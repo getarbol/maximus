@@ -128,6 +128,7 @@ try {
       '/body',
       '/webhooks',
       '/http-paths',
+      '/projection',
       '/diagnostics',
       '/internals',
       '/mcp',
@@ -152,8 +153,11 @@ import { defineErrors, maximus } from '@arbol-ai/maximus';
 import { analytics } from '@arbol-ai/maximus/analytics';
 import { createClient } from '@arbol-ai/maximus/client';
 import { mcp } from '@arbol-ai/maximus/mcp';
+import { mcpToolName, queryKind } from '@arbol-ai/maximus/projection';
 import { verifyContract } from '@arbol-ai/maximus/testing';
 assert.equal(defineErrors({}).forbidden.create().code, 'FORBIDDEN');
+assert.equal(mcpToolName('agenda', { resource: 'appointments', verb: 'findNearest' }), 'agenda_appointments_find_nearest');
+assert.equal(queryKind({ type: 'integer' }), 'integer');
 for (const value of [maximus, analytics, createClient, mcp, verifyContract]) {
   assert.equal(typeof value, 'function');
 }`
@@ -166,7 +170,16 @@ for (const value of [maximus, analytics, createClient, mcp, verifyContract]) {
   const runtimeModule = (specifier) =>
     /^(?:node:|cloudflare:|pg$|@modelcontextprotocol\/)/.test(specifier) ||
     builtinModules.includes(specifier);
-  for (const entry of ['schemas', 'errors', 'failures', 'body', 'webhooks', 'http-paths', 'client']) {
+  for (const entry of [
+    'schemas',
+    'errors',
+    'failures',
+    'body',
+    'webhooks',
+    'http-paths',
+    'projection',
+    'client',
+  ]) {
     const pending = [join(installed, manifest.exports[`./${entry}`].import)];
     const seen = new Set();
     while (pending.length > 0) {

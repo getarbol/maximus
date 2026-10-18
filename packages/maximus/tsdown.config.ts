@@ -13,6 +13,7 @@ const entries = {
   body: 'src/body.ts',
   webhooks: 'src/webhooks.ts',
   'http-paths': 'src/http-paths.ts',
+  projection: 'src/projection.ts',
   diagnostics: 'src/diagnostics.ts',
   internals: 'src/internals.ts',
   'workers/runtime': 'src/workers/runtime.ts',

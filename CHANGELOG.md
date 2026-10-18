@@ -6,6 +6,14 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## 7.1.0 (2026-10-18)
+
+- `@arbol-ai/maximus/projection` is back, for a gateway that builds MCP tools, CLI commands and
+  clients from services' OpenAPI documents: `mcpToolName`, `kebab`, `snake`, `permissionDescription`
+  and `queryKind`, with the types `QueryKind` and `SchemaResolver`, as in 6.2.1. `mcpToolName` takes
+  a `ProjectedName` (`resource` and `verb`) where it took the retired `ApiName`. The entry is
+  runtime-free, and the release check loads it from the packed package.
+
 ## 7.0.0 (2026-10-18)
 
 Breaking:
