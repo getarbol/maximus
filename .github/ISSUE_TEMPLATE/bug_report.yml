@@ -1,0 +1,32 @@
+name: Bug report
+description: Something in Maximus does not behave as its documentation says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report security problems privately, as SECURITY.md describes, never in an issue. Use synthetic
+        data only: no tokens, customer records or production URLs.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The @arbol-ai/maximus version, and the Bun, Node and cf versions if they matter.
+      placeholder: '@arbol-ai/maximus 7.0.0, Bun 1.4.3, Node 24.11.0, cf 1.0.0-beta.18'
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The smallest application or request that shows the problem.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+      description: What the documentation says should happen, and what happens instead.
+    validations:
+      required: true

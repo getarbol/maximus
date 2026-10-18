@@ -1,0 +1,329 @@
+/**
+ * What `.build()` refuses. Every rule an application must keep is checked once, at construction, so a
+ * service that breaks one never starts: each refusal is a TypeError that names the rule and, when one
+ * operation breaks it, that operation.
+ */
+import type { TSchema } from '@sinclair/typebox';
+
+import { isAttachmentSchema } from './binary.ts';
+import type { ErrorCatalog } from './errors.ts';
+import { createHttpRouteResolver, isInputHeaderName, operationPathParameters } from './http-paths.ts';
+import { hasUncompiledCodecs } from './input-schemas.ts';
+import { pathParameterSchemas } from './internal/http-routes.ts';
+import { MAX_BODY_BYTES_CEILING, STANDARD_CODES, operationScopes } from './manifest.ts';
+import type { AppManifest, McpConfiguration, McpGuide, McpSkill, OperationShape } from './manifest.ts';
+import { isNamespacedScope } from './scopes.ts';
+import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
+
+/** Names a Worker entrypoint already uses, or that would break a class or a promise. */
+const RESERVED_NAMES = new Set([
+  'fetch',
+  'connect',
+  'constructor',
+  'then',
+  'scheduled',
+  'queue',
+  'alarm',
+  '__proto__',
+  'prototype',
+]);
+/** An MCP tool name: a letter, then up to 63 letters, digits and underscores. */
+const TOOL_NAME = /^[a-z][A-Za-z0-9_]{0,63}$/;
+/** Every field an operation has: any other, such as a misspelled or retired one, would do nothing. */
+const OPERATION_FIELDS: ReadonlySet<string> = new Set(
+  Object.keys({
+    actorKinds: true,
+    http: true,
+    visibility: true,
+    mcp: true,
+    rpc: true,
+    scope: true,
+    scopeMatch: true,
+    conditionalScopes: true,
+    failures: true,
+    title: true,
+    description: true,
+    group: true,
+    effect: true,
+    input: true,
+    output: true,
+    maxBodyBytes: true,
+    maxOutputBytes: true,
+    execute: true,
+    pipeline: true,
+  } satisfies Record<keyof OperationShape, true>)
+);
+
+/** Checks the application, then hands it back unchanged. */
+export function defineApp<Env, C>() {
+  return <const Ops extends Record<string, OperationShape>>(manifest: AppManifest<Env, C, Ops>) => {
+    checkApplication(manifest);
+    return manifest;
+  };
+}
+
+/**
+ * Every rule, in the order they always ran, so an application that breaks several meets the same refusal
+ * first.
+ */
+function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
+  manifest: AppManifest<Env, C, Ops>
+): void {
+  if (!/^[a-z][a-z0-9-]{1,63}$/.test(manifest.namespace)) {
+    throw new TypeError('A scope namespace is required.');
+  }
+  checkDeclaredFailures(manifest.operations, manifest.errors);
+  const claimed = { routes: new Set<string>(), tools: new Set<string>() };
+  for (const [name, op] of Object.entries(manifest.operations)) {
+    checkOperation(name, op, manifest, claimed);
+  }
+  // Compiling the router refuses ambiguous or overlapping path templates.
+  createHttpRouteResolver(Object.values(manifest.operations));
+  checkGuides(manifest.mcp?.guides ?? []);
+  checkSkills(manifest.mcp?.skills ?? []);
+  checkSkillTool(manifest.mcp, claimed.tools);
+  if (!validBodyLimit(manifest.maxBodyBytes)) {
+    throw new TypeError('The application body limit is a positive integer up to 16 MiB.');
+  }
+  if (!validBodyLimit(manifest.maxOutputBytes)) {
+    throw new TypeError('The application output limit is a positive integer up to 16 MiB.');
+  }
+  if (new URL(manifest.origin).protocol !== 'https:') {
+    throw new TypeError('Application origin must use HTTPS.');
+  }
+  checkTokenAuthority(manifest.tokens);
+  tokenAudiences(manifest.tokens);
+  if (
+    Object.keys(manifest.tokens.resources ?? {}).length > 0 &&
+    manifest.tokens.resourceMetadataUrl === undefined
+  ) {
+    // The default discovery document is not served once distinct resources are configured, so a
+    // 401 challenge would otherwise point clients at a 404.
+    throw new TypeError(
+      'tokens.resources requires tokens.resourceMetadataUrl: name the metadata a 401 challenge points at.'
+    );
+  }
+}
+
+/** An operation's `failures` name domain codes of the catalog, each once. */
+function checkDeclaredFailures(
+  operations: Readonly<Record<string, OperationShape>>,
+  errors: ErrorCatalog
+): void {
+  const domainCodes = new Set(
+    Object.values(errors.definitions)
+      .map(({ code }) => code)
+      .filter((code) => !STANDARD_CODES.has(code))
+  );
+  for (const [name, op] of Object.entries(operations)) {
+    if (
+      op.failures &&
+      (new Set(op.failures).size !== op.failures.length || op.failures.some((code) => !domainCodes.has(code)))
+    ) {
+      throw new TypeError(
+        `Operation "${name}": failures lists each domain failure code of the error catalog once; standard failures are always allowed.`
+      );
+    }
+  }
+}
+
+/** Every rule one operation keeps, in the order a definition is usually written. */
+function checkOperation(
+  name: string,
+  op: OperationShape,
+  application: { namespace: string; rpc: { callers: readonly string[] } },
+  claimed: { routes: Set<string>; tools: Set<string> }
+): void {
+  checkOperationContract(name, op, application.namespace);
+  checkHttpExposure(name, op, claimed.routes);
+  if (
+    op.conditionalScopes &&
+    (!op.conditionalScopes.length ||
+      new Set(op.conditionalScopes).size !== op.conditionalScopes.length ||
+      op.conditionalScopes.some(
+        (scope) => operationScopes(op).includes(scope) || !isNamespacedScope(scope, application.namespace)
+      ))
+  ) {
+    throw new TypeError(
+      'Conditional scopes require unique namespaced declarations distinct from the admission scope.'
+    );
+  }
+  if (op.mcp) {
+    if (!TOOL_NAME.test(op.mcp.name) || claimed.tools.has(op.mcp.name)) {
+      throw new TypeError('MCP tools require unique safe names.');
+    }
+    claimed.tools.add(op.mcp.name);
+  }
+  if (
+    op.rpc &&
+    op.rpc !== true &&
+    op.rpc.callers.some((caller) => !application.rpc.callers.includes(caller))
+  ) {
+    throw new TypeError('Operation RPC callers must be allowed by the application.');
+  }
+}
+
+/** The operation's fields, name, scopes, eligible actors and schemas. */
+function checkOperationContract(name: string, op: OperationShape, namespace: string): void {
+  const unknown = Object.keys(op).find((field) => !OPERATION_FIELDS.has(field));
+  if (unknown !== undefined) {
+    throw new TypeError(`Operation "${name}": "${unknown}" is not an operation field.`);
+  }
+  if (op.scopeMatch !== undefined && op.scopeMatch !== 'any' && op.scopeMatch !== 'all') {
+    throw new TypeError(`Operation "${name}": scopeMatch must be any or all.`);
+  }
+  if (hasUncompiledCodecs(op.input)) {
+    throw new TypeError(
+      `Operation "${name}": its input uses codecs (normalize, transform, inspect, refine, pipe or stripObject) that run only inside inputSchema(); wrap the input in inputSchema().`
+    );
+  }
+  if (
+    op.actorKinds &&
+    (!op.actorKinds.length ||
+      new Set(op.actorKinds).size !== op.actorKinds.length ||
+      op.actorKinds.some((kind) => kind !== 'user' && kind !== 'service'))
+  ) {
+    throw new TypeError(`Operation "${name}": actorKinds must explicitly name eligible users or services.`);
+  }
+  if (!/^[a-z][a-zA-Z0-9]*$/.test(name) || RESERVED_NAMES.has(name)) {
+    throw new TypeError(
+      `Operation "${name}": use a camelCase name that is not a reserved Worker method. Use safe operation names, namespaced scopes and strict object schemas.`
+    );
+  }
+  const scopes = operationScopes(op);
+  if (
+    !scopes.length ||
+    new Set(scopes).size !== scopes.length ||
+    scopes.some((scope) => !isNamespacedScope(scope, namespace))
+  ) {
+    throw new TypeError(
+      `Operation "${name}": every scope is "${namespace}:<resource>:<action>", listed once. Use safe operation names, namespaced scopes and strict object schemas.`
+    );
+  }
+  if (
+    !(
+      strictObject(op.input, op.http?.method !== 'GET') &&
+      (isAttachmentSchema(op.output) || strictObject(op.output, true))
+    )
+  ) {
+    throw new TypeError(
+      `Operation "${name}": input and output are strict objects or unions of strict objects; a GET input is one strict object (its query). Use safe operation names, namespaced scopes and strict object schemas.`
+    );
+  }
+}
+
+/** Byte bodies, attachments, limits, header-sourced fields and the route itself. */
+function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>): void {
+  if (
+    (op.http?.body !== undefined && op.http.body !== 'bytes') ||
+    (op.http?.response !== undefined && op.http.response !== 'attachment')
+  ) {
+    throw new TypeError('Unsupported HTTP binary contract.');
+  }
+  const binary = op.http?.body === 'bytes';
+  const attachment = isAttachmentSchema(op.output);
+  if ((binary || attachment) && (!op.http || op.mcp || op.rpc)) {
+    throw new TypeError(`Operation "${name}": byte bodies and attachments are HTTP-only.`);
+  }
+  if ((op.http?.response === 'attachment') !== attachment || (binary && op.http?.method === 'GET')) {
+    throw new TypeError(`Operation "${name}": declare matching attachment output and non-GET byte bodies.`);
+  }
+  if (!validBodyLimit(op.maxOutputBytes)) {
+    throw new TypeError('Invalid operation output byte limit.');
+  }
+  if (op.http?.successStatus !== undefined && ![200, 201, 202].includes(op.http.successStatus)) {
+    throw new TypeError('Invalid operation success status.');
+  }
+  if (op.http?.headers) {
+    const pathFields = new Set(operationPathParameters(op.http.path));
+    const headers = Object.entries(op.http.headers);
+    if (
+      !binary ||
+      op.input.type !== 'object' ||
+      new Set(headers.map(([, wire]) => wire.toLowerCase())).size !== headers.length ||
+      headers.some(
+        ([field, wire]) =>
+          !Object.hasOwn(op.input.properties, field) || pathFields.has(field) || !isInputHeaderName(wire)
+      )
+    ) {
+      throw new TypeError('Byte operation headers must name unique, non-authority metadata fields.');
+    }
+  }
+  if (!validBodyLimit(op.maxBodyBytes) || (op.maxBodyBytes !== undefined && op.http?.method === 'GET')) {
+    throw new TypeError(
+      `Operation "${name}": an operation body limit is a positive integer up to 16 MiB, on a non-GET route.`
+    );
+  }
+  if (op.http) {
+    for (const parameter of operationPathParameters(op.http.path)) {
+      pathParameterSchemas(op.input, parameter);
+    }
+    const route = `${op.http.method} ${op.http.path}`;
+    if (routes.has(route) || (op.effect !== 'read' && op.http.method === 'GET')) {
+      throw new TypeError(`Operation "${name}": use unique versioned routes; mutations cannot use GET.`);
+    }
+    routes.add(route);
+  }
+}
+
+/** Guides are named resources and prompts: each name safe and unique. */
+function checkGuides(guides: readonly McpGuide[]): void {
+  if (
+    new Set(guides.map((guide) => guide.name)).size !== guides.length ||
+    guides.some((guide) => !/^[a-z][a-z0-9-]{0,63}$/.test(guide.name))
+  ) {
+    throw new TypeError('Guides require unique safe names.');
+  }
+}
+
+/** The MCP skills: unique Agent Skills names, one-line descriptions and instructions. */
+function checkSkills(skills: readonly McpSkill[]): void {
+  if (
+    new Set(skills.map((skill) => skill.name)).size !== skills.length ||
+    skills.some(
+      (skill) =>
+        skill.name.length > 64 ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) ||
+        !skill.description.trim() ||
+        skill.description.length > 1024 ||
+        /[\r\n]/.test(skill.description) ||
+        !skill.text.trim()
+    )
+  ) {
+    throw new TypeError('Skills require unique Agent Skills names, a one-line description and instructions.');
+  }
+}
+
+/** The skill tool serves the MCP skills under a name no operation's tool takes. */
+function checkSkillTool(mcp: McpConfiguration | undefined, tools: ReadonlySet<string>): void {
+  const skillTool = mcp?.skillTool;
+  if (
+    skillTool !== undefined &&
+    (!(mcp?.skills ?? []).length || !TOOL_NAME.test(skillTool) || tools.has(skillTool))
+  ) {
+    throw new TypeError('A skill tool requires skills and a safe name no operation uses.');
+  }
+}
+
+/** Whether a body or output limit is absent, or a positive integer up to 16 MiB. */
+function validBodyLimit(value: number | undefined): boolean {
+  return value === undefined || (Number.isInteger(value) && value > 0 && value <= MAX_BODY_BYTES_CEILING);
+}
+
+/**
+ * A strict object (`additionalProperties: false`), or — when `unions` is true —
+ * a union whose every member is a strict object, so a request body or a result
+ * can be discriminated by a field (`{ channel: 'email', … } | { channel: 'sms', … }`).
+ */
+function strictObject(schema: TSchema, unions: boolean): boolean {
+  if (schema.type === 'object') {
+    return schema.additionalProperties === false;
+  }
+  const members = (schema as { anyOf?: unknown }).anyOf;
+  return (
+    unions &&
+    Array.isArray(members) &&
+    members.length > 0 &&
+    members.every((member) => strictObject(member as TSchema, false))
+  );
+}

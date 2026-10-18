@@ -1,0 +1,30 @@
+/**
+ * The Worker as `cf` develops, builds and deploys it: its name, runtime, entrypoint and bindings.
+ */
+import { bindings, defineConfig } from 'cf/config';
+
+import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
+
+export default defineConfig(({ mode }) => ({
+  worker: {
+    name: '__PROJECT_NAME__',
+    compatibilityDate: '2026-10-12',
+    // Maximus keeps per-invocation diagnostics in AsyncLocalStorage (node:async_hooks).
+    compatibilityFlags: ['nodejs_compat'],
+    entrypoint,
+    // A workers.dev URL or a preview URL would be one more origin for the same Worker.
+    workersDev: false,
+    previewUrls: false,
+    observability: {
+      enabled: true,
+      redactQueryString: true,
+      logs: { enabled: true, invocationLogs: true },
+      traces: { enabled: true },
+    },
+    env: {
+      // The development token `maximus init` wrote to .dev.vars, declared for `cf dev` alone: no build that
+      // is deployed carries it.
+      DEVELOPMENT_TOKEN: mode === 'development' && bindings.secret(),
+    },
+  },
+}));

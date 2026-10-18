@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.private/
+.env*
+.dev.vars*
+.cloudflare/
+.wrangler/
+coverage/
+*.tgz
+*.log
+.DS_Store
+
+.turbo/
+packages/maximus/skills/
+packages/maximus/LICENSE

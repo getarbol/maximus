@@ -1,0 +1,155 @@
+{
+  "name": "@arbol-ai/maximus",
+  "version": "7.0.0",
+  "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, with its OpenAPI, typed client and CLI.",
+  "keywords": [
+    "api",
+    "cloudflare",
+    "cloudflare-workers",
+    "framework",
+    "mcp",
+    "model-context-protocol",
+    "multi-tenant",
+    "openapi",
+    "rpc",
+    "typebox"
+  ],
+  "homepage": "https://github.com/getarbol/maximus#readme",
+  "bugs": {
+    "url": "https://github.com/getarbol/maximus/issues"
+  },
+  "license": "MIT",
+  "author": "Arbol",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getarbol/maximus.git",
+    "directory": "packages/maximus"
+  },
+  "bin": {
+    "maximus": "dist/tooling/cli.js"
+  },
+  "files": [
+    "dist",
+    "config",
+    "templates",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "import": "./dist/schemas.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./failures": {
+      "types": "./dist/standard-failures.d.ts",
+      "import": "./dist/standard-failures.js"
+    },
+    "./body": {
+      "types": "./dist/body.d.ts",
+      "import": "./dist/body.js"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks.d.ts",
+      "import": "./dist/webhooks.js"
+    },
+    "./http-paths": {
+      "types": "./dist/http-paths.d.ts",
+      "import": "./dist/http-paths.js"
+    },
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "import": "./dist/diagnostics.js"
+    },
+    "./internals": {
+      "types": "./dist/internals.d.ts",
+      "import": "./dist/internals.js"
+    },
+    "./workers": {
+      "types": "./dist/workers/runtime.d.ts",
+      "import": "./dist/workers/runtime.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/client.d.ts",
+      "import": "./dist/client/client.js"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/analytics.d.ts",
+      "import": "./dist/analytics/analytics.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres/index.d.ts",
+      "import": "./dist/postgres/index.js"
+    },
+    "./testing": {
+      "types": "./dist/tooling/testing.d.ts",
+      "import": "./dist/tooling/testing.js"
+    },
+    "./oxfmt": {
+      "types": "./config/oxfmt.d.mts",
+      "import": "./config/oxfmt.mjs"
+    },
+    "./oxlint": {
+      "types": "./config/oxlint.d.mts",
+      "import": "./config/oxlint.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsdown",
+    "test": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "@sinclair/typebox": "0.34.52",
+    "ajv-formats": "3.0.1",
+    "jose": "6.2.12",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "ajv": "8.20.0",
+    "miniflare": "5.20261012.1-beta",
+    "pg": "8.23.1",
+    "tsdown": "0.23.1"
+  },
+  "peerDependencies": {
+    "oxfmt": ">=0.71.0 <1",
+    "oxlint": "^1.86.0",
+    "pg": "^8.23.1",
+    "ultracite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "oxfmt": {
+      "optional": true
+    },
+    "oxlint": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "ultracite": {
+      "optional": true
+    }
+  }
+}

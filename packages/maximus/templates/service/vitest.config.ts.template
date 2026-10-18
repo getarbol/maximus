@@ -1,0 +1,10 @@
+/**
+ * The tests run in workerd, with the Worker and the bindings cloudflare.config.ts declares.
+ */
+import { cloudflareTest } from '@cloudflare/vitest-plugin';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [cloudflareTest({ remoteBindings: false, experimental: { newConfig: true } })],
+  test: { include: ['tests/**/*.test.ts'] },
+});

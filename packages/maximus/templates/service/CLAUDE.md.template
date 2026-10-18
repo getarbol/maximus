@@ -1,0 +1,3 @@
+# Agent guide
+
+Read .agents/skills/project/SKILL.md and the installed Maximus skill (node_modules/@arbol-ai/maximus/skills/maximus/SKILL.md). Code/docs are English. Use organizationId, strict schemas and namespaced scopes. Keep credentials and provider evidence in ignored .private/ (0700/0600). Add operations in resource modules; compose once in app.ts. Domain functions are shared with scripts. Tests own provider behavior, not framework JWT/protocol matrices. Run bun run verify. Never call live providers in CI. Configure audience, issuer, callers and deployment resources before release.

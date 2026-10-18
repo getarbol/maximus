@@ -1,0 +1,12 @@
+/**
+ * The service's contract smoke test, against the Worker in workerd.
+ */
+import { verifyContract } from '@arbol-ai/maximus/testing';
+import { exports } from 'cloudflare:workers';
+import { expect, it } from 'vitest';
+
+it('publishes one runtime contract', async () => {
+  const contract = await verifyContract((request) => exports.default.fetch(request), 'https://example.test');
+  // A new service publishes no paths yet; list them here as you add operations.
+  expect(contract.paths).toEqual([]);
+});

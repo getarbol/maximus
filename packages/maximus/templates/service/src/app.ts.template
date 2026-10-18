@@ -1,0 +1,30 @@
+/**
+ * The service's application: its configuration, its error catalog and, as you add them, its operations.
+ */
+import { defineErrors, maximus } from '@arbol-ai/maximus';
+
+/**
+ * The service's one application. Set its public origin, the OAuth audience its tokens are issued for
+ * and the authorization server that issues them before the first deployment.
+ */
+export const base = maximus<Env>({
+  name: '__PROJECT_NAME__',
+  namespace: '__PROJECT_NAME__',
+  title: '__PROJECT_NAME__',
+  version: '0.1.0',
+  origin: 'https://__PROJECT_NAME__.example.com',
+  tokens: {
+    audience: 'https://__PROJECT_NAME__.example.com',
+    issuer: 'https://auth.example.com/',
+    // From localhost only: the token `maximus init` wrote to `.dev.vars`, for `cf dev`.
+    development: { binding: 'DEVELOPMENT_TOKEN' },
+  },
+  errors: defineErrors({}),
+  rpc: { callers: [] },
+});
+
+/**
+ * The checked application. Chain operations on `base`, or mount resource modules built on it, before
+ * `.build()`.
+ */
+export const app = base.build();

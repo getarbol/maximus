@@ -1,0 +1,33 @@
+{
+  "name": "maximus-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*",
+    "examples/worker-rpc/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/prepare-package.mjs && turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "ultracite check",
+    "fix": "ultracite fix",
+    "verify": "bun run build && bun run typecheck && bun run check && bun run test && node scripts/verify-package.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261018.1",
+    "@types/node": "26.6.5",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
+    "publint": "0.3.25",
+    "turbo": "2.11.9",
+    "typescript": "7.0.2",
+    "ultracite": "8.0.1",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "bun@1.4.3"
+}
