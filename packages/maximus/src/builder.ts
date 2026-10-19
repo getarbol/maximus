@@ -3,7 +3,7 @@
  * `.operation()` declares operations, `.mount()` composes resource modules that share one base, and
  * `.build()` checks the result.
  */
-import type { Static, StaticDecode, TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 
 import type { BinaryBody } from './binary.ts';
 import { defineApp } from './define-app.ts';
@@ -12,6 +12,7 @@ import { composeOperations } from './manifest.ts';
 import type { AppManifest, Invocation, OperationShape, OperationMiddleware, Exposure } from './manifest.ts';
 import { ok } from './result.ts';
 import type { Result } from './result.ts';
+import type { StaticDecode } from './schema-types.ts';
 
 /**
  * What `maximus()` takes: the application without its operations, context and middleware, which the builder

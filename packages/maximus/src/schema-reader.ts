@@ -2,10 +2,11 @@
  * Reads untrusted data, such as a stored record or a provider's or a model's answer, through a schema's
  * owner semantics.
  */
-import type { StaticDecode, TSchema } from '@sinclair/typebox';
+import type { TSchema } from '@sinclair/typebox';
 
 import { inputSchema, SchemaValidationError } from './input-schemas.ts';
 import { decodeIssues } from './internal/decode-issues.ts';
+import type { StaticDecode } from './schema-types.ts';
 import { decodeSchema } from './validation.ts';
 
 /**

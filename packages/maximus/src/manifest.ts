@@ -2,11 +2,12 @@
  * What an application is: its operations, their exposure on each transport and the configuration
  * every transport reads. `define-app.ts` holds the rules `.build()` checks against these shapes.
  */
-import type { Static, StaticDecode, TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 
 import type { BinaryBody } from './binary.ts';
 import type { Failure, ErrorCatalog } from './errors.ts';
 import type { Result } from './result.ts';
+import type { StaticDecode } from './schema-types.ts';
 import { matchesScopes } from './scopes.ts';
 import type { ScopeMatch } from './scopes.ts';
 import { STANDARD_FAILURES } from './standard-failures.ts';

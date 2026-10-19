@@ -3,11 +3,12 @@
  * JSON, and the RFC format validators registered once with TypeBox.
  */
 import { FormatRegistry } from '@sinclair/typebox';
-import type { Static, StaticDecode, TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from '@sinclair/typebox';
 import { Value, HasTransform, TransformDecode } from '@sinclair/typebox/value';
 import { fullFormats } from 'ajv-formats/dist/formats.js';
 
 import { decodeIssues, jsonPointer } from './internal/decode-issues.ts';
+import type { StaticDecode } from './schema-types.ts';
 
 // Maintained RFC validators only; never instantiate Ajv or compile dynamic JavaScript in workerd.
 for (const name of ['date', 'time', 'date-time', 'email', 'uuid', 'uri'] as const) {

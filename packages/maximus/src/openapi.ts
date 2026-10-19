@@ -92,9 +92,30 @@ export interface OpenApiDocument {
  * describes.
  */
 export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
-  manifest: AppManifest<E, C, O>
+  manifest: AppManifest<E, C, O>,
+  options?: {
+    /** Adapter-owned operation metadata; schemas in extensions share the document's components. */
+    operationExtensions?: (name: string, operation: OperationShape) => Record<`x-${string}`, unknown>;
+  }
 ): Record<string, unknown> {
   const document = openApiDocument(manifest);
+  if (options?.operationExtensions) {
+    const paths = document.paths as Record<string, Record<string, Record<string, unknown>>>;
+    for (const methods of Object.values(paths)) {
+      for (const declared of Object.values(methods)) {
+        const name = String(declared.operationId);
+        const operation = manifest.operations[name];
+        if (!operation) {
+          throw new TypeError('The document names an undeclared operation.');
+        }
+        const extensions = options.operationExtensions(name, operation);
+        if (Object.keys(extensions).some((key) => !key.startsWith('x-'))) {
+          throw new TypeError('OpenAPI extensions must use x- names.');
+        }
+        Object.assign(declared, extensions);
+      }
+    }
+  }
   const own = Object.entries(document.components.schemas);
   const bundled = bundleSchemas(
     [document.paths, ...own.map(([, schema]) => schema)],

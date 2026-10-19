@@ -295,3 +295,8 @@ None of them needs a token. The OAuth metadata endpoints also answer
   includes it.
 
 Both are options of `createWorker(app, { http })`; see [Worker composition](worker-composition.md).
+
+Adapters can add per-operation metadata with `createOpenApi(app, { operationExtensions: (name,
+operation) => ({ 'x-owner-operation': name, 'x-owner-input': operation.input }) })`. Only `x-` keys
+are accepted. Named schemas in these extensions share the native document's components and local
+references; runtime schemas and authorization remain unchanged.

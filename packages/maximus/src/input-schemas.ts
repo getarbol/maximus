@@ -6,7 +6,6 @@
 import { Type as t, Kind, TransformKind } from '@sinclair/typebox';
 import type {
   Static,
-  StaticDecode,
   TSchema,
   TObject,
   TProperties,
@@ -15,9 +14,12 @@ import type {
   TUnion,
   TOptional,
   TTransform,
+  TLiteral,
   OptionalKind,
 } from '@sinclair/typebox';
 import { Value, TransformDecode } from '@sinclair/typebox/value';
+
+import type { StaticDecode } from './schema-types.ts';
 
 /** Type-only: the key under which a codec's schema type carries its wire type. No schema object has it. */
 declare const WIRE: unique symbol;
@@ -47,13 +49,13 @@ export type SchemaInput<S extends TSchema, Depth extends unknown[] = []> = Depth
       ? W
       : never
     : S extends TObject<infer P>
-      ? { [K in Exclude<keyof P, InputKeys<P>>]: SchemaInput<P[K]> } & {
-          [K in InputKeys<P>]?: SchemaInput<P[K]>;
+      ? { [K in Exclude<keyof P, InputKeys<P>>]: SchemaInput<P[K], [...Depth, unknown]> } & {
+          [K in InputKeys<P>]?: SchemaInput<P[K], [...Depth, unknown]>;
         }
       : S extends TArray<infer I>
-        ? SchemaInput<I>[]
+        ? SchemaInput<I, [...Depth, unknown]>[]
         : S extends TUnion<infer U>
-          ? SchemaInput<U[number]>
+          ? SchemaInput<U[number], [...Depth, unknown]>
           : Static<S>;
 
 /**
@@ -109,7 +111,9 @@ type OwnerSchema = TSchema & {
 
 /** A union of literals: `literalUnion(['open', 'done'])`. */
 export const literalUnion = <const V extends readonly (string | number | boolean)[]>(values: V) =>
-  t.Union(values.map((value: V[number]) => t.Literal(value)));
+  t.Union(values.map((value: V[number]) => t.Literal(value))) as TUnion<{
+    -readonly [K in keyof V]: TLiteral<V[K]>;
+  }>;
 /**
  * The schema with a default that decoding applies when the field is absent, so the field is optional on the
  * wire.

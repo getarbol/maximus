@@ -465,3 +465,16 @@ function references(value: unknown, found: string[] = []): string[] {
   }
   return found;
 }
+
+it('bundles schemas in adapter operation extensions with the native document', () => {
+  const schema = t.Recursive((self) => t.Object({ value: t.String(), children: t.Array(self) }), {
+    $id: 'ExtensionTree',
+  });
+  const document = createOpenApi(application(), {
+    operationExtensions: (name) => ({ 'x-owner-name': name, 'x-owner-input': schema }),
+  });
+  const found = references(document);
+  expect(found).toContain('#/components/schemas/ExtensionTree');
+  expect(found.every((reference) => reference.startsWith('#/components/schemas/'))).toBe(true);
+  expect(JSON.stringify(schema)).toContain('"$id":"ExtensionTree"');
+});

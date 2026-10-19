@@ -8,6 +8,7 @@ import {
   checkSchema,
   defaultSchema,
   inputSchema,
+  literalUnion,
   normalizeSchema,
   pipeSchema,
   readSchema,
@@ -47,6 +48,28 @@ const decodedPage: Wire = { ...wire, page: 2 };
 // @ts-expect-error A TypeBox transform is sent encoded.
 const decodedSince: Wire = { ...wire, since: new Date() };
 const withLimit: SchemaInput<typeof Search> = { ...wire, limit: '10' };
+
+const Choices = literalUnion(['open', 'done']);
+const optionalOwner = inputSchema(
+  t.Object({ name: t.Optional(normalizeSchema(t.String(), (value) => value.trim())), state: Choices })
+);
+const optionalDecoded: StaticDecode<typeof optionalOwner> = { state: 'open' };
+// @ts-expect-error Literal choices remain closed after decoding.
+const invalidChoice: StaticDecode<typeof optionalOwner> = { state: 'other' };
+const optionalName: string | undefined = optionalDecoded.name;
+void [optionalDecoded, invalidChoice, optionalName];
+
+const StoredOwner = t.Object({
+  settings: t.Unsafe<{ enabled: boolean; labels: Record<string, string> }>(
+    t.Object({ enabled: t.Boolean(), labels: t.Record(t.String(), t.String()) })
+  ),
+  name: t.Optional(normalizeSchema(t.String(), (value) => value.trim())),
+});
+const storedOwner = readSchema(StoredOwner, {});
+const enabled: boolean = storedOwner.settings.enabled;
+// @ts-expect-error An opaque owner's decoded type does not widen to any.
+const invalidEnabled: string = storedOwner.settings.enabled;
+void [enabled, invalidEnabled];
 
 /** What the handler receives. */
 type Decoded = StaticDecode<typeof SearchInput>;
