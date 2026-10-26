@@ -11,6 +11,7 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 | Purpose                 | Exports                                                                                                                                                                                                                                                                                                                 |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Builder                 | `maximus`, types `ApplicationBuilder`, `ApplicationConfiguration` (what `maximus()` takes)                                                                                                                                                                                                                              |
+| File routes and tools   | `defineHandler`, `defineTool`; types `Register`, `HandlerOptions`, `HandlerHttp`, `HandlerMcp`, `ToolOptions`, `HandlerArguments`, `HandlerAnswer`, `HandlerDeclaration`, `ToolDeclaration`, `Fail`, `Failed`, `DomainCode`, `SchemaOf`, `SchemaOrFields`. See [Project structure](../guides/project-structure.md)      |
 | Schemas                 | `t` (also `Type`), types `Static`, `TSchema`; `EmptyInputSchema`, `OrganizationIdSchema`, `UuidSchema`, `AttachmentOutputSchema`, type `Attachment`; `parseInput`, `parseSchema`                                                                                                                                        |
 | Lists                   | `Page` (also the type `Page<Item>`), `PageInfoSchema`, `PageQueryFields`, `pageLimit`; types `PageInfo`, `PageQuery`, `TPage`. See [Lists](../guides/schemas-and-validation.md#lists)                                                                                                                                   |
 | Shared schemas          | `EmailAddressSchema`, `PhoneNumberSchema`, `HttpsUrlSchema`, `HexColorSchema`, `DeletedObjectSchema`, `SignedUrlSchema`, `NamedReferenceSchema`, `PostalAddressSchema`; types `DeletedObject`, `SignedUrl`, `NamedReference`, `PostalAddress`. See [Shared schemas](../guides/schemas-and-validation.md#shared-schemas) |
@@ -48,7 +49,9 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 
 `/config` exports runtime-neutral `defineConfig`, `defineMiddleware`, `defineOperationMiddleware`
 , `defineRequestMiddleware` and `createRoute`, plus `ProjectConfiguration`, `ProjectContext`, `ProjectEnv` and middleware types.
-Generated composition uses `collectMiddleware`, `useProjectMiddleware` and `checkProjectPipeline`.
+Generated composition uses `collectMiddleware`, `useProjectMiddleware` and `checkProjectPipeline`, and
+binds file declarations with `bindRoute` and `bindTool`, whose names `routeName`, `toolName` and the types
+`RouteName`, `ToolName` and `ToolMcpName` derive.
 `/project` exports `createProjectWorker` and types `ProjectModules`, `ProjectCron`, `ProjectEvents`.
 It is Workers-only and composes discovered pages and background handlers through the existing runtime.
 `/vite` exports the Node-only `maximusProject()` plugin; Vite is an optional peer, never a runtime

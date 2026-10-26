@@ -88,7 +88,7 @@ type DefinitionDataSchema<D extends ErrorDefinition> = D extends {
   ? S
   : TObject<Record<never, never>>;
 /** What a failure's `create()` takes: the data its definition declares, optional when every field is. */
-type CreateArguments<D extends ErrorDefinition> = D extends { dataSchema: TObject<TProperties> }
+export type CreateArguments<D extends ErrorDefinition> = D extends { dataSchema: TObject<TProperties> }
   ? Record<never, never> extends Static<DefinitionDataSchema<D>>
     ? [data?: Static<DefinitionDataSchema<D>>]
     : [data: Static<DefinitionDataSchema<D>>]

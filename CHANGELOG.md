@@ -8,6 +8,14 @@ dates of the release commits.
 
 ## Unreleased
 
+- `defineHandler` declares a route as a plain value: `input` and `output` take schemas or the fields of
+  strict objects, and the handler receives one object (`{ input, principal, env, fail, …context }`) and
+  returns its output or `fail(code)`, typed by the declared failures and their data. Binding derives
+  what a route leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its
+  effect from the method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's
+  idempotent hint. `defineTool` declares a tool only MCP serves. A project registers its base and error
+  catalog in `Register`, which types every handler's context and failures.
+- The OpenAPI document leaves out an operation's empty description.
 - `operation()` accepts every field `.operation()` does, including `failures`, `maxBodyBytes` and
   `maxOutputBytes`. Both, and the project route helper, share one handler type, and `Failure` is
   derived from `FailureSchema`, so the type and the wire schema cannot drift apart.

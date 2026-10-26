@@ -168,7 +168,8 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
     (paths[op.http.path] ??= {})[op.http.method.toLowerCase()] = {
       operationId: name,
       summary: op.title,
-      description: op.description,
+      // A route that says no more than its title documents none.
+      ...(op.description ? { description: op.description } : {}),
       // Alternatives: OpenAPI admits a request that satisfies any one security requirement.
       security: operationSecurity(name, op, manifest.tokens),
       tags: [op.group ?? name],
