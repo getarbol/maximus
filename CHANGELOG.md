@@ -11,6 +11,9 @@ dates of the release commits.
 - `operation()` accepts every field `.operation()` does, including `failures`, `maxBodyBytes` and
   `maxOutputBytes`. Both, and the project route helper, share one handler type, and `Failure` is
   derived from `FailureSchema`, so the type and the wire schema cannot drift apart.
+- The `service` starter's CI workflow pins its actions by commit, keeps the checkout token from later
+  steps, stops after 15 minutes and no longer hands a GitHub Packages token to `bun install`. Its
+  `cloudflare.config.ts` pins the compatibility date of the day the project is created.
 
 ## 7.4.0 (2026-10-26)
 

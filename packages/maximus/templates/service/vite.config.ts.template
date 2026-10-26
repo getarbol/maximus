@@ -1,8 +1,8 @@
-import fmt from '@arbol-ai/maximus/oxfmt';
-import lint from '@arbol-ai/maximus/oxlint';
 /**
  * The build `cf` runs: Cloudflare's Vite plugin bundles the Worker and, under `cf dev`, runs it in workerd.
  */
+import fmt from '@arbol-ai/maximus/oxfmt';
+import lint from '@arbol-ai/maximus/oxlint';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import { defineConfig } from 'vite-plus';
 

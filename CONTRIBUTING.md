@@ -95,7 +95,7 @@ uses synthetic data only and never calls a live provider or a paid service.
   A comment inside a function says why, never what the next line does.
 - A change in behavior updates the guide or reference page that describes it in the same pull
   request. Prose in `docs/` is not formatted automatically; keep lines near 100 characters.
-- Examples must keep running with `cf dev`, building with `cf build` and typechecking with the
+- Examples must keep running with `vp dev`, building with `vp build` and typechecking with the
   workspace.
 - Edit the skill only in `.agents/skills/maximus/`, never the generated copy.
 

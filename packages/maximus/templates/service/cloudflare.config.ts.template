@@ -8,7 +8,7 @@ import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
 export default defineConfig(({ mode }) => ({
   worker: {
     name: '__PROJECT_NAME__',
-    compatibilityDate: '2026-10-12',
+    compatibilityDate: '__COMPATIBILITY_DATE__',
     // Maximus keeps per-invocation diagnostics in AsyncLocalStorage (node:async_hooks).
     compatibilityFlags: ['nodejs_compat'],
     entrypoint,

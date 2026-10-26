@@ -1,9 +1,9 @@
 # CLI reference
 
 `@arbol-ai/maximus` installs one command-line tool, `maximus`, with `init` and `prepare`. It never
-belongs in a Worker bundle. Developing, building and deploying a service are `cf`'s own commands,
-which Maximus does not wrap: `cf dev`, `cf build`, `cf workers types` and `cf deploy` (see
-[Deploying](../guides/deploying.md)).
+belongs in a Worker bundle. Vite+ develops and builds a service (`vp dev`, `vp build`), and
+Cloudflare's `cf` generates its types and deploys it (`cf workers types`, `cf deploy`); Maximus wraps
+neither (see [Deploying](../guides/deploying.md)).
 
 Run it without installing anything, or as `maximus init` from a project that depends on
 `@arbol-ai/maximus`. Never run `bunx maximus` or `npx maximus`: they download the unrelated public npm
