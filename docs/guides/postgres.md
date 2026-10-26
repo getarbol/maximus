@@ -53,7 +53,7 @@ details or query text:
 
 ## Testing it
 
-From `packages/maximus`, `bun run test` covers the unit behavior. `bun run test:integration` starts
+From the repository root, `bun run test` covers the unit behavior. `bun run test:integration` starts
 and removes a disposable Docker container from the **already installed** `postgres:18.6-trixie`
 image, on tmpfs and a random loopback port; it accepts no database URL from the environment and never
 downloads an image. It covers hash partitions, explicit tenant queries on reused connections,

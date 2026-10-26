@@ -19,6 +19,11 @@ const require = createRequire(import.meta.url);
 const config = (name: string) => fileURLToPath(new URL(`../../config/${name}`, import.meta.url));
 const binary = (name: 'oxfmt' | 'oxlint') =>
   join(dirname(require.resolve(`${name}/package.json`)), 'bin', name);
+/**
+ * The environment of a standalone oxlint or oxfmt run. Under `vp test`, VP_VERSION would make them read a
+ * Vite+ configuration's `lint` field instead of the preset file a consumer passes with `-c`.
+ */
+const { VP_VERSION: _vitePlus, ...standalone } = process.env;
 
 interface Diagnostic {
   code: string;
@@ -65,6 +70,7 @@ beforeAll(() => {
       {
         cwd: root,
         encoding: 'utf-8',
+        env: standalone,
       }
     );
   } catch (error) {
@@ -129,6 +135,7 @@ it('formats with single quotes in 110 columns', () => {
     try {
       execFileSync(process.execPath, [binary('oxfmt'), '-c', 'oxfmt.config.mjs', '--check', file], {
         cwd: directory,
+        env: standalone,
         stdio: 'pipe',
       });
       return true;

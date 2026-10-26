@@ -10,16 +10,19 @@
   "scripts": {
     "build": "node scripts/prepare-package.mjs && vp run -r build",
     "typecheck": "vp run -r typecheck",
-    "test": "vp run -r test",
+    "test": "vp test run --project unit --project examples",
     "check": "vp run typecheck && vp check",
     "fix": "vp check --fix",
     "verify": "bun run build && bun run check",
     "verify:release": "bun run verify",
-    "verify:tests": "bun run test && node scripts/verify-package.mjs"
+    "verify:tests": "bun run test && node scripts/verify-package.mjs",
+    "test:coverage": "vp test run --project unit --coverage",
+    "test:integration": "vp test run --project postgres"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261018.1",
     "@types/node": "26.6.5",
+    "@vitest/coverage-v8": "5.0.5",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "publint": "0.3.25",

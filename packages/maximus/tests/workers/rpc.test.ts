@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { afterAll, beforeAll, expect, it } from 'vite-plus/test';
@@ -26,7 +27,8 @@ beforeAll(async () => {
     'bun',
     [
       'build',
-      'tests/workers/fixtures/rpc-owner.ts',
+      // Resolved from this file, so the suite runs from any working directory.
+      fileURLToPath(new URL('fixtures/rpc-owner.ts', import.meta.url)),
       '--target=browser',
       '--external=cloudflare:workers',
       '--external=node:*',

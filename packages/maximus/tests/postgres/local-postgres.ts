@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import type { TestProject } from 'vitest/node';
+import type { TestProject } from 'vite-plus/test/node';
 
 declare module 'vitest' {
   export interface ProvidedContext {

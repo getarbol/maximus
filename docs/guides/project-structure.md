@@ -308,8 +308,8 @@ the framework commands are:
 
 ```bash
 # Framework repository only; explicit test authorization required.
-bun run --cwd packages/maximus test
-bun run --cwd packages/maximus test:integration
+bun run test
+bun run test:integration
 ```
 
 Use the root `bun run verify` for the framework's builds, workspace types, lint and format without
