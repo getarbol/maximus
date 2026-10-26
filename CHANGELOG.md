@@ -6,6 +6,10 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## 7.3.1 (2026-10-26)
+
+- Preserve project-name substitution in starter README titles when formatting templates with Vite+.
+
 ## 7.3.0 (2026-10-26)
 
 - Add an optional project layout with typed file discovery, a public Hello World page and a protected

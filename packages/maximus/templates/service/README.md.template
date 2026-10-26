@@ -1,4 +1,4 @@
-# **PROJECT_NAME**
+# `__PROJECT_NAME__`
 
 A [Maximus](https://github.com/getarbol/maximus) service on Cloudflare Workers. It
 declares each operation once and serves it over HTTP with its OpenAPI document, and, when an

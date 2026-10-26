@@ -1,4 +1,4 @@
-# **PROJECT_NAME**
+# `__PROJECT_NAME__`
 
 A Maximus backend on Cloudflare Workers, with Vite+ as its default toolchain. `GET /` returns **Hello World**, `/health` reports liveness,
 and `/api/openapi.json` describes the API. `GET /api/v1/greeting` is authenticated. The starter refuses
