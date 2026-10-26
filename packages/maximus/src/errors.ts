@@ -14,21 +14,16 @@ import { parseSchema } from './validation.ts';
 export interface FailureData {}
 /**
  * A failure as every transport carries it: a stable code, a message for people that never contains input
- * values, whether repeating the request may succeed, and the data its code declares.
+ * values, whether repeating the request may succeed, and the data its code declares. Its fields come from
+ * `FailureSchema`, so the type and the wire schema cannot drift apart.
  */
-export interface Failure<Data = FailureData> {
-  /** The failure code, stable across releases, that clients branch on, such as `NOT_FOUND`. */
-  code: string;
-  /** What went wrong, for people; it never contains input values. */
-  message: string;
-  /** Whether repeating the same request may succeed. */
-  retryable: boolean;
+export type Failure<Data = FailureData> = Omit<Static<typeof FailureSchema>, 'data'> & {
   /**
    * The details the code declares, such as `issues` for `INVALID_INPUT`; an empty object when it declares
    * none.
    */
   data: Data;
-}
+};
 /**
  * One failure of a catalog: its code, HTTP status, message, retryability, Retry-After seconds and,
  * optionally, the strict schema of its data.

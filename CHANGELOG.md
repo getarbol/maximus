@@ -6,6 +6,12 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## Unreleased
+
+- `operation()` accepts every field `.operation()` does, including `failures`, `maxBodyBytes` and
+  `maxOutputBytes`. Both, and the project route helper, share one handler type, and `Failure` is
+  derived from `FailureSchema`, so the type and the wire schema cannot drift apart.
+
 ## 7.4.0 (2026-10-26)
 
 - Add root `maximus.config.ts`, named HTTP method declarations and generated typed Worker/application

@@ -176,23 +176,30 @@ export interface OperationShape extends Exposure {
     middleware: readonly OperationMiddleware<never>[];
   };
 }
+/** An operation's definition as `.operation()` takes it: its scope, exposure, words, schemas and limits. */
+export type OperationFields<I extends TSchema, O extends TSchema> = Omit<
+  OperationShape,
+  keyof Exposure | 'input' | 'output' | 'execute' | 'pipeline'
+> & {
+  input: I;
+  output: O;
+};
+/** A definition with the exposure its declaration names, keeping that exposure's literal types. */
+export type OperationDefinition<I extends TSchema, O extends TSchema, X> = X & OperationFields<I, O>;
+/** What a handler receives besides its input: the prepared context and, for a declared byte body, its reader. */
+export type OperationContext<C, X> = C &
+  (X extends { http: { body: 'bytes' } } ? { body: BinaryBody } : object);
+/** An operation's handler: the prepared context and the decoded input in, a Result of its output out. */
+export type OperationHandler<C, I extends TSchema, O extends TSchema, X> = (
+  context: OperationContext<C, X>,
+  input: StaticDecode<I>
+) => Promise<Result<Static<O>, Failure>>;
 /**
  * Declares one operation on its own, keeping its literal types. The builder's `.operation()` is the usual way
  * to declare one. As there, `execute` receives the decoded input, `StaticDecode<typeof input>`.
  */
 export function operation<C, I extends TSchema, O extends TSchema, const X extends Exposure>(
-  definition: X & {
-    scope: OperationScope;
-    scopeMatch?: ScopeMatch;
-    conditionalScopes?: readonly string[];
-    title: string;
-    description: string;
-    group?: string;
-    effect: OperationShape['effect'];
-    input: I;
-    output: O;
-    execute: (context: C, input: StaticDecode<I>) => Promise<Result<Static<O>, Failure>>;
-  }
+  definition: OperationDefinition<I, O, X> & { execute: OperationHandler<C, I, O, X> }
 ) {
   return definition;
 }

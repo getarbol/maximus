@@ -3,16 +3,24 @@
  * `.operation()` declares operations, `.mount()` composes resource modules that share one base, and
  * `.build()` checks the result.
  */
-import type { Static, TSchema } from '@sinclair/typebox';
+import type { TSchema } from '@sinclair/typebox';
 
-import type { BinaryBody } from './binary.ts';
 import { defineApp } from './define-app.ts';
 import type { Failure } from './errors.ts';
 import { composeOperations } from './manifest.ts';
-import type { AppManifest, Invocation, OperationShape, OperationMiddleware, Exposure } from './manifest.ts';
+import type {
+  AppManifest,
+  Invocation,
+  OperationDefinition,
+  OperationHandler,
+  OperationShape,
+  OperationMiddleware,
+  Exposure,
+} from './manifest.ts';
 import { ok } from './result.ts';
 import type { Result } from './result.ts';
-import type { StaticDecode } from './schema-types.ts';
+
+export type { OperationFields } from './manifest.ts';
 
 /**
  * What `maximus()` takes: the application without its operations, context and middleware, which the builder
@@ -29,15 +37,6 @@ export type ApplicationConfiguration<E> = Omit<
 type DistinctOperations<Ops, M> = [Extract<keyof M, keyof Ops>] extends [never]
   ? unknown
   : { readonly 'Operations declared twice': Extract<keyof M, keyof Ops> };
-/** An operation's definition as `.operation()` takes it: its scope, exposure, words, schemas and limits. */
-export type OperationFields<I extends TSchema, O extends TSchema> = Omit<
-  OperationShape,
-  keyof Exposure | 'input' | 'output' | 'execute' | 'pipeline'
-> & {
-  input: I;
-  output: O;
-};
-type Definition<I extends TSchema, O extends TSchema, X extends Exposure> = X & OperationFields<I, O>;
 /** Refuses a definition field no operation has, such as a misspelled one, which would otherwise do nothing. */
 export type KnownOperationFields<X> = Readonly<Record<Exclude<keyof X, keyof OperationShape>, never>>;
 /** Immutable builders let independent resource modules share inferred context without overwriting routes. */
@@ -59,12 +58,9 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
    */
   operation<const N extends string, I extends TSchema, O extends TSchema, const X extends Exposure>(
     name: N extends keyof Ops ? never : N,
-    definition: Definition<I, O, X> & KnownOperationFields<X>,
-    execute: (
-      context: C & (X extends { http: { body: 'bytes' } } ? { body: BinaryBody } : object),
-      input: StaticDecode<I>
-    ) => Promise<Result<Static<O>, Failure>>
-  ): ApplicationBuilder<E, C, Ops & Record<N, Definition<I, O, X> & { execute: typeof execute }>> {
+    definition: OperationDefinition<I, O, X> & KnownOperationFields<X>,
+    execute: OperationHandler<C, I, O, X>
+  ): ApplicationBuilder<E, C, Ops & Record<N, OperationDefinition<I, O, X> & { execute: typeof execute }>> {
     const operations = composeOperations(this.definition.operations, {
       [name]: {
         ...definition,
@@ -74,11 +70,15 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
           middleware: this.definition.middleware ?? [],
         },
       },
-    }) as AppManifest<E, C, Ops & Record<N, Definition<I, O, X> & { execute: typeof execute }>>['operations'];
+    }) as AppManifest<
+      E,
+      C,
+      Ops & Record<N, OperationDefinition<I, O, X> & { execute: typeof execute }>
+    >['operations'];
     return new ApplicationBuilder({ ...this.definition, operations }, this.root) as ApplicationBuilder<
       E,
       C,
-      Ops & Record<N, Definition<I, O, X> & { execute: typeof execute }>
+      Ops & Record<N, OperationDefinition<I, O, X> & { execute: typeof execute }>
     >;
   }
   /**
