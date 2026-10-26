@@ -32,6 +32,7 @@ export default defineConfig({
   ignorePatterns: [
     ...core.ignorePatterns,
     '**/.cloudflare',
+    '**/.maximus',
     '**/.wrangler',
     '**/.private',
     '**/.agents',

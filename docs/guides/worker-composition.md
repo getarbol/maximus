@@ -19,12 +19,12 @@ export default worker.handler; // fetch, plus your other handlers
 export const NotesService = worker.entrypoint; // native RPC methods
 ```
 
-| Returned | Use |
-| --- | --- |
-| `handler` | The Worker's default export: `fetch` plus `handlers`. |
-| `entrypoint` | A `WorkerEntrypoint` class whose methods are the `rpc` operations. Export it under a name. |
-| `service(Class)` | Wraps your own `WorkerEntrypoint` with diagnostics. |
-| `durableObject(Class)` | Wraps a Durable Object class the same way. |
+| Returned               | Use                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `handler`              | The Worker's default export: `fetch` plus `handlers`.                                      |
+| `entrypoint`           | A `WorkerEntrypoint` class whose methods are the `rpc` operations. Export it under a name. |
+| `service(Class)`       | Wraps your own `WorkerEntrypoint` with diagnostics.                                        |
+| `durableObject(Class)` | Wraps a Durable Object class the same way.                                                 |
 
 ## Plain routes
 
@@ -59,7 +59,9 @@ export const paymentWebhook: HttpRoute<Env> = async (request, env, context) => {
   const body = await readBodyBytes(request, { maxBytes: 64 * 1024, signal: request.signal });
   if (!body.ok) {
     return context.fail(
-      body.error.data.reason === 'too_large' ? standardErrors.tooLarge.create() : standardErrors.invalidInput.create()
+      body.error.data.reason === 'too_large'
+        ? standardErrors.tooLarge.create()
+        : standardErrors.invalidInput.create()
     );
   }
   // Verify the exact bytes before treating any of them as data.
@@ -166,12 +168,12 @@ assets: {
 },
 ```
 
-| Path kind | Served | `cache-control` |
-| --- | --- | --- |
-| `pages.paths` and `pages.patterns` | The shell, `pages.shell` (default `/index.html`) | `no-store` |
-| `files` | The file itself | `no-cache` |
-| Below `immutablePrefixes` | The file itself | `public, max-age=31536000, immutable` |
-| Anything else | The `404 NOT_FOUND` envelope | `no-store` |
+| Path kind                          | Served                                           | `cache-control`                       |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------- |
+| `pages.paths` and `pages.patterns` | The shell, `pages.shell` (default `/index.html`) | `no-store`                            |
+| `files`                            | The file itself                                  | `no-cache`                            |
+| Below `immutablePrefixes`          | The file itself                                  | `public, max-age=31536000, immutable` |
+| Anything else                      | The `404 NOT_FOUND` envelope                     | `no-store`                            |
 
 A non-200 answer from the binding keeps its status and becomes `no-store`.
 
@@ -246,12 +248,12 @@ authentication, no validation. `ownsPath(pathname)` says whether any method's ro
 
 ## Reserved paths
 
-| Path | Owner |
-| --- | --- |
+| Path                                                                                                                                                   | Owner                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
 | `/`, `/health`, `/openapi.json`, `/openapi.yaml`, `/openapi.yml`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp` | The service's own endpoints, below `basePath` when set |
-| `/v<n>/…` | Operations |
-| Each transport's path, `/mcp` by default | The transport, exactly |
-| `tokens.resources` keys | OAuth resource metadata |
+| `/v<n>/…`                                                                                                                                              | Operations                                             |
+| Each transport's path, `/mcp` by default                                                                                                               | The transport, exactly                                 |
+| `tokens.resources` keys                                                                                                                                | OAuth resource metadata                                |
 
 Plain routes, mounts and transports that collide with these, or with each other, fail when the Worker
 is built.

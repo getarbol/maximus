@@ -1,6 +1,6 @@
 # CLI reference
 
-`@arbol-ai/maximus` installs one command-line tool, `maximus`, with one command, `init`. It never
+`@arbol-ai/maximus` installs one command-line tool, `maximus`, with `init` and `prepare`. It never
 belongs in a Worker bundle. Developing, building and deploying a service are `cf`'s own commands,
 which Maximus does not wrap: `cf dev`, `cf build`, `cf workers types` and `cf deploy` (see
 [Deploying](../guides/deploying.md)).
@@ -12,7 +12,7 @@ package named `maximus`. `--help` prints the usage.
 ## maximus init
 
 ```sh
-bunx @arbol-ai/maximus init <new-directory> --name <name>
+bunx @arbol-ai/maximus init <new-directory> --name <name> [--layout service|project]
 ```
 
 Creates a starter project from the package's templates: one Worker with an empty application, its
@@ -27,3 +27,18 @@ overwrites an existing directory and provisions nothing. Before the first deploy
 placeholder origin, audience and issuer in `src/app.ts`; a fresh project passes `bun run verify` as
 generated.
 
+`--layout project` creates the optional [project structure](../guides/project-structure.md): a public
+Hello World page, a protected greeting operation, generated imports and a deployment workflow. Its
+non-test `verify` checks types, lint and build. Configure origin and authentication in
+`src/application.ts`; infrastructure remains in `cloudflare.config.ts`.
+
+## maximus prepare
+
+```sh
+maximus prepare [directory] [--mode production|development]
+```
+
+Discover project modules and write `.maximus/app.ts`, `.maximus/middleware.ts` and
+`.maximus/worker.ts`. The default directory is the current directory, and the default mode is
+production. No application modules execute during discovery. The `maximusProject()` Vite plugin
+from `@arbol-ai/maximus/vite` invokes the same generator and watches additions/removals in development.

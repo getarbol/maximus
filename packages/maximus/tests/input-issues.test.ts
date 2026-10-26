@@ -2,7 +2,7 @@
  * INVALID_INPUT issues: JSON Pointer paths and expectations, never the refused values, bounded in number.
  */
 import { DefaultErrorFunction, SetErrorFunction } from '@sinclair/typebox/errors';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { executeOperation } from '../src/execution.ts';
 import { defineErrors, maximus, ok, standardErrors, t } from '../src/index.ts';

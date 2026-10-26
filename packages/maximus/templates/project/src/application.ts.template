@@ -1,0 +1,26 @@
+import { defineErrors, err, maximus, standardErrors } from '@arbol-ai/maximus';
+
+import { middleware } from '../.maximus/middleware';
+
+let application = maximus<Env>({
+  name: '__PROJECT_NAME__',
+  namespace: '__PROJECT_NAME__',
+  title: '__PROJECT_NAME__',
+  version: '0.1.0',
+  origin: 'https://__PROJECT_NAME__.example.com',
+  tokens: {
+    audience: 'https://__PROJECT_NAME__.example.com',
+    scheme: { type: 'bearer', description: 'Production authentication has not been configured.' },
+    // Fail closed until the application configures its identity provider or verified token resolver.
+    resolve: () => Promise.resolve(err(standardErrors.unauthorized.create())),
+    development: { binding: 'DEVELOPMENT_TOKEN' },
+  },
+  errors: defineErrors({}),
+  rpc: { callers: [] },
+});
+
+/** All discovered operations share middleware that runs after native authentication and scope checks. */
+for (const handler of middleware) {
+  application = application.use(handler);
+}
+export const base = application;

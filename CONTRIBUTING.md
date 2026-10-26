@@ -5,7 +5,7 @@ the rules the framework keeps, and how to propose a change.
 
 ## Set up
 
-You need [Bun](https://bun.sh) 1.4 and Node.js 22.18 or later (the build runs tsdown on Node, and
+You need [Bun](https://bun.sh) 1.4 and Node.js 22.18 or later (Vite+ runs library packing on Node, and
 the release checks run `node` and `npm`).
 
 ```sh
@@ -43,14 +43,15 @@ readers, `createDiagnostics` and the correlation helpers).
 
 ## Check your change
 
-| Command             | Runs                                                                                                                                                                                                                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run typecheck` | TypeScript in every package and example (Turborepo; add `--force` to bypass the cache).                                                                                                                                                                                                                             |
-| `bun run check`     | Oxlint and Oxfmt through Ultracite. `bun run fix` applies fixes.                                                                                                                                                                                                                                                    |
-| `bun run test`      | The package's Vitest suite and the examples' tests.                                                                                                                                                                                                                                                                 |
-| `bun run verify`    | Build, typecheck, lint, tests, then packs the package and checks it: every export present, under 400 KiB, no workspace protocols or private files, a clean install with no optional peer, the Node entries loading, the browser entries bundling without a runtime, Postgres with `pg`, and a `maximus init` smoke. |
+| Command                | Runs                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `bun run typecheck`    | TypeScript in every package and example (Turborepo; add `--force` to bypass the cache). |
+| `bun run check`        | Oxlint and Oxfmt through Ultracite. `bun run fix` applies fixes.                        |
+| `bun run test`         | The package's Vitest suite and the examples' tests.                                     |
+| `bun run verify`       | Vite+ library and Worker builds, workspace TypeScript, lint and formatting.             |
+| `bun run verify:tests` | Explicitly requested test suites and packed-package smoke checks.                       |
 
-Run `bun run verify` before you open a pull request; CI runs the same on every push and pull
+Run `bun run verify` before you open a pull request. Tests require a human request; CI runs the same on every push and pull
 request, and the publish workflow runs it before it publishes. The Postgres entry also has
 integration tests,
 `bun run test:integration` in `packages/maximus`, which need Docker and an already installed

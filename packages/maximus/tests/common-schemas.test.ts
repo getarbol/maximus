@@ -1,7 +1,7 @@
 /**
  * The shared named schemas: each one appears once as a component and validates what its name promises.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import {
   DeletedObjectSchema,

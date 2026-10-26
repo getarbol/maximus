@@ -1,5 +1,14 @@
 # Building a service
 
+For optional file conventions, use `maximus init <directory> --name <name> --layout project`.
+`routes/` factories receive their versioned file path and return builders derived from
+`src/application.ts`; `pages/` returns public native Responses. Middleware runs after authorization.
+Cron, queue, email and Durable Object modules are discovered into ignored `.maximus/` imports by
+`maximus prepare` and `maximusProject()` from `@arbol-ai/maximus/vite`. Configure infrastructure
+explicitly in `cloudflare.config.ts`. Read `docs/guides/project-structure.md` in the Maximus repository
+for conventions and boundaries. The generated project uses non-test validation and automatic
+deployment on main; production API authentication initially refuses every token.
+
 ## Packages
 
 ```sh

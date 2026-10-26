@@ -4,7 +4,7 @@
  */
 import { createHmac } from 'node:crypto';
 
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import {
   MAX_SIGNATURES,

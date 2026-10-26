@@ -1,7 +1,7 @@
 /**
  * String formats: date-time validation comes from the formats Maximus registers itself.
  */
-import { it, expect } from 'vitest';
+import { it, expect } from 'vite-plus/test';
 
 import { parseInput, t } from '../src/index.ts';
 

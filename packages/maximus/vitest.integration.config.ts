@@ -1,7 +1,7 @@
 /**
  * Vitest configuration of the Postgres integration tests, which need Docker: `bun run test:integration`.
  */
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from 'vite-plus/test/config';
 
 export default defineConfig({
   test: {

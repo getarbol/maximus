@@ -1,0 +1,2 @@
+/** Importable outside workerd; the generated composition retains every operation's inferred type. */
+export { app } from '../.maximus/app';

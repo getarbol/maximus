@@ -1,0 +1,11 @@
+import fmt from '@arbol-ai/maximus/oxfmt';
+import lint from '@arbol-ai/maximus/oxlint';
+import { maximusProject } from '@arbol-ai/maximus/vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  lint: { ...lint, options: { typeAware: false } },
+  fmt,
+  plugins: [maximusProject(), cloudflare()],
+});

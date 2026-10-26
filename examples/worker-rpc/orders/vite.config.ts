@@ -3,7 +3,7 @@
  * reaches it locally; each Worker builds and deploys from its own directory.
  */
 import { cloudflare } from '@cloudflare/vite-plugin';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vite-plus';
 
 import { pricingWorker } from '../pricing/cloudflare.config.ts';
 

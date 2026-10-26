@@ -2,7 +2,7 @@
  * OAuth access token verification against a JWKS: signature, issuer, audiences and expiry.
  */
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../src/index.ts';
 import { createTokenAuthorization } from '../src/tokens.ts';

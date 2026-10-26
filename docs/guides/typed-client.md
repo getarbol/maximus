@@ -85,19 +85,19 @@ not intermediate bytes. An attachment operation resolves to a `Response` whose b
 
 ## Options
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `response` | `'envelope'` | `'data'` returns data and rejects refusals. |
-| `onFailure` | none | Builds the `Error` thrown for a refusal in data mode. |
-| `fetch` | global `fetch` | The fetch implementation, for tests or a Service Binding's `fetch`. |
-| `timeoutMs` | 30 000 | Deadline for each call, including discovery and token acquisition. |
-| `signal` | none | `() => AbortSignal`, captured once per call: a page or job lifecycle. |
-| `beforeRequest` | none | `(request) => void`: may add headers. Method, URL, body, bearer and mapped headers stay the client's. |
-| `afterResponse` | none | `(response, request) => void`: read consistency headers, record timings. |
-| `credentials` | `'omit'` | Fetch credentials mode. |
-| `cache` | `'no-store'` | Fetch cache mode. |
-| `maxResponseBytes` | 1 MiB | Largest JSON response, chunked bodies included; at most 16 MiB. Match the service's `maxOutputBytes`. Refusal bodies are capped at 16 KiB. |
-| `maxAttachmentBytes` | 16 MiB | Largest attachment download. |
+| Option               | Default        | Meaning                                                                                                                                    |
+| -------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `response`           | `'envelope'`   | `'data'` returns data and rejects refusals.                                                                                                |
+| `onFailure`          | none           | Builds the `Error` thrown for a refusal in data mode.                                                                                      |
+| `fetch`              | global `fetch` | The fetch implementation, for tests or a Service Binding's `fetch`.                                                                        |
+| `timeoutMs`          | 30 000         | Deadline for each call, including discovery and token acquisition.                                                                         |
+| `signal`             | none           | `() => AbortSignal`, captured once per call: a page or job lifecycle.                                                                      |
+| `beforeRequest`      | none           | `(request) => void`: may add headers. Method, URL, body, bearer and mapped headers stay the client's.                                      |
+| `afterResponse`      | none           | `(response, request) => void`: read consistency headers, record timings.                                                                   |
+| `credentials`        | `'omit'`       | Fetch credentials mode.                                                                                                                    |
+| `cache`              | `'no-store'`   | Fetch cache mode.                                                                                                                          |
+| `maxResponseBytes`   | 1 MiB          | Largest JSON response, chunked bodies included; at most 16 MiB. Match the service's `maxOutputBytes`. Refusal bodies are capped at 16 KiB. |
+| `maxAttachmentBytes` | 16 MiB         | Largest attachment download.                                                                                                               |
 
 ## Guarantees and limits
 
@@ -112,7 +112,12 @@ not intermediate bytes. An attachment operation resolves to a `Response` whose b
 ## Type helpers
 
 ```ts
-import type { OperationInput, OperationName, OperationOutput, ReadOperationName } from '@arbol-ai/maximus/client';
+import type {
+  OperationInput,
+  OperationName,
+  OperationOutput,
+  ReadOperationName,
+} from '@arbol-ai/maximus/client';
 
 type NotesOperation = OperationName<typeof app>; // 'createNote' | 'getNote' | 'listNotes'
 type Reads = ReadOperationName<typeof app>; // operations with effect 'read'

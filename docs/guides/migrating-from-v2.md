@@ -15,30 +15,30 @@ available and unchanged.
 
 ## Breaking changes in 3.0.0
 
-| Area | 2.x | 3.x | What to do |
-| --- | --- | --- | --- |
-| Token issuer | `tokens.issuer` defaulted to a built-in authorization server. | No default. | Set `tokens.issuer` on every application that verifies or documents OAuth tokens. Without it, OAuth tokens are refused and `/openapi.json` fails. |
-| Admission proof type | `typ: arbol-admission+jwt` | `typ: maximus-admission+jwt` | Upgrade the signer and every verifying owner in the same release window: each refuses the other's proofs. |
-| Classification extensions | `x-arbol-service-id`, `x-arbol-publication`, `x-arbol-publish`, `x-arbol-input-schema`, `x-arbol-actor-kinds` | `x-maximus-service-id`, `x-maximus-publication`, `x-maximus-publish`, `x-maximus-input-schema`, `x-maximus-actor-kinds` | Update tools that read classified OpenAPI documents. |
-| Security scheme names | `arbolToken`; `arbolHuman` and `arbolMachine` for dual authentication | `oauth2`; `bearer` | Update clients or generators that reference scheme names. |
-| Service owner | `owner: 'arbol'` | `owner: 'platform'` | Replace the value in `service`. |
-| `maximus token` | `ARBOL_CLIENT_ID`, `ARBOL_CLIENT_SECRET`, optional `ARBOL_ISSUER` | `--issuer` (required), `MAXIMUS_CLIENT_ID`, `MAXIMUS_CLIENT_SECRET` | Removed in 4.0: drop it from operator scripts. |
+| Area                      | 2.x                                                                                                           | 3.x                                                                                                                     | What to do                                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token issuer              | `tokens.issuer` defaulted to a built-in authorization server.                                                 | No default.                                                                                                             | Set `tokens.issuer` on every application that verifies or documents OAuth tokens. Without it, OAuth tokens are refused and `/openapi.json` fails. |
+| Admission proof type      | `typ: arbol-admission+jwt`                                                                                    | `typ: maximus-admission+jwt`                                                                                            | Upgrade the signer and every verifying owner in the same release window: each refuses the other's proofs.                                         |
+| Classification extensions | `x-arbol-service-id`, `x-arbol-publication`, `x-arbol-publish`, `x-arbol-input-schema`, `x-arbol-actor-kinds` | `x-maximus-service-id`, `x-maximus-publication`, `x-maximus-publish`, `x-maximus-input-schema`, `x-maximus-actor-kinds` | Update tools that read classified OpenAPI documents.                                                                                              |
+| Security scheme names     | `arbolToken`; `arbolHuman` and `arbolMachine` for dual authentication                                         | `oauth2`; `bearer`                                                                                                      | Update clients or generators that reference scheme names.                                                                                         |
+| Service owner             | `owner: 'arbol'`                                                                                              | `owner: 'platform'`                                                                                                     | Replace the value in `service`.                                                                                                                   |
+| `maximus token`           | `ARBOL_CLIENT_ID`, `ARBOL_CLIENT_SECRET`, optional `ARBOL_ISSUER`                                             | `--issuer` (required), `MAXIMUS_CLIENT_ID`, `MAXIMUS_CLIENT_SECRET`                                                     | Removed in 4.0: drop it from operator scripts.                                                                                                    |
 
 The token verifier is now built on first use, so an application whose `tokens.resolve` handles every
 token never contacts an issuer.
 
 ## Additions in 3.x
 
-| Version | Addition |
-| --- | --- |
-| 3.1.0 | `@getarbol/maximus/projection` (public names, REST routes, MCP tool names, CLI commands, query codec); `callAdmitted` and the admission service's native contract; the standard `OUTCOME_UNKNOWN` failure. |
-| 3.2.0 | `checkSchema` and `readSchema` for stored, provider and model data. |
-| 3.3.0 | `INVALID_INPUT` carries `data.issues` on every transport. Clients that expected `data: {}` must accept the issues. |
-| 3.3.1 | A plain route may sit beneath a transport's path. |
-| 3.4.0 | Admitted operations declare the input field that names files (`admission.attachments`); `describe` accepts an internal runtime's agent. |
-| 3.4.1 | `callAdmitted` calls a Service Binding stub's method directly. Upgrade every dispatcher from 3.4.0, where admitted calls through real bindings failed. |
-| 3.5.0 | `@getarbol/maximus/admitted` and `@getarbol/maximus/failures`, runtime-free entries for dispatchers. |
-| 3.6.0 | `.build()` refuses a missing or non-HTTPS `tokens.issuer` and input codecs outside `inputSchema()`, both of which used to fail at run time or without a word. |
+| Version | Addition                                                                                                                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1.0   | `@getarbol/maximus/projection` (public names, REST routes, MCP tool names, CLI commands, query codec); `callAdmitted` and the admission service's native contract; the standard `OUTCOME_UNKNOWN` failure. |
+| 3.2.0   | `checkSchema` and `readSchema` for stored, provider and model data.                                                                                                                                        |
+| 3.3.0   | `INVALID_INPUT` carries `data.issues` on every transport. Clients that expected `data: {}` must accept the issues.                                                                                         |
+| 3.3.1   | A plain route may sit beneath a transport's path.                                                                                                                                                          |
+| 3.4.0   | Admitted operations declare the input field that names files (`admission.attachments`); `describe` accepts an internal runtime's agent.                                                                    |
+| 3.4.1   | `callAdmitted` calls a Service Binding stub's method directly. Upgrade every dispatcher from 3.4.0, where admitted calls through real bindings failed.                                                     |
+| 3.5.0   | `@getarbol/maximus/admitted` and `@getarbol/maximus/failures`, runtime-free entries for dispatchers.                                                                                                       |
+| 3.6.0   | `.build()` refuses a missing or non-HTTPS `tokens.issuer` and input codecs outside `inputSchema()`, both of which used to fail at run time or without a word.                                              |
 
 See the [changelog](../../CHANGELOG.md) for every release.
 
@@ -60,13 +60,13 @@ work through the errors. See [Service definition and CLI](service-definition-and
 
 ## From unsigned delegation to signed admission
 
-| | Unsigned delegation (legacy) | Signed admission |
-| --- | --- | --- |
-| Operation | `delegated: { surfaces, actorKinds, clientClasses }` | `admission: { callers, ingresses }`, `actorKinds` |
-| Application | `delegation: { authorize(env, grant) }` | `admission: { verification(env), authorize(env, admission, input) }` |
-| Binding props | `{ caller: 'gateway', mode: 'delegated' }` | `{ caller: '<dispatcher>', mode: 'admitted' }` |
-| Credential | An unsigned grant object | A signed proof from the admission service |
-| Classification | Unclassified only | Requires `publication` |
+|                | Unsigned delegation (legacy)                         | Signed admission                                                     |
+| -------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| Operation      | `delegated: { surfaces, actorKinds, clientClasses }` | `admission: { callers, ingresses }`, `actorKinds`                    |
+| Application    | `delegation: { authorize(env, grant) }`              | `admission: { verification(env), authorize(env, admission, input) }` |
+| Binding props  | `{ caller: 'gateway', mode: 'delegated' }`           | `{ caller: '<dispatcher>', mode: 'admitted' }`                       |
+| Credential     | An unsigned grant object                             | A signed proof from the admission service                            |
+| Classification | Unclassified only                                    | Requires `publication`                                               |
 
 Both were served by `worker.delegatedEntrypoint`. Once an application declared `publication`,
 unsigned grants were refused, so the dispatcher and the owner moved together. Both are gone in 5.0:

@@ -2,7 +2,7 @@
  * MCP mounted at the root of a dedicated host: real Streamable HTTP initialization, the 401 challenge
  * and its metadata, and the origin's tools behind the same all-of scope checks for listing and calls.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../../src/index.ts';
 import { mcp } from '../../src/mcp/index.ts';

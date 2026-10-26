@@ -2,7 +2,7 @@
  * An operation's declared failures: they are all the failures its document lists, and any other domain
  * failure it answers becomes INTERNAL_ERROR.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, createOpenApi, defineErrors, err, maximus, ok, t } from '../src/index.ts';
 

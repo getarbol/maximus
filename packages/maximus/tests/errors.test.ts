@@ -2,7 +2,7 @@
  * Error catalogs at run time: a domain failure cannot take a standard failure's name or a catalog
  * member's, `create()` checks the data it is given, and `validate()` admits only the catalog's failures.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { defineErrors, t } from '../src/index.ts';
 import type { ErrorDefinition } from '../src/index.ts';

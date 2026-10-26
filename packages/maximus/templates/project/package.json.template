@@ -1,0 +1,38 @@
+{
+  "name": "__PROJECT_NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:project": "maximus prepare",
+    "dev": "vp dev",
+    "typecheck": "maximus prepare && cf workers types && tsc",
+    "check": "vp check",
+    "fix": "vp check --fix",
+    "build": "vp build",
+    "verify": "bun run typecheck && bun run check && bun run build",
+    "deploy": "bun run verify && cf deploy --prebuilt --mode production"
+  },
+  "dependencies": {
+    "@arbol-ai/maximus": "__MAXIMUS_VERSION__"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.3",
+    "@types/node": "26.6.5",
+    "cf": "1.0.0-beta.22",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
+    "typescript": "7.0.2",
+    "ultracite": "8.0.1",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "bun@1.4.3"
+}

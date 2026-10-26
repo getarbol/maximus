@@ -37,15 +37,15 @@ export const errors = defineErrors({
 });
 ```
 
-| Field | Meaning |
-| --- | --- |
+| Field                | Meaning                                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (`noteNotFound`) | The factory name in code. Standard names (`invalidInput`, `notFound`, …) and the catalog's own members (`schema`, `definitions`, `status`, `retryAfter`, `validate`) are reserved: the type and `defineErrors` refuse them. |
-| `code` | A stable `UPPER_SNAKE_CASE` identifier. Unique across the catalog, standard codes included. |
-| `status` | The HTTP status, 400–599. |
-| `message` | A fixed, human-readable sentence. It is part of the contract; it never carries values. |
-| `retryable` | Whether repeating the same call may succeed. Defaults to `false`. |
-| `retryAfter` | Seconds, sent as `Retry-After` over HTTP. |
-| `dataSchema` | A strict object schema for structured `data`. Without it, `data` is `{}`. |
+| `code`               | A stable `UPPER_SNAKE_CASE` identifier. Unique across the catalog, standard codes included.                                                                                                                                 |
+| `status`             | The HTTP status, 400–599.                                                                                                                                                                                                   |
+| `message`            | A fixed, human-readable sentence. It is part of the contract; it never carries values.                                                                                                                                      |
+| `retryable`          | Whether repeating the same call may succeed. Defaults to `false`.                                                                                                                                                           |
+| `retryAfter`         | Seconds, sent as `Retry-After` over HTTP.                                                                                                                                                                                   |
+| `dataSchema`         | A strict object schema for structured `data`. Without it, `data` is `{}`.                                                                                                                                                   |
 
 The catalog includes the framework's [standard failures](../reference/standard-failures.md), so
 `errors.notFound`, `errors.forbidden`, `errors.outcomeUnknown` and the others are always there.
@@ -112,11 +112,11 @@ query key or a malformed JSON body, carry no issues.
 
 ## Presentation on each transport
 
-| Transport | Success | Failure |
-| --- | --- | --- |
-| HTTP | `successStatus` and `{ success: true, data, error: null, metadata }` | The catalog status and `{ success: false, data: null, error, metadata }`, plus `Retry-After` when declared |
-| MCP | `structuredContent` | A tool result with `isError: true` and the failure as JSON text |
-| Native RPC | `{ ok: true, value }` | `{ ok: false, error }` |
+| Transport  | Success                                                              | Failure                                                                                                    |
+| ---------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| HTTP       | `successStatus` and `{ success: true, data, error: null, metadata }` | The catalog status and `{ success: false, data: null, error, metadata }`, plus `Retry-After` when declared |
+| MCP        | `structuredContent`                                                  | A tool result with `isError: true` and the failure as JSON text                                            |
+| Native RPC | `{ ok: true, value }`                                                | `{ ok: false, error }`                                                                                     |
 
 The typed client returns the HTTP envelope, or in `response: 'data'` mode returns the data and throws
 an `Error` whose `cause` is `{ status, failure, requestId }`.

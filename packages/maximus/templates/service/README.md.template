@@ -1,4 +1,4 @@
-# __PROJECT_NAME__
+# **PROJECT_NAME**
 
 A [Maximus](https://github.com/getarbol/maximus) service on Cloudflare Workers. It
 declares each operation once and serves it over HTTP with its OpenAPI document, and, when an
@@ -12,8 +12,8 @@ them. The starter declares no operation, so it serves only its discovery documen
 
 ## Run it locally
 
-`bun run dev` serves the Worker on `localhost` with `cf dev`. `maximus init` wrote a random development
-token to `.dev.vars`, which Git ignores and `cloudflare.config.ts` declares for `cf dev` alone, so no
+`bun run dev` serves the Worker on `localhost` with `vp dev`. `maximus init` wrote a random development
+token to `.dev.vars`, which Git ignores and `cloudflare.config.ts` declares for `vp dev` alone, so no
 deployed build carries it. From `localhost` it is a developer holding every scope the service declares:
 
 ```sh
@@ -26,12 +26,12 @@ curl -H "authorization: Bearer $TOKEN" http://localhost:5173/v1/<your operation'
 | Command                         | Runs                                                                                         |
 | ------------------------------- | -------------------------------------------------------------------------------------------- |
 | `bun install`                   | Installs the dependencies.                                                                   |
-| `bun run dev`                   | The Worker locally, with `cf dev`.                                                           |
+| `bun run dev`                   | The Worker locally, with `vp dev`.                                                           |
 | `bun run typecheck`             | Generates the binding and runtime types with `cf workers types`, then TypeScript.            |
-| `bun run check` / `bun run fix` | Lint and format with the Maximus presets.                                                    |
+| `bun run check` / `bun run fix` | Vite+ lint and format with the Maximus presets.                                              |
 | `bun run test`                  | The tests, in the Workers runtime.                                                           |
-| `bun run build`                 | `cf build`, which writes the build `cf deploy` uploads.                                      |
-| `bun run verify`                | Everything above.                                                                            |
+| `bun run build`                 | `vp build`, which writes the build `cf deploy` uploads.                                      |
+| `bun run verify`                | Type generation, TypeScript, Vite+ lint/format and build; no tests.                          |
 | `bun run deploy`                | `verify`, then deploys that same build with `cf deploy`. Sign in with `cf auth login` first. |
 
 ## Layout

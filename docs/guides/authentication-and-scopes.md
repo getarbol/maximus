@@ -26,12 +26,12 @@ maximus<Env>({
 });
 ```
 
-| Check | Rule |
-| --- | --- |
-| Keys | The issuer's JWKS at `tokens.jwksUri`, or `.well-known/jwks.json` resolved against the issuer. HTTPS only; cached for ten minutes. |
-| Algorithm | `RS256` |
-| Issuer, audience | Exactly `tokens.issuer`, and `tokens.audience` or any one audience of its list |
-| Time | `exp` required, five seconds of clock tolerance |
+| Check            | Rule                                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Keys             | The issuer's JWKS at `tokens.jwksUri`, or `.well-known/jwks.json` resolved against the issuer. HTTPS only; cached for ten minutes. |
+| Algorithm        | `RS256`                                                                                                                            |
+| Issuer, audience | Exactly `tokens.issuer`, and `tokens.audience` or any one audience of its list                                                     |
+| Time             | `exp` required, five seconds of clock tolerance                                                                                    |
 
 A service that also accepts tokens issued for a gateway in front of it lists both audiences, its own
 first: `audience: ['https://notes.example.com', 'https://api.example.com']`. A token for either
@@ -41,13 +41,13 @@ resource OAuth discovery names.
 The verified claims become the principal. The defaults are the standard OAuth claims (RFC 9068) and
 Auth0's conventions:
 
-| Claim | Becomes |
-| --- | --- |
-| `sub` | `actorId`. A subject `<client id>@clients` is a machine (`actorKind: 'service'`); anyone else is a person (`'user'`). A subject ending in `@clients` that names another client is refused. |
-| `org_id` | `organizationId`. Required; 1 to 128 letters, digits, `_` and `-`, starting with a letter or digit. |
-| `azp` or `client_id` | The client id, optional. If both are present they must be equal. Without one, the call has no `authority`. |
-| `scope` | The granted scopes: a space-separated string or a list. Absent, the token grants none. |
-| `permissions` | What a person may do: a person holds only the granted scopes it also lists, and none when their token lacks it. A machine's scopes are never limited. |
+| Claim                | Becomes                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sub`                | `actorId`. A subject `<client id>@clients` is a machine (`actorKind: 'service'`); anyone else is a person (`'user'`). A subject ending in `@clients` that names another client is refused. |
+| `org_id`             | `organizationId`. Required; 1 to 128 letters, digits, `_` and `-`, starting with a letter or digit.                                                                                        |
+| `azp` or `client_id` | The client id, optional. If both are present they must be equal. Without one, the call has no `authority`.                                                                                 |
+| `scope`              | The granted scopes: a space-separated string or a list. Absent, the token grants none.                                                                                                     |
+| `permissions`        | What a person may do: a person holds only the granted scopes it also lists, and none when their token lacks it. A machine's scopes are never limited.                                      |
 
 A person's scopes must appear in both because the client chooses which scopes it requests. Auth0
 without RBAC, for one, grants whatever scopes an application asks for, so `scope` alone would let any
@@ -77,12 +77,12 @@ Two entries change a rule rather than a name:
   authorization server assigns every client id, so that no client can take a person's subject
   (RFC 9068, section 5).
 
-| Provider | Settings |
-| --- | --- |
-| Auth0 | None. Enable RBAC and **Add Permissions in the Access Token** on the API. |
-| Okta | `claims: { scopes: 'scp', client: 'cid', permissions: false, machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/v1/keys`, `/v1/authorize` and `/v1/token`. Add an `org_id` claim in the authorization server, and give each scope an access policy rule that admits only the groups that may hold it. |
-| WorkOS | Session tokens: `claims: { scopes: 'permissions' }`, `jwksUri: 'https://api.workos.com/sso/jwks/<client id>'`, and an `aud` claim added by the JWT template. OAuth tokens: `claims: { machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/oauth2/jwks`, `/oauth2/authorize` and `/oauth2/token`; they list no permissions, so they grant scopes to machines and none to people. |
-| Any other | The claims above, `algorithms` (`ES256`, `EdDSA`, …) and the endpoints; or [custom verification](#custom-verification) for anything else. |
+| Provider  | Settings                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth0     | None. Enable RBAC and **Add Permissions in the Access Token** on the API.                                                                                                                                                                                                                                                                                                                                                           |
+| Okta      | `claims: { scopes: 'scp', client: 'cid', permissions: false, machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/v1/keys`, `/v1/authorize` and `/v1/token`. Add an `org_id` claim in the authorization server, and give each scope an access policy rule that admits only the groups that may hold it.                                                                          |
+| WorkOS    | Session tokens: `claims: { scopes: 'permissions' }`, `jwksUri: 'https://api.workos.com/sso/jwks/<client id>'`, and an `aud` claim added by the JWT template. OAuth tokens: `claims: { machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/oauth2/jwks`, `/oauth2/authorize` and `/oauth2/token`; they list no permissions, so they grant scopes to machines and none to people. |
+| Any other | The claims above, `algorithms` (`ES256`, `EdDSA`, …) and the endpoints; or [custom verification](#custom-verification) for anything else.                                                                                                                                                                                                                                                                                           |
 
 `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` default to Auth0's paths, `.well-known/jwks.json`,
 `authorize` and `oauth/token`, each resolved against the issuer. Copy the others from your
@@ -178,7 +178,6 @@ tokens: {
 Return a `client` when you have one: without it, calls have no `authority`, and operations with
 `conditionalScopes` refuse them.
 
-
 ## Local development
 
 To run a service with `cf dev` without an authorization server, accept one development token:
@@ -214,11 +213,11 @@ binding: declared for `cf dev` alone, no build that `cf deploy` uploads has it. 
 `tokens.scheme` tells clients how to obtain a token. It changes discovery and documentation, not the
 checks above.
 
-| `scheme` | Use when | Effect |
-| --- | --- | --- |
-| `{ type: 'oauth' }` (default) | Callers get OAuth access tokens from `issuer`. | OpenAPI publishes OAuth authorization-code and client-credentials flows; OAuth discovery is served. |
-| `{ type: 'bearer', description }` | The application issues its own tokens, such as a signed visitor session. | Requires `resolve`. OpenAPI publishes an HTTP bearer scheme with your description; no OAuth discovery; a `401` carries a plain `Bearer` challenge. Cannot mount MCP or declare `tokens.resources`. |
-| `{ type: 'oauth+bearer', description }` | People use OAuth and machines use workload keys your resolver verifies. | Requires `resolve`. OpenAPI publishes OAuth authorization code and the bearer scheme as alternatives per operation, from its `actorKinds` (which every published operation must then declare). |
+| `scheme`                                | Use when                                                                 | Effect                                                                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ type: 'oauth' }` (default)           | Callers get OAuth access tokens from `issuer`.                           | OpenAPI publishes OAuth authorization-code and client-credentials flows; OAuth discovery is served.                                                                                                |
+| `{ type: 'bearer', description }`       | The application issues its own tokens, such as a signed visitor session. | Requires `resolve`. OpenAPI publishes an HTTP bearer scheme with your description; no OAuth discovery; a `401` carries a plain `Bearer` challenge. Cannot mount MCP or declare `tokens.resources`. |
+| `{ type: 'oauth+bearer', description }` | People use OAuth and machines use workload keys your resolver verifies.  | Requires `resolve`. OpenAPI publishes OAuth authorization code and the bearer scheme as alternatives per operation, from its `actorKinds` (which every published operation must then declare).     |
 
 ## OAuth discovery
 

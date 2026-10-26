@@ -1,6 +1,6 @@
 # Maximus agent guide
 
-Maximus is one package, @arbol-ai/maximus, in a Bun/Turborepo workspace with its examples. The core
+Maximus is one package, @arbol-ai/maximus, in a Bun/Vite+ workspace with its examples. The core
 is its root; each optional capability is an entry (/workers, /mcp, /client, …) whose source is
 packages/maximus/src/<entry>/. Read docs/README.md (concepts, guides, reference) and the owned
 .agents/skills/maximus/SKILL.md; examples/ holds runnable services that the workspace typechecks.
@@ -32,8 +32,8 @@ No raw input/output, credentials, cookies or clinical data. Providers sanitize e
 framework telemetry and disabling native platform collection are separate controls. Never invent trace IDs.
 
 Tests live beside their entry, in packages/maximus/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
-Run bun run verify plus the consuming services' tests and production dry bundles before
-release. Publish the packed tarball. Never publish workspace: or file: dependencies.
+Run bun run verify (Vite+ builds, workspace TypeScript, lint and format) and production dry bundles
+before release. Tests require an explicit human request, including scripts, hooks and CI. Publish the packed tarball. Never publish workspace: or file: dependencies.
 Registry installation and actual production verification are separate gates; never label mocks live.
 
 Canonical skills are tracked in .agents/skills with harness symlinks; the package includes a generated copy

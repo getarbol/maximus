@@ -3,7 +3,7 @@
  * tenant keys, atomic commits, claims and time budgets reset between tenants.
  */
 import { Pool } from 'pg';
-import { afterAll, beforeAll, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, expect, inject, it } from 'vite-plus/test';
 
 import { withTenantTransaction } from '../../src/postgres/transaction.ts';
 

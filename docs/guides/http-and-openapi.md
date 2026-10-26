@@ -21,12 +21,12 @@ base.operation(
 );
 ```
 
-| Field | Values |
-| --- | --- |
-| `method` | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. `GET` only for `effect: 'read'`. |
-| `path` | A versioned path: `/v<n>/` followed by one or more segments of `[A-Za-z0-9_-]`, or a whole-segment parameter such as `{noteId}`. No empty segments and no trailing slash. |
-| `successStatus` | `200` (default), `201` or `202`. |
-| `body`, `headers`, `response` | Binary uploads and downloads; see [Files](#files). |
+| Field                         | Values                                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `method`                      | `GET`, `POST`, `PUT`, `PATCH` or `DELETE`. `GET` only for `effect: 'read'`.                                                                                               |
+| `path`                        | A versioned path: `/v<n>/` followed by one or more segments of `[A-Za-z0-9_-]`, or a whole-segment parameter such as `{noteId}`. No empty segments and no trailing slash. |
+| `successStatus`               | `200` (default), `201` or `202`.                                                                                                                                          |
+| `body`, `headers`, `response` | Binary uploads and downloads; see [Files](#files).                                                                                                                        |
 
 `METHOD path` must be unique in the application. A read that needs a body, such as a search with
 filters, uses `POST`; its effect stays `read`.
@@ -35,12 +35,12 @@ filters, uses `POST`; its effect stays `read`.
 
 The operation's input schema describes one object. HTTP assembles it from the request:
 
-| Request | Input |
-| --- | --- |
-| `GET` | The query string, each declared field as its kind: an integer, number or boolean, a comma-separated list of strings, otherwise a string. A repeated key, or a value that does not read as its kind, is `INVALID_INPUT`. |
-| `POST`, `PUT`, `PATCH`, `DELETE` | The JSON body. `content-type` must be `application/json` (otherwise `UNSUPPORTED_MEDIA_TYPE`) and the body must parse (otherwise `INVALID_INPUT`). A `DELETE` with no body and no `content-type` is the empty input. |
-| Path parameters | Each `{name}` segment is decoded once and merged into the input. |
-| Byte uploads (`http.body: 'bytes'`) | The query string and the mapped headers; the body is read by the handler. See [Files](#files). |
+| Request                             | Input                                                                                                                                                                                                                   |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`                               | The query string, each declared field as its kind: an integer, number or boolean, a comma-separated list of strings, otherwise a string. A repeated key, or a value that does not read as its kind, is `INVALID_INPUT`. |
+| `POST`, `PUT`, `PATCH`, `DELETE`    | The JSON body. `content-type` must be `application/json` (otherwise `UNSUPPORTED_MEDIA_TYPE`) and the body must parse (otherwise `INVALID_INPUT`). A `DELETE` with no body and no `content-type` is the empty input.    |
+| Path parameters                     | Each `{name}` segment is decoded once and merged into the input.                                                                                                                                                        |
+| Byte uploads (`http.body: 'bytes'`) | The query string and the mapped headers; the body is read by the handler. See [Files](#files).                                                                                                                          |
 
 Rules that follow from this:
 
@@ -93,19 +93,24 @@ A failure answers the status its catalog definition declares:
 {
   "success": false,
   "data": null,
-  "error": { "code": "NOTE_NOT_FOUND", "message": "The note does not exist.", "retryable": false, "data": {} },
+  "error": {
+    "code": "NOTE_NOT_FOUND",
+    "message": "The note does not exist.",
+    "retryable": false,
+    "data": {}
+  },
   "metadata": { "requestId": "…" }
 }
 ```
 
 Every response gets these headers:
 
-| Header | Value |
-| --- | --- |
-| `x-request-id` | The request's UUID, also in `metadata.requestId` and in diagnostics. |
-| `cache-control` | `private, no-store`. A plain route may set its own. |
-| `x-content-type-options` | `nosniff` |
-| `server-timing` | `total;dur=<milliseconds>` |
+| Header                   | Value                                                                |
+| ------------------------ | -------------------------------------------------------------------- |
+| `x-request-id`           | The request's UUID, also in `metadata.requestId` and in diagnostics. |
+| `cache-control`          | `private, no-store`. A plain route may set its own.                  |
+| `x-content-type-options` | `nosniff`                                                            |
+| `server-timing`          | `total;dur=<milliseconds>`                                           |
 
 A `401` adds `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource"`
 (see [Authentication and scopes](authentication-and-scopes.md#oauth-discovery)). A failure whose
@@ -119,10 +124,10 @@ them all.
 
 ## Limits
 
-| Limit | Default | Set with |
-| --- | --- | --- |
-| Request body | 32 KiB | Application `maxBodyBytes`, or an operation's `maxBodyBytes` (not on GET). At most 16 MiB. |
-| Output | 256 KiB of JSON | Application `maxOutputBytes`, or an operation's `maxOutputBytes`. At most 16 MiB per operation. |
+| Limit        | Default         | Set with                                                                                        |
+| ------------ | --------------- | ----------------------------------------------------------------------------------------------- |
+| Request body | 32 KiB          | Application `maxBodyBytes`, or an operation's `maxBodyBytes` (not on GET). At most 16 MiB.      |
+| Output       | 256 KiB of JSON | Application `maxOutputBytes`, or an operation's `maxOutputBytes`. At most 16 MiB per operation. |
 
 Keep the application limit small and raise it only on the operations that need it, such as an
 import. A larger body answers `413 REQUEST_TOO_LARGE`, counting chunked bodies as they arrive. An
@@ -220,7 +225,12 @@ base.operation(
   },
   async (_context, input) => {
     const body = new TextEncoder().encode(`Note ${input.noteId}`);
-    return ok({ body, contentType: 'text/plain', filename: `${input.noteId}.txt`, byteLength: body.byteLength });
+    return ok({
+      body,
+      contentType: 'text/plain',
+      filename: `${input.noteId}.txt`,
+      byteLength: body.byteLength,
+    });
   }
 );
 ```
@@ -252,25 +262,25 @@ The root holds OpenAPI's own fields only: `openapi`, `info`, `servers`, `paths` 
 Scopes become OAuth security requirements. A list of scopes is a list of alternatives; with
 `scopeMatch: 'all'` it is one requirement holding every scope. Maximus-specific facts are extensions:
 
-| Extension | Meaning |
-| --- | --- |
-| `x-required-scopes` | The operation's scopes. |
-| `x-scope-match` | `any` or `all`; present for several scopes. |
-| `x-conditional-scopes` | Scopes the handler checks for part of the operation. |
-| `x-effect` | `read`, `write` or `delete`. |
-| `x-mcp-tool` | The MCP tool name, when the operation declares a tool; `x-mcp-idempotent` and `x-mcp-open-world` (`true` unless the tool declares `openWorld: false`) beside it. |
-| `x-native-rpc` | Whether the operation is a native RPC method. |
-| `x-max-body-bytes`, `x-max-output-bytes` | The limits in force: the operation's, else the application's, else the defaults (32 KiB and 256 KiB). |
-| `x-body`, `x-input-headers` | Binary upload shape. |
-| `x-response` | `attachment` for downloads. |
+| Extension                                | Meaning                                                                                                                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `x-required-scopes`                      | The operation's scopes.                                                                                                                                          |
+| `x-scope-match`                          | `any` or `all`; present for several scopes.                                                                                                                      |
+| `x-conditional-scopes`                   | Scopes the handler checks for part of the operation.                                                                                                             |
+| `x-effect`                               | `read`, `write` or `delete`.                                                                                                                                     |
+| `x-mcp-tool`                             | The MCP tool name, when the operation declares a tool; `x-mcp-idempotent` and `x-mcp-open-world` (`true` unless the tool declares `openWorld: false`) beside it. |
+| `x-native-rpc`                           | Whether the operation is a native RPC method.                                                                                                                    |
+| `x-max-body-bytes`, `x-max-output-bytes` | The limits in force: the operation's, else the application's, else the defaults (32 KiB and 256 KiB).                                                            |
+| `x-body`, `x-input-headers`              | Binary upload shape.                                                                                                                                             |
+| `x-response`                             | `attachment` for downloads.                                                                                                                                      |
 
 Security schemes depend on `tokens.scheme`:
 
-| Scheme | Published as |
-| --- | --- |
+| Scheme            | Published as                                                                                                                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `oauth` (default) | `oauth2` with `authorizationCode` and `clientCredentials` flows. Their URLs are `tokens.authorizationEndpoint` and `tokens.tokenEndpoint`, by default `authorize` and `oauth/token` resolved against `tokens.issuer`. |
-| `bearer` | An HTTP `bearer` scheme with your description. |
-| `oauth+bearer` | `oauth2` (authorization code only) and `bearer`, chosen per operation by its `actorKinds`. |
+| `bearer`          | An HTTP `bearer` scheme with your description.                                                                                                                                                                        |
+| `oauth+bearer`    | `oauth2` (authorization code only) and `bearer`, chosen per operation by its `actorKinds`.                                                                                                                            |
 
 To produce the same document at build time (to generate an SDK, say), call `createOpenApi(app)`. It
 contains no credentials, internal operations or handlers, and serving it grants nothing: every
@@ -278,10 +288,10 @@ operation still checks its token.
 
 ## Discovery endpoints
 
-| Path | Answer |
-| --- | --- |
-| `GET /` | `{ "name": title, "openapi": "/openapi.json", "mcp": "/mcp" }` (`mcp` only with the transport). |
-| `GET /health` | `{ "status": "ok", "service": name, "version": version }`. No dependency is probed. Move it with `http.healthPath`. |
+| Path                                        | Answer                                                                                                                                                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                                     | `{ "name": title, "openapi": "/openapi.json", "mcp": "/mcp" }` (`mcp` only with the transport).                                                                                                                        |
+| `GET /health`                               | `{ "status": "ok", "service": name, "version": version }`. No dependency is probed. Move it with `http.healthPath`.                                                                                                    |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 metadata: `resource` (the audience, or the first of `tokens.audience`'s list), `authorization_servers`, `scopes_supported` and `resource_documentation`. Also at `/.well-known/oauth-protected-resource/mcp`. |
 
 None of them needs a token. The OAuth metadata endpoints also answer

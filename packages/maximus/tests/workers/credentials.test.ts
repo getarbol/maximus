@@ -2,7 +2,7 @@
  * Per-organization credentials: read and checked once, failing closed when missing, invalid or another
  * organization's.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { t, ok, err, standardErrors } from '../../src/index.ts';
 import { credentials } from '../../src/workers/credentials.ts';

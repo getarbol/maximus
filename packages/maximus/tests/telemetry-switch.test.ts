@@ -1,7 +1,7 @@
 /**
  * Telemetry switches isolated per invocation, and observers isolated from each other's failures.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { reportUnexpected, withDiagnostics } from '../src/telemetry.ts';
 

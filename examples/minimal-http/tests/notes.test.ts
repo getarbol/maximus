@@ -3,7 +3,7 @@
  */
 import { createHttpHandler } from '@arbol-ai/maximus';
 import { createClient } from '@arbol-ai/maximus/client';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { app } from '../src/app';
 import type { Env, NoteStore } from '../src/app';

@@ -26,11 +26,11 @@ When the runtime exposes an active span, Maximus sets `service.name`, `operation
 
 Maximus writes one-line JSON to the Workers console, which Cloudflare's logs collect:
 
-| Event | Level | When | Fields |
-| --- | --- | --- | --- |
-| `maximus.admission.rejected` | warn | A request was refused before execution: unknown route, bad token, missing scope, rate limit, oversized or malformed body. | `service`, `operation` (or `null`), `requestId`, `traceId`, `surface`, `occurredAt`, `durationMicros`, `errorCode` |
-| `maximus.unexpected` | error | A handler threw, returned an invalid output, or a framework step failed unexpectedly. | `surface`, `requestId`, `name`, `causes`, `issueCount`, `locations` |
-| `maximus.observer.delivery_failed` | error | An observer's promise rejected. | `requestId` |
+| Event                              | Level | When                                                                                                                      | Fields                                                                                                             |
+| ---------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `maximus.admission.rejected`       | warn  | A request was refused before execution: unknown route, bad token, missing scope, rate limit, oversized or malformed body. | `service`, `operation` (or `null`), `requestId`, `traceId`, `surface`, `occurredAt`, `durationMicros`, `errorCode` |
+| `maximus.unexpected`               | error | A handler threw, returned an invalid output, or a framework step failed unexpectedly.                                     | `surface`, `requestId`, `name`, `causes`, `issueCount`, `locations`                                                |
+| `maximus.observer.delivery_failed` | error | An observer's promise rejected.                                                                                           | `requestId`                                                                                                        |
 
 `maximus.admission.rejected` never names the actor or the organization, even when the token was
 valid; the `admission` observer below receives the verified principal instead. `maximus.unexpected`

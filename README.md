@@ -11,6 +11,13 @@ Binding), then every call runs the same pipeline: decode and validate the input,
 context, run your handler, validate what it returns. It is built for teams whose services are called
 by people, by other services and by agents, in many tenants at once.
 
+Create a project with `bunx @arbol-ai/maximus init my-service --name my-service --layout project`.
+It starts with Vite+, a public Hello World page, a protected greeting operation and automatic
+deployment on main. See [Project structure](docs/guides/project-structure.md) for optional file conventions.
+
+The repository root uses Vite+ for checks, formatting, workspace tasks and library/Worker builds.
+`bun run verify` performs non-test validation; tests run only when explicitly requested.
+
 ```ts
 import { defineErrors, err, maximus, ok, t } from '@arbol-ai/maximus';
 import { mcp } from '@arbol-ai/maximus/mcp';

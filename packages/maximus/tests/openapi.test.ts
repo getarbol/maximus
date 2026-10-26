@@ -2,7 +2,7 @@
  * The OpenAPI document: each public HTTP operation with its scopes, limits and MCP hints, its failures by
  * status and its OAuth flows, and only OpenAPI's own fields at the root.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { parse, stringify } from 'yaml';
 
 import { createHttpHandler, createOpenApi, defineErrors, maximus, ok, t } from '../src/index.ts';

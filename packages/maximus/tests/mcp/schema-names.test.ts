@@ -5,7 +5,7 @@
  */
 import addFormats from 'ajv-formats';
 import Ajv2020 from 'ajv/dist/2020.js';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import {
   EmailAddressSchema,

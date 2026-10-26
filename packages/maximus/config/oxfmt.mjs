@@ -18,6 +18,7 @@ export default defineConfig({
     ...ultracite.ignorePatterns,
     '**/.private/**',
     '**/.cloudflare/**',
+    '**/.maximus/**',
     '**/.wrangler/**',
     '**/dist/**',
     '**/.agents/**',

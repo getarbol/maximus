@@ -6,7 +6,7 @@
  * reported only when they are the server's own, never with their text.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { stringify } from 'yaml';
 import type * as Yaml from 'yaml';
 

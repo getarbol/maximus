@@ -5,7 +5,7 @@
  * may sign with.
  */
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../src/index.ts';
 import { createTokenAuthorization, projectToken } from '../src/tokens.ts';

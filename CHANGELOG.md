@@ -6,6 +6,17 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## 7.3.0 (2026-10-26)
+
+- Add an optional project layout with typed file discovery, a public Hello World page and a protected
+  greeting operation. The service layout stays compatible.
+- Add `maximus prepare`, the optional `/vite` plugin and `/project` Worker composition for pages,
+  ordered operation middleware, cron handlers, queue consumers, email recipients and Durable Objects.
+- Generate English agent guidance and a GitHub workflow that deploys main after non-test validation.
+  Framework CI keeps test suites and package smoke checks behind explicit manual authorization.
+- Make Vite+ the workspace and starter toolchain: root checks and task orchestration, library packing,
+  Worker builds and explicit test commands. Existing runtime exports remain compatible.
+
 ## 7.1.0 (2026-10-18)
 
 - `@arbol-ai/maximus/projection` is back, for a gateway that builds MCP tools, CLI commands and

@@ -11,13 +11,13 @@ old compiler's fields. Everything else is unchanged.
 
 Remove these options; TypeScript names each one that remains.
 
-| 4.x | 5.0 |
-| --- | --- |
-| `gateway: { audience, issuer, jwksUri?, authorize? }` | Remove it. List the platform audience in `tokens.audience` beside the service's own (`audience: [OWN, PLATFORM]`): the Gateway forwards the caller's token to the origin, which verifies it like any other. Rules that `gateway.authorize` applied belong in the application's context or middleware. |
-| `originRoutes: 'published' \| 'declared' \| 'none'` | Remove it. A selected service's origin serves and documents every declared route, as `'declared'` did, because the Gateway forwards every call there. With `'none'`, the origin now serves its operations and also `/`, `/openapi.json`, `/openapi.yaml`, `/health` and the OAuth metadata; a web app that needs `/` as a page moves the API below a prefix with `http.basePath`, and the platform lists the service's OpenAPI under that prefix. |
-| `contract: { package, registry?, notify?, notifyWorkflow? }` | Remove it, with any `maximus publish` step: the platform fetches the deployed origin's `/openapi.json`. |
-| `admission`, `delegation` | Remove them. |
-| `service: { kind, owner, dependencies, connections, … }` | Keep only `publicName`, `permissions` and `roles`. |
+| 4.x                                                          | 5.0                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway: { audience, issuer, jwksUri?, authorize? }`        | Remove it. List the platform audience in `tokens.audience` beside the service's own (`audience: [OWN, PLATFORM]`): the Gateway forwards the caller's token to the origin, which verifies it like any other. Rules that `gateway.authorize` applied belong in the application's context or middleware.                                                                                                                                             |
+| `originRoutes: 'published' \| 'declared' \| 'none'`          | Remove it. A selected service's origin serves and documents every declared route, as `'declared'` did, because the Gateway forwards every call there. With `'none'`, the origin now serves its operations and also `/`, `/openapi.json`, `/openapi.yaml`, `/health` and the OAuth metadata; a web app that needs `/` as a page moves the API below a prefix with `http.basePath`, and the platform lists the service's OpenAPI under that prefix. |
+| `contract: { package, registry?, notify?, notifyWorkflow? }` | Remove it, with any `maximus publish` step: the platform fetches the deployed origin's `/openapi.json`.                                                                                                                                                                                                                                                                                                                                           |
+| `admission`, `delegation`                                    | Remove them.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `service: { kind, owner, dependencies, connections, … }`     | Keep only `publicName`, `permissions` and `roles`.                                                                                                                                                                                                                                                                                                                                                                                                |
 
 On operations, remove `admission`, `delegated`, `resourceSlots` and `execution`.
 
@@ -34,15 +34,15 @@ including one the Gateway forwards, it is the caller's verified access token.
 
 ## Imports
 
-| 4.x | 5.0 |
-| --- | --- |
-| `isResult` from `@getarbol/maximus/admitted` | `isResult` from `@getarbol/maximus` |
-| `callAdmitted` from `@getarbol/maximus/admitted` | Removed. Call native RPC methods on the binding. |
-| Anything from `@getarbol/maximus/delegation` | Removed: admission proofs and keys, `operationContract`, the admission service's schemas, `authorizeDelegatedOperation`, `DelegatedGrant`, the Gateway token mode. |
-| `exportServiceContract`, `ContractBuild` | Removed. `createOpenApi(app, { projection: 'origin' })` is the document the origin serves. |
-| `gatewayServes`, types `GatewayPolicy`, `GatewayCall`, `OriginRoutes` | Removed. |
-| `publicName`, `cliCommand`, `restRoute`, `encodeQuery`, `decodeQuery`, types `RestRoute`, `RestMethod` from `/projection` | Removed. `mcpToolName`, `kebab`, `snake`, `permissionDescription` and `queryKind` remain. |
-| `originServes(publication, originRoutes, operation, surface)` | `originServes(publication, operation, surface)`. |
+| 4.x                                                                                                                       | 5.0                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `isResult` from `@getarbol/maximus/admitted`                                                                              | `isResult` from `@getarbol/maximus`                                                                                                                                |
+| `callAdmitted` from `@getarbol/maximus/admitted`                                                                          | Removed. Call native RPC methods on the binding.                                                                                                                   |
+| Anything from `@getarbol/maximus/delegation`                                                                              | Removed: admission proofs and keys, `operationContract`, the admission service's schemas, `authorizeDelegatedOperation`, `DelegatedGrant`, the Gateway token mode. |
+| `exportServiceContract`, `ContractBuild`                                                                                  | Removed. `createOpenApi(app, { projection: 'origin' })` is the document the origin serves.                                                                         |
+| `gatewayServes`, types `GatewayPolicy`, `GatewayCall`, `OriginRoutes`                                                     | Removed.                                                                                                                                                           |
+| `publicName`, `cliCommand`, `restRoute`, `encodeQuery`, `decodeQuery`, types `RestRoute`, `RestMethod` from `/projection` | Removed. `mcpToolName`, `kebab`, `snake`, `permissionDescription` and `queryKind` remain.                                                                          |
+| `originServes(publication, originRoutes, operation, surface)`                                                             | `originServes(publication, operation, surface)`.                                                                                                                   |
 
 ## The CLI
 

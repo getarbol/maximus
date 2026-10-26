@@ -39,7 +39,7 @@ pipeline, never around it.
 | Callers without bearer tokens (webhooks, signed links) | A plain route that verifies its own signature |
 | Tokens that are not organization-bound OAuth access tokens | `tokens.resolve`, verifying cryptographically |
 | SDKs or a catalog generated from the contract | The origin's `/openapi.json`, or `createOpenApi(app)` at build time; see `references/transports.md` |
-| A new service from scratch | `references/building-a-service.md` |
+| A new service from scratch | `references/building-a-service.md`; `maximus init --layout project` adds optional file conventions |
 | Upgrading from 4.x | `references/migration-to-v5.md` |
 | Upgrading from 2.x | `references/migration-from-v2.md` |
 

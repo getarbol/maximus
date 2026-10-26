@@ -1,7 +1,7 @@
 /**
  * Reading untrusted data: defaults, normalization before checks and unknown keys stripped.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { checkSchema, defaultSchema, normalizeSchema, readSchema, stripObject, t } from '../src/schemas.ts';
 

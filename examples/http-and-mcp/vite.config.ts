@@ -2,6 +2,6 @@
  * The build `cf` runs: Cloudflare's Vite plugin bundles the Worker and, under `cf dev`, runs it in workerd.
  */
 import { cloudflare } from '@cloudflare/vite-plugin';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vite-plus';
 
 export default defineConfig({ plugins: [cloudflare()] });

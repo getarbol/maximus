@@ -78,15 +78,15 @@ permission changes out of model-facing tools.
 
 `tools/list` describes each tool from its operation:
 
-| Tool field | From |
-| --- | --- |
-| `name` | `mcp.name` |
-| `title`, `description` | `title`, `description`. Write the description for a model: when to call it and what it never does. |
+| Tool field                    | From                                                                                                                                                                              |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                        | `mcp.name`                                                                                                                                                                        |
+| `title`, `description`        | `title`, `description`. Write the description for a model: when to call it and what it never does.                                                                                |
 | `inputSchema`, `outputSchema` | The operation's schemas, self-contained: each [named schema](schemas-and-validation.md#shared-schemas) written in place without its `$id`, and a recursive one once under `$defs` |
-| `annotations.readOnlyHint` | `effect === 'read'` |
-| `annotations.destructiveHint` | `effect === 'delete'` |
-| `annotations.idempotentHint` | `mcp.idempotent` |
-| `annotations.openWorldHint` | `mcp.openWorld ?? true` |
+| `annotations.readOnlyHint`    | `effect === 'read'`                                                                                                                                                               |
+| `annotations.destructiveHint` | `effect === 'delete'`                                                                                                                                                             |
+| `annotations.idempotentHint`  | `mcp.idempotent`                                                                                                                                                                  |
+| `annotations.openWorldHint`   | `mcp.openWorld ?? true`                                                                                                                                                           |
 
 Hints help clients present tools; they are not consent and not authorization.
 

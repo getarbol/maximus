@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.cloudflare/
+.maximus/
+.wrangler/
+.env*
+.dev.vars*
+.private/
+coverage/
+.vite-plus/

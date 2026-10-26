@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vite-plus/test';
 
 /**
  * The presets run the real oxlint and oxfmt, as a project that uses Maximus would: a new oxlint or

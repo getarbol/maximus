@@ -354,15 +354,14 @@ Configure MCP on the application and name a tool on each operation it should off
 export const app = maximus<Env>({
   // ...the same configuration
   mcp: { instructions: "Notes of the caller's organization. Read a note before quoting it." },
-})
-  .operation(
-    'createNote',
-    {
-      // ...the same definition
-      mcp: { name: 'create_note', idempotent: false },
-    },
-    handler
-  );
+}).operation(
+  'createNote',
+  {
+    // ...the same definition
+    mcp: { name: 'create_note', idempotent: false },
+  },
+  handler
+);
 ```
 
 Mount the transport in `src/index.ts`:

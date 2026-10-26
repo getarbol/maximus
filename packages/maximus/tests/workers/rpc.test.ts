@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vite-plus/test';
 
 const principal = {
   actorId: 'person',

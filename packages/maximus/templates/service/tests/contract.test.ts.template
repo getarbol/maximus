@@ -3,7 +3,7 @@
  */
 import { verifyContract } from '@arbol-ai/maximus/testing';
 import { exports } from 'cloudflare:workers';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 it('publishes one runtime contract', async () => {
   const contract = await verifyContract((request) => exports.default.fetch(request), 'https://example.test');

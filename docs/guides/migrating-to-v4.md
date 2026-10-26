@@ -21,15 +21,15 @@ dependencies: add the ones you use.
 
 ## Imports
 
-| 3.x | 4.0 |
-| --- | --- |
-| `@getarbol/maximus-workers` | `@getarbol/maximus/workers` |
-| `@getarbol/maximus-mcp` | `@getarbol/maximus/mcp` |
-| `@getarbol/maximus-client` | `@getarbol/maximus/client` |
-| `@getarbol/maximus-analytics` | `@getarbol/maximus/analytics` |
-| `@getarbol/maximus-tooling` (`verifyContract`) | `@getarbol/maximus/testing` |
-| `@getarbol/maximus-tooling/oxlint`, `/oxfmt` | `@getarbol/maximus/oxlint`, `/oxfmt` |
-| `@getarbol/maximus-postgres/transaction`, `/failures` | `@getarbol/maximus/postgres` |
+| 3.x                                                   | 4.0                                  |
+| ----------------------------------------------------- | ------------------------------------ |
+| `@getarbol/maximus-workers`                           | `@getarbol/maximus/workers`          |
+| `@getarbol/maximus-mcp`                               | `@getarbol/maximus/mcp`              |
+| `@getarbol/maximus-client`                            | `@getarbol/maximus/client`           |
+| `@getarbol/maximus-analytics`                         | `@getarbol/maximus/analytics`        |
+| `@getarbol/maximus-tooling` (`verifyContract`)        | `@getarbol/maximus/testing`          |
+| `@getarbol/maximus-tooling/oxlint`, `/oxfmt`          | `@getarbol/maximus/oxlint`, `/oxfmt` |
+| `@getarbol/maximus-postgres/transaction`, `/failures` | `@getarbol/maximus/postgres`         |
 
 The root and its existing entries (`/schemas`, `/errors`, `/delegation`, `/body`, …) are unchanged.
 
@@ -45,13 +45,13 @@ The root and its existing entries (`/schemas`, `/errors`, `/delegation`, `/body`
 The CLI finds the Worker by its `cloudflare.config.ts` or Wrangler file and reads the application,
 the web app and the Gateway entrypoint from the Worker's module, so most flags go:
 
-| 3.x | 4.0 |
-| --- | --- |
-| `maximus check --app src/app.ts#app --wrangler wrangler.jsonc` | `maximus check`, in the Worker's directory or at the workspace's root |
-| `--wrangler <path>` | Run in that Worker's directory, or name it: `maximus check api` |
-| `--worker <name>` (export, publish) | The name the Worker's configuration gives |
-| `--entrypoint <Class>` | Export `worker.delegatedEntrypoint` under that name; the flag still overrides |
-| `publish --package … --notify …` | `contract: { package, notify }` in the application; the flags still override |
+| 3.x                                                            | 4.0                                                                           |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `maximus check --app src/app.ts#app --wrangler wrangler.jsonc` | `maximus check`, in the Worker's directory or at the workspace's root         |
+| `--wrangler <path>`                                            | Run in that Worker's directory, or name it: `maximus check api`               |
+| `--worker <name>` (export, publish)                            | The name the Worker's configuration gives                                     |
+| `--entrypoint <Class>`                                         | Export `worker.delegatedEntrypoint` under that name; the flag still overrides |
+| `publish --package … --notify …`                               | `contract: { package, notify }` in the application; the flags still override  |
 
 `--app` remains, to read another application than the one `createWorker` was given.
 

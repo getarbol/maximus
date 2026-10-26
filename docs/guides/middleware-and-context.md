@@ -15,15 +15,15 @@ async (context, input) => {
 };
 ```
 
-| Field | Present | Meaning |
-| --- | --- | --- |
-| `env` | Always | The Worker's bindings. Inside `http.aroundOperation`, the environment that hook passed on. |
-| `principal` | Always | The verified caller. Use `principal.organizationId` for every tenant query. |
-| `authority` | HTTP and MCP calls whose principal has a `client` | `{ surface, scopes, client, token? }`, frozen; `token` is the verified access token, for calling another service as the same caller (never log, store or return it). Absent over ordinary RPC. |
-| `input` | Always | The decoded input, the same value as the handler's second argument. |
-| `operation` | Always | The operation's name, from the definition, never from the request. |
-| `background` | When the runtime provides one | `waitUntil(promise)` for bounded work after the response. |
-| `body` | Byte uploads only | `read()` for the request bytes; see [Files](http-and-openapi.md#files). |
+| Field        | Present                                           | Meaning                                                                                                                                                                                        |
+| ------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env`        | Always                                            | The Worker's bindings. Inside `http.aroundOperation`, the environment that hook passed on.                                                                                                     |
+| `principal`  | Always                                            | The verified caller. Use `principal.organizationId` for every tenant query.                                                                                                                    |
+| `authority`  | HTTP and MCP calls whose principal has a `client` | `{ surface, scopes, client, token? }`, frozen; `token` is the verified access token, for calling another service as the same caller (never log, store or return it). Absent over ordinary RPC. |
+| `input`      | Always                                            | The decoded input, the same value as the handler's second argument.                                                                                                                            |
+| `operation`  | Always                                            | The operation's name, from the definition, never from the request.                                                                                                                             |
+| `background` | When the runtime provides one                     | `waitUntil(promise)` for bounded work after the response.                                                                                                                                      |
+| `body`       | Byte uploads only                                 | `read()` for the request bytes; see [Files](http-and-openapi.md#files).                                                                                                                        |
 
 The default OAuth verification always sets a client, so `authority` is present on HTTP and MCP. A
 custom `tokens.resolve` that returns no `client` produces calls without `authority`, which makes

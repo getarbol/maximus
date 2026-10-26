@@ -2,7 +2,7 @@
  * The fluent builder: derived context, resource modules, middleware order and single `next`, the Result
  * shape at the output boundary, and what `.build()` refuses.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { maximus, t, ok, err, standardErrors, defineErrors, createHttpHandler } from '../src/index.ts';
 import type { TSchema } from '../src/index.ts';

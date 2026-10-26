@@ -4,7 +4,7 @@
  * params for an unknown skill or a cursor, the public cache hint on both eras, and the skill tool.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { parse } from 'yaml';
 
 import { createHttpHandler, defineErrors, EmptyInputSchema, ok } from '../../src/index.ts';

@@ -2,7 +2,7 @@
  * HTTP routing: transport and plain route ownership of paths, ambiguous templates, typed GET queries, and
  * the verified access token an operation receives.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import type { HttpTransport } from '../src/http.ts';
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../src/index.ts';

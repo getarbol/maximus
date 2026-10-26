@@ -2,7 +2,7 @@
  * Static assets: pages, named files and immutable assets each get their policy, and nothing else is
  * served.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus } from '../../src/index.ts';
 import { createAssetHandler } from '../../src/workers/assets.ts';

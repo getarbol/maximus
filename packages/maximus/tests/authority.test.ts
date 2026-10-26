@@ -2,7 +2,7 @@
  * Verified invocation authority: the client, surface and scopes a transport verified reach preparation,
  * middleware and the handler unchanged, and conditional operations fail closed without them.
  */
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { executeOperation } from '../src/execution.ts';
 import {

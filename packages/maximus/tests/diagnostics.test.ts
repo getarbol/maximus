@@ -1,7 +1,7 @@
 /**
  * Safe error descriptions: no messages, record keys, cyclic causes or hostile getters reach a diagnostic.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { createDiagnostics } from '../src/internal/diagnostics.ts';
 

@@ -14,7 +14,7 @@ locally.
    export const app = maximus<Env>({
      // ...
      rpc: { callers: ['orders'] },
-   })
+   });
    ```
 
 2. Opt each operation in. `rpc: true` admits every application caller; `{ callers }` narrows it to a
@@ -88,7 +88,9 @@ async ({ env, principal }, input) => {
   }
   if (!quote.ok) {
     // The owner's failures belong to its catalog: translate them into yours.
-    return err(quote.error.retryable ? standardErrors.upstreamUnavailable.create() : standardErrors.internal.create());
+    return err(
+      quote.error.retryable ? standardErrors.upstreamUnavailable.create() : standardErrors.internal.create()
+    );
   }
   return ok({ totalCents: quote.value.totalCents, currency: quote.value.currency });
 };

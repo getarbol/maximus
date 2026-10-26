@@ -4,7 +4,7 @@
  */
 import { DatabaseError } from 'pg';
 import type { Pool, PoolClient } from 'pg';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { classifyTransactionFailure } from '../../src/postgres/failures.ts';
 import { withTenantTransaction } from '../../src/postgres/transaction.ts';

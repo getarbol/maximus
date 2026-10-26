@@ -1,0 +1,34 @@
+# __PROJECT_NAME__ agent guide
+
+AGENTS.md is a symlink to this file. Keep code, documentation, comments and agent instructions in English.
+Read .agents/skills/project/SKILL.md and node_modules/@arbol-ai/maximus/skills/maximus/SKILL.md.
+
+## Structure
+
+This is a Maximus project layout. The Vite plugin and `maximus prepare` generate `.maximus/` from
+optional directories. Never edit generated files. Routes are factories that receive their inferred
+versioned path and return a builder derived from `base` in src/application.ts. Pages return native
+Responses; public pages never contain tenant data. Middleware runs after authentication and scopes.
+Configure platform bindings, triggers and Durable Object migrations in cloudflare.config.ts.
+Keep domain logic in src/, schemas and migrations in db/, and uploaded files in public/ only after
+configuring an assets binding and explicit file admission. Never apply migrations implicitly.
+
+## Boundaries
+
+Tenant authority is context.principal.organizationId, never caller input. Declare strict schemas,
+scopes, effects and the required transports once. Use the shared Result pipeline. Never put provider
+credentials, customer data or request bodies in logs, examples, errors or agent instructions.
+Secrets belong in bindings; .dev.vars is local and ignored. Production tokens are refused until the
+application configures a real identity provider or cryptographically verified resolver.
+
+## Workflows
+
+Use `bun run verify` for type generation, TypeScript, lint, format and build. Tests require an explicit
+human request, including tests in scripts, hooks or CI. Never start them implicitly.
+Use `cf` for Cloudflare; discover account/resource commands with anonymous `cf cli search` queries
+and inspect their schema before execution. Deploy with the project's script or its GitHub workflow.
+Preserve unrelated work and Git identity configuration. Do not add assistant attribution to commits.
+
+Vite+ owns the root toolchain: `vite.config.ts` configures lint/format, `vp check` checks them,
+`vp build` bundles the Worker and `vp dev` runs it locally. TypeScript and Cloudflare type generation
+remain part of `bun run verify`. Tests are never part of automatic deployment.

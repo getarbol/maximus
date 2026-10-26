@@ -9,6 +9,9 @@
 
 Build a service:
 
+- [Project structure](guides/project-structure.md): optional file conventions for routes, pages,
+  middleware, scheduled handlers, queues, email and Durable Objects.
+
 - [HTTP and OpenAPI](guides/http-and-openapi.md): routes, input, responses, limits, files and the
   runtime contract.
 - [Schemas and validation](guides/schemas-and-validation.md): strict schemas, input codecs, query

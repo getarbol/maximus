@@ -38,20 +38,20 @@ each once as a component of that name and every SDK generated from those documen
 it. Use them as they are; spread one to give a field its own description
 (`{ ...EmailAddressSchema, description: 'Where the receipt goes.' }`).
 
-| Export | Component | Shape |
-| --- | --- | --- |
-| `OrganizationIdSchema` | `OrganizationId` | string `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`: the ids identity providers issue (`org_…`, UUIDs, slugs) |
-| `UuidSchema` | `Uuid` | an RFC 9562 UUID, lower case |
-| `EmailAddressSchema` | `EmailAddress` | string, format `email`, at most 254 characters |
-| `PhoneNumberSchema` | `PhoneNumber` | E.164, `^\+[1-9][0-9]{1,14}$` |
-| `HttpsUrlSchema` | `HttpsUrl` | string, format `uri`, `^https://`, at most 2048 characters |
-| `HexColorSchema` | `HexColor` | `#rrggbb` |
-| `DeletedObjectSchema` | `DeletedObject` | `{ id: string, deleted: true }`: what a `delete` answers |
-| `SignedUrlSchema` | `SignedUrl` | `{ url: HttpsUrl, expiresAt: date-time }`: a link that grants access by itself until it expires |
-| `NamedReferenceSchema` | `NamedReference` | `{ id: string, name: string }` |
-| `PostalAddressSchema` | `PostalAddress` | FHIR-shaped `{ line?: string[] (≤ 4), city?, state?, postalCode?, countryCode?: ISO 3166-1 alpha-2, use?: 'home' \| 'work' }` |
-| `PageInfoSchema`, `Page(item, { $id })` | `PageInfo`, `<$id>` | See [Lists](#lists) |
-| `FailureSchema` (`/errors`) | `Failure` | `{ code, message, retryable, data }`, the base every failure narrows |
+| Export                                  | Component           | Shape                                                                                                                         |
+| --------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `OrganizationIdSchema`                  | `OrganizationId`    | string `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`: the ids identity providers issue (`org_…`, UUIDs, slugs)                          |
+| `UuidSchema`                            | `Uuid`              | an RFC 9562 UUID, lower case                                                                                                  |
+| `EmailAddressSchema`                    | `EmailAddress`      | string, format `email`, at most 254 characters                                                                                |
+| `PhoneNumberSchema`                     | `PhoneNumber`       | E.164, `^\+[1-9][0-9]{1,14}$`                                                                                                 |
+| `HttpsUrlSchema`                        | `HttpsUrl`          | string, format `uri`, `^https://`, at most 2048 characters                                                                    |
+| `HexColorSchema`                        | `HexColor`          | `#rrggbb`                                                                                                                     |
+| `DeletedObjectSchema`                   | `DeletedObject`     | `{ id: string, deleted: true }`: what a `delete` answers                                                                      |
+| `SignedUrlSchema`                       | `SignedUrl`         | `{ url: HttpsUrl, expiresAt: date-time }`: a link that grants access by itself until it expires                               |
+| `NamedReferenceSchema`                  | `NamedReference`    | `{ id: string, name: string }`                                                                                                |
+| `PostalAddressSchema`                   | `PostalAddress`     | FHIR-shaped `{ line?: string[] (≤ 4), city?, state?, postalCode?, countryCode?: ISO 3166-1 alpha-2, use?: 'home' \| 'work' }` |
+| `PageInfoSchema`, `Page(item, { $id })` | `PageInfo`, `<$id>` | See [Lists](#lists)                                                                                                           |
+| `FailureSchema` (`/errors`)             | `Failure`           | `{ code, message, retryable, data }`, the base every failure narrows                                                          |
 
 `EmptyInputSchema` (`{}`, strict) stays unnamed. Every object is strict. Dates and times stay plain
 `date-time` and `date` strings. Domain records (people, patients, identity documents, locations)
@@ -109,20 +109,20 @@ export const SearchInputSchema = inputSchema(
 normalizers, transforms, refinements and stripping and apply only the TypeBox checks and defaults,
 so `.build()` refuses an operation input that uses a codec outside `inputSchema()`.
 
-| Helper | Effect |
-| --- | --- |
-| `inputSchema(schema)` | Compiles the codecs below into one decoding schema. Defaulted fields become optional on the wire. |
-| `inputSchema(schema, wire)` | Declares a different wire schema, decoded and then checked against `schema`. See [Query strings](#query-strings). |
-| `inputSchema(schema, { stripUnknown: true })` | Drops unknown keys of objects declared with `stripObject`, instead of refusing them. For readers of stored or provider data; an operation input stays strict, and `.build()` refuses this form there. |
-| `defaultSchema(schema, value)` | A default applied before the handler. |
-| `normalizeSchema(schema, fn)` | Runs `fn` on the raw value, then applies the schema's length, pattern and format checks. Consecutive normalizers all run before those checks. |
-| `transformSchema(schema, fn)` | Validates the source value, then converts it with `fn`. |
-| `refineSchema(schema, predicate, detail?)` | A semantic rule. `detail` is a message or `{ message, path }`. |
-| `inspectSchema(schema, (value, { addIssue }) => …)` | Like `refineSchema`, reporting any number of issues. |
-| `pipeSchema(source, target)` | Validates and decodes `source`, then checks and decodes the result against `target`. |
-| `stripObject(properties)`, `strictObject(schema)`, `looseObject(schema)`, `extendObject(object, properties)` | Object shapes with explicit unknown-key behavior. |
-| `literalUnion(['a', 'b'])` | A union of literals. |
-| `urlSchema({ protocol, hostname?, maxLength? })` | A URI whose protocol (and optionally hostname) matches the given expressions. |
+| Helper                                                                                                       | Effect                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inputSchema(schema)`                                                                                        | Compiles the codecs below into one decoding schema. Defaulted fields become optional on the wire.                                                                                                     |
+| `inputSchema(schema, wire)`                                                                                  | Declares a different wire schema, decoded and then checked against `schema`. See [Query strings](#query-strings).                                                                                     |
+| `inputSchema(schema, { stripUnknown: true })`                                                                | Drops unknown keys of objects declared with `stripObject`, instead of refusing them. For readers of stored or provider data; an operation input stays strict, and `.build()` refuses this form there. |
+| `defaultSchema(schema, value)`                                                                               | A default applied before the handler.                                                                                                                                                                 |
+| `normalizeSchema(schema, fn)`                                                                                | Runs `fn` on the raw value, then applies the schema's length, pattern and format checks. Consecutive normalizers all run before those checks.                                                         |
+| `transformSchema(schema, fn)`                                                                                | Validates the source value, then converts it with `fn`.                                                                                                                                               |
+| `refineSchema(schema, predicate, detail?)`                                                                   | A semantic rule. `detail` is a message or `{ message, path }`.                                                                                                                                        |
+| `inspectSchema(schema, (value, { addIssue }) => …)`                                                          | Like `refineSchema`, reporting any number of issues.                                                                                                                                                  |
+| `pipeSchema(source, target)`                                                                                 | Validates and decodes `source`, then checks and decodes the result against `target`.                                                                                                                  |
+| `stripObject(properties)`, `strictObject(schema)`, `looseObject(schema)`, `extendObject(object, properties)` | Object shapes with explicit unknown-key behavior.                                                                                                                                                     |
+| `literalUnion(['a', 'b'])`                                                                                   | A union of literals.                                                                                                                                                                                  |
+| `urlSchema({ protocol, hostname?, maxLength? })`                                                             | A URI whose protocol (and optionally hostname) matches the given expressions.                                                                                                                         |
 
 Callbacks run in declaration order. A refinement's message travels to the caller in
 `INVALID_INPUT` issues, so it must never contain the input's values.
@@ -234,12 +234,12 @@ keys of `stripObject` objects dropped. Neither coerces types.
 
 Lower-level helpers:
 
-| Helper | Use |
-| --- | --- |
-| `decodeInput(schema, value)` | The operation boundary as a function: a `Result` whose failure is `INVALID_INPUT` with issues. |
-| `decodeSchema(schema, value)` | The same decoding, throwing on refusal. |
-| `parseInput(schema, value)` | Check only, no defaults or codecs: `{ ok: true, value }` or an `INVALID_INPUT` failure without issues. |
-| `parseSchema(schema, value)` | Check only, returning the value or throwing. |
+| Helper                        | Use                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `decodeInput(schema, value)`  | The operation boundary as a function: a `Result` whose failure is `INVALID_INPUT` with issues.         |
+| `decodeSchema(schema, value)` | The same decoding, throwing on refusal.                                                                |
+| `parseInput(schema, value)`   | Check only, no defaults or codecs: `{ ok: true, value }` or an `INVALID_INPUT` failure without issues. |
+| `parseSchema(schema, value)`  | Check only, returning the value or throwing.                                                           |
 
 All of them accept only plain JSON trees: no class instances, cycles, non-finite numbers or nesting
 deeper than 100 levels.
@@ -255,7 +255,11 @@ that reports an outage hides it. Send a credential with `redirect: 'manual'` and
 response, so the key never follows a redirect and the call still runs:
 
 ```ts
-const response = await fetch(url, { headers: { authorization: `Bearer ${key}` }, redirect: 'manual', signal });
+const response = await fetch(url, {
+  headers: { authorization: `Bearer ${key}` },
+  redirect: 'manual',
+  signal,
+});
 if (response.status >= 300 && response.status < 400) {
   await response.body?.cancel();
   return err(errors.upstreamUnavailable.create());
@@ -266,13 +270,13 @@ if (response.status >= 300 && response.status < 400) {
 
 Each value is checked exactly once, by the boundary that owns it:
 
-| Value | Checked by |
-| --- | --- |
-| Operation input | The shared execution path, on every transport, after admission. |
-| Operation output and returned failures | The same path, before any transport sees them. |
-| MCP JSON-RPC envelopes | The MCP SDK. |
-| Stored records, provider and model responses, operator files | Their own reader: `checkSchema` or `readSchema`. |
-| The arguments of your own RPC methods and Durable Object methods | The method that receives them. |
+| Value                                                            | Checked by                                                      |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| Operation input                                                  | The shared execution path, on every transport, after admission. |
+| Operation output and returned failures                           | The same path, before any transport sees them.                  |
+| MCP JSON-RPC envelopes                                           | The MCP SDK.                                                    |
+| Stored records, provider and model responses, operator files     | Their own reader: `checkSchema` or `readSchema`.                |
+| The arguments of your own RPC methods and Durable Object methods | The method that receives them.                                  |
 
 Inside a handler, values are typed and already checked:
 

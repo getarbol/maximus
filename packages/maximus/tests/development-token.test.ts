@@ -2,7 +2,7 @@
  * The development token: accepted only from a local host and only when long enough, as a developer holding
  * every scope the application declares, while every other token is verified as before.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../src/index.ts';
 import type { TokenPolicy } from '../src/index.ts';

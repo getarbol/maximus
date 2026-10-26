@@ -1,5 +1,12 @@
 # Lint and format
 
+New starters use Vite+ by default. Their root `vite.config.ts` owns `lint` and `fmt`; `vp check`
+applies the Maximus presets, and the verification task first runs the project's complete TypeScript
+check. The framework's root `bun run check` orchestrates workspace TypeScript through `vp run`
+and then `vp check`. Existing lint rules stay unchanged during migration; type-aware lint rules
+are opt-in rather than silently changing every consumer's policy. `vp pack` builds the package,
+and `vp build` builds the Workers. The standalone preset exports below remain available.
+
 Maximus ships an oxlint preset and an oxfmt preset. They are Ultracite's, plus the guardrails a
 Maximus service needs: each one stops a mistake that type checking cannot see and that has already
 broken, or would quietly weaken, a service. `maximus init` sets both up.
@@ -20,12 +27,12 @@ export { default } from '@arbol-ai/maximus/oxfmt';
 
 ## The guardrails
 
-| Rule | Refuses | Why |
-| --- | --- | --- |
+| Rule                              | Refuses                             | Why                                                                                                                                      |
+| --------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `maximus/no-fetch-redirect-error` | `fetch(url, { redirect: 'error' })` | A Worker's `fetch` throws on it before sending anything, so every such call fails. Use `redirect: 'manual'` and refuse a `3xx` yourself. |
-| `no-restricted-properties` | `process.env` | A Worker reads configuration from its `env` bindings and secrets from the Secrets Store (`await env.NAME.get()`). |
-| `no-restricted-imports` | `zod` | Maximus schemas are TypeBox: `t` from `@arbol-ai/maximus`, or `@arbol-ai/maximus/schemas` in a browser. |
-| `no-restricted-imports` | `hono`, `elysia` | Maximus serves HTTP, MCP and RPC from one definition; a second router splits the contract. Use plain routes or mounts. |
+| `no-restricted-properties`        | `process.env`                       | A Worker reads configuration from its `env` bindings and secrets from the Secrets Store (`await env.NAME.get()`).                        |
+| `no-restricted-imports`           | `zod`                               | Maximus schemas are TypeBox: `t` from `@arbol-ai/maximus`, or `@arbol-ai/maximus/schemas` in a browser.                                  |
+| `no-restricted-imports`           | `hono`, `elysia`                    | Maximus serves HTTP, MCP and RPC from one definition; a second router splits the contract. Use plain routes or mounts.                   |
 
 Code that runs in Node rather than in a Worker may use `redirect: 'error'` and `process.env`: tests
 (`tests/`, `*.test.ts`, `*.spec.ts`), `scripts/`, `examples/` and tool configuration

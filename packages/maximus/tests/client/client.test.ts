@@ -2,7 +2,7 @@
  * The typed HTTP client: route discovery from the live OpenAPI document, fresh tokens, typed envelopes,
  * and refusals of contracts or redirects that could send authority elsewhere.
  */
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi } from 'vite-plus/test';
 
 import { createClient } from '../../src/client/client.ts';
 import { maximus, defineErrors, t, ok, createHttpHandler } from '../../src/index.ts';

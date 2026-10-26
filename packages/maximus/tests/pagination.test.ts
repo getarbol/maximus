@@ -2,7 +2,7 @@
  * The list contract: the named response metadata, PageInfo and each Page, the query defaults on the wire,
  * and page names.
  */
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 import {
   Page,

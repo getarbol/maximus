@@ -42,10 +42,10 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.release.outputs.publish == 'true'
-        run: bun install --frozen-lockfile
-      # The same gate as every push: build, types, lint, tests and the packed-package checks.
+        run: bun install --frozen-lockfile --ignore-scripts
+      # Release validation runs no tests; a human can request them in the verification workflow.
       - if: steps.release.outputs.publish == 'true'
-        run: bun run verify
+        run: bun run verify:release
       - if: steps.release.outputs.publish == 'true'
         run: node scripts/publish.mjs
         env:

@@ -3,7 +3,7 @@
  * body bounds before execution, hidden tools, and business input and output checked once.
  */
 import { FormatRegistry } from '@sinclair/typebox';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vite-plus/test';
 
 import {
   t,

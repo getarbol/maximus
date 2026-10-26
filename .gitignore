@@ -13,3 +13,5 @@ coverage/
 .turbo/
 packages/maximus/skills/
 packages/maximus/LICENSE
+
+.vite-plus/

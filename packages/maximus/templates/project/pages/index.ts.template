@@ -1,0 +1,11 @@
+import type { HttpRoute } from '@arbol-ai/maximus';
+
+/** Public liveness content only; business data belongs in authenticated operations. */
+const home: HttpRoute<Env> = () =>
+  Promise.resolve(
+    new Response('Hello World\n', {
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
+  );
+
+export default home;

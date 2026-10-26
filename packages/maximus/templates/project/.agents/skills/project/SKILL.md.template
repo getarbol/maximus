@@ -1,0 +1,17 @@
+---
+name: __PROJECT_NAME__-development
+description: Extend the __PROJECT_NAME__ Maximus backend using its optional file conventions.
+---
+
+Read CLAUDE.md and the installed Maximus skill. Add authenticated route factories in routes/v1/;
+their default export receives the path and returns operations derived from src/application.ts's base.
+Declare strict input/output schemas, scope and effect. Use src/ for named domain functions.
+Pages return native Responses. Middleware modules default-export an OperationMiddleware<Invocation<Env>>.
+Crons export a cron expression and a default scheduled handler; queues and email export native handlers.
+Durable Object files default-export their class. Infrastructure declarations remain explicit in
+cloudflare.config.ts. Read the Maximus project-structure guide before adding another module kind.
+Run bun run verify for non-test validation. Tests require a human request.
+
+Vite+ owns the root toolchain: `vite.config.ts` configures lint/format, `vp check` checks them,
+`vp build` bundles the Worker and `vp dev` runs it locally. TypeScript and Cloudflare type generation
+remain part of `bun run verify`. Tests are never part of automatic deployment.

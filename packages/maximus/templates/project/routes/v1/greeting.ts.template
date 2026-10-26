@@ -1,0 +1,22 @@
+import { EmptyInputSchema, ok, t } from '@arbol-ai/maximus';
+
+import { base } from '../../src/application';
+
+const GreetingSchema = t.Object({ message: t.String() }, { $id: 'Greeting', additionalProperties: false });
+
+/** The filename supplies the versioned path; Maximus still owns admission and schema validation. */
+export default function greeting(path: string) {
+  return base.operation(
+    'getGreeting',
+    {
+      title: 'Get a greeting',
+      description: 'Return a greeting to an authenticated caller.',
+      scope: '__PROJECT_NAME__:greeting:read',
+      effect: 'read',
+      http: { method: 'GET', path },
+      input: EmptyInputSchema,
+      output: GreetingSchema,
+    },
+    () => Promise.resolve(ok({ message: 'Hello World' }))
+  );
+}

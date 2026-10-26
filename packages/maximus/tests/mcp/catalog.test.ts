@@ -4,7 +4,7 @@
  * execution metadata analytics records.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { parse } from 'yaml';
 
 import { analytics } from '../../src/analytics/analytics.ts';

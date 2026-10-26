@@ -52,7 +52,10 @@ Fake bindings through the narrow interfaces your application declares (a `NoteSt
   };
   const handle = createHttpHandler(app, { verify: async () => person });
 
-  await handle(new Request('https://notes.example.com/v1/notes', { headers: { authorization: 'Bearer a.b.c' } }), env);
+  await handle(
+    new Request('https://notes.example.com/v1/notes', { headers: { authorization: 'Bearer a.b.c' } }),
+    env
+  );
   ```
 
   The token must still look like a JWT (`a.b.c`). A machine is `sub: '<client>@clients'` with
@@ -99,7 +102,9 @@ async function rpc(method: string, params: object = {}) {
   return JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text);
 }
 
-expect((await rpc('tools/list')).result.tools.map((tool: { name: string }) => tool.name)).toContain('list_tasks');
+expect((await rpc('tools/list')).result.tools.map((tool: { name: string }) => tool.name)).toContain(
+  'list_tasks'
+);
 ```
 
 ## Operations without HTTP
