@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#maximus/*": "./.maximus/*.ts"
+  },
   "scripts": {
+    "prepare": "maximus prepare",
     "prepare:project": "maximus prepare",
     "dev": "vp dev",
     "typecheck": "maximus prepare && cf workers types && tsc",

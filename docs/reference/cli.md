@@ -30,7 +30,7 @@ generated.
 `--layout project` creates the optional [project structure](../guides/project-structure.md): a public
 Hello World page, a protected greeting operation, generated imports and a deployment workflow. Its
 non-test `verify` checks types, lint and build. Configure origin and authentication in
-`src/application.ts`; infrastructure remains in `cloudflare.config.ts`.
+`maximus.config.ts`; `src/` is optional and the Worker entry is generated; infrastructure remains in `cloudflare.config.ts`.
 
 ## maximus prepare
 
@@ -38,7 +38,8 @@ non-test `verify` checks types, lint and build. Configure origin and authenticat
 maximus prepare [directory] [--mode production|development]
 ```
 
-Discover project modules and write `.maximus/app.ts`, `.maximus/middleware.ts` and
-`.maximus/worker.ts`. The default directory is the current directory, and the default mode is
+Discover project modules and write `.maximus/base.ts`, `.maximus/routes.ts`, `.maximus/app.ts`,
+`.maximus/middleware.ts`, `.maximus/worker.ts` and the stable `.maximus/entry.ts`. Named HTTP exports and legacy factories are supported. The default directory is the current directory, and the default mode is
 production. No application modules execute during discovery. The `maximusProject()` Vite plugin
-from `@arbol-ai/maximus/vite` invokes the same generator and watches additions/removals in development.
+from `@arbol-ai/maximus/vite` invokes the same generator on every build and watches additions, removals and changed exports.
+Discovery reads syntax without executing configuration or application code.

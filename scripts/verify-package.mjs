@@ -2,7 +2,7 @@
  * The release checks of the packed package: every export and the bin are present, the size cap, no private
  * files or workspace protocols, publint's rules, a clean install without optional peers, declarations that
  * type-check without the DOM library, Node and browser entries, Postgres with pg, and a `maximus init`
- * starter that passes its own `verify` (types, lint and format, tests in workerd and `cf build`) on the
+ * starter that passes its own `verify` (types, lint and format, Vite+ build) on the
  * packed release.
  */
 import assert from 'node:assert/strict';
@@ -234,12 +234,12 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   assert.equal(starterManifest.dependencies['@arbol-ai/maximus'], manifest.version);
   assert(!JSON.stringify(starterManifest).includes('@arbol-ai/maximus-'), 'Starter names a retired package');
   assert(!JSON.stringify(starterManifest).includes('wrangler'), 'The starter runs Wrangler');
-  assert(readFileSync(join(starter, 'oxlint.config.ts'), 'utf-8').includes('@arbol-ai/maximus/oxlint'));
+  assert(readFileSync(join(starter, 'vite.config.ts'), 'utf-8').includes('@arbol-ai/maximus/oxlint'));
   // The starter's own verify, on this release rather than one from the registry: binding and runtime types
-  // from cf, its lint and format presets, its contract test in workerd, then cf build.
+  // from cf, its lint and format presets, then Vite+ build.
   starterManifest.dependencies['@arbol-ai/maximus'] = `file:${archive}`;
   writeFileSync(starterPath, `${JSON.stringify(starterManifest, null, 2)}\n`);
-  execFileSync('bun', ['install'], { cwd: starter, stdio: 'pipe' });
+  execFileSync('bun', ['install', '--ignore-scripts'], { cwd: starter, stdio: 'pipe' });
   execFileSync('bun', ['run', 'verify'], { cwd: starter, stdio: 'inherit' });
   // cf deploys the build verify left without the development token, which only `cf dev` declares.
   const built = JSON.parse(

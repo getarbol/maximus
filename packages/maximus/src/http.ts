@@ -146,10 +146,23 @@ export interface RouteContext {
  */
 export type HttpRoute<E> = (request: Request, env: E, context: RouteContext) => Promise<Response>;
 /**
+ * Wraps HTTP before token admission. The request is a bodyless metadata copy, so a wrapper cannot
+ * consume unbounded input or mutate the headers native admission reads. No principal is available;
+ * `next` keeps the existing pipeline and may run only once before the wrapper settles.
+ */
+export type HttpMiddleware<E> = (
+  request: Request,
+  env: E,
+  context: RouteContext,
+  next: () => Promise<Response>
+) => Promise<Response>;
+/**
  * How the HTTP handler composes the application with the rest of a Worker: exact origins, transports, plain
  * routes and mounts, a base path, a fallback and request hooks.
  */
 export interface HttpOptions<E = unknown> {
+  /** Ordered request wrappers, after origin admission and inside native error/security handling. */
+  middleware?: readonly HttpMiddleware<E>[];
   /** Exact deployment origins; refusal precedes metadata, hooks and token admission. */
   origins?: readonly string[];
   /**
@@ -226,6 +239,11 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
       }))
   ) {
     throw new TypeError('HTTP origins must be exact HTTPS origins.');
+  }
+  for (const middleware of hooks.middleware ?? []) {
+    if (typeof middleware !== 'function') {
+      throw new TypeError('Every HTTP middleware entry must be a function.');
+    }
   }
   const paths = nativePaths(manifest.tokens, hooks);
   const authorize = createTokenAuthorization(manifest.tokens, hooks.verify);
@@ -432,11 +450,8 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
      * Routes the request: origin pinning, the `before` hook, plain routes and mounts, liveness and discovery
      * documents, then an operation or a transport, else the fallback or NOT_FOUND.
      */
-    async function dispatch(): Promise<Response> {
+    async function dispatchNative(): Promise<Response> {
       const url = new URL(incoming.url);
-      if (hooks.origins && !hooks.origins.includes(url.origin)) {
-        return reject(standardErrors.notFound.create());
-      }
       if (hooks.before) {
         plain = true;
         const response = await hooks.before(incoming, env, context);
@@ -662,7 +677,37 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     }
     let response: Response;
     try {
-      response = await dispatch();
+      if (hooks.origins && !hooks.origins.includes(new URL(incoming.url).origin)) {
+        response = reject(standardErrors.notFound.create());
+      } else {
+        const dispatch = async (index: number): Promise<Response> => {
+          const middleware = hooks.middleware?.[index];
+          if (!middleware) {
+            return dispatchNative();
+          }
+          let invoked = false;
+          let active = true;
+          const requestView = new Request(incoming.url, {
+            method: incoming.method,
+            headers: new Headers(incoming.headers),
+            signal: incoming.signal,
+          });
+          try {
+            return await middleware(requestView, env, context, () => {
+              if (invoked || !active) {
+                throw new TypeError(
+                  'An HTTP middleware continuation may run only once before its wrapper settles.'
+                );
+              }
+              invoked = true;
+              return dispatch(index + 1);
+            });
+          } finally {
+            active = false;
+          }
+        };
+        response = await dispatch(0);
+      }
     } catch (error) {
       reportUnexpected(error, plain ? 'route' : 'http', requestId);
       response = plain

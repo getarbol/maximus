@@ -1,13 +1,13 @@
 # Building a service
 
-For optional file conventions, use `maximus init <directory> --name <name> --layout project`.
-`routes/` factories receive their versioned file path and return builders derived from
-`src/application.ts`; `pages/` returns public native Responses. Middleware runs after authorization.
-Cron, queue, email and Durable Object modules are discovered into ignored `.maximus/` imports by
-`maximus prepare` and `maximusProject()` from `@arbol-ai/maximus/vite`. Configure infrastructure
-explicitly in `cloudflare.config.ts`. Read `docs/guides/project-structure.md` in the Maximus repository
-for conventions and boundaries. The generated project uses non-test validation and automatic
-deployment on main; production API authentication initially refuses every token.
+For the API-first project layout, use `maximus init <directory> --name <name> --layout project`.
+Configure the application in `maximus.config.ts`; `src/` is optional domain code. Routes export
+`GET`, `POST`, `PUT`, `PATCH` or `DELETE` through `defineRoute` from the generated `#maximus/routes` alias.
+`defineMiddleware` (also named `defineRequestMiddleware`) wraps HTTP requests; `defineOperationMiddleware` runs after native admission on
+HTTP, MCP and RPC. Middleware files run in filename order. The Vite+ plugin reconciles entries on
+builds and source changes. Configure infrastructure explicitly in `cloudflare.config.ts`, importing
+`.maximus/entry.ts` as its entrypoint. Legacy route factories and explicit service composition below
+remain supported. Read `docs/guides/project-structure.md` for configuration, migration and conventions.
 
 ## Packages
 

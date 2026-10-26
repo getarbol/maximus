@@ -1,22 +1,38 @@
 import { EmptyInputSchema, ok, t } from '@arbol-ai/maximus';
 
-import { base } from '../../src/application';
+import { defineRoute } from '#maximus/routes';
 
 const GreetingSchema = t.Object({ message: t.String() }, { $id: 'Greeting', additionalProperties: false });
 
-/** The filename supplies the versioned path; Maximus still owns admission and schema validation. */
-export default function greeting(path: string) {
-  return base.operation(
-    'getGreeting',
-    {
-      title: 'Get a greeting',
-      description: 'Return a greeting to an authenticated caller.',
-      scope: '__PROJECT_NAME__:greeting:read',
-      effect: 'read',
-      http: { method: 'GET', path },
-      input: EmptyInputSchema,
-      output: GreetingSchema,
-    },
-    () => Promise.resolve(ok({ message: 'Hello World' }))
-  );
-}
+/** The filename supplies the path and this export supplies the method. */
+export const GET = defineRoute(
+  'getGreeting',
+  {
+    title: 'Get a greeting',
+    description: 'Return a greeting to an authenticated caller.',
+    scope: '__PROJECT_NAME__:greeting:read',
+    effect: 'read',
+    input: EmptyInputSchema,
+    output: GreetingSchema,
+  },
+  () => Promise.resolve(ok({ message: 'Hello World' }))
+);
+
+const EchoInputSchema = t.Object(
+  { message: t.String({ minLength: 1, maxLength: 200 }) },
+  { additionalProperties: false }
+);
+
+/** A POST can expose a read operation; its effect remains truthful because no state changes. */
+export const POST = defineRoute(
+  'echoGreeting',
+  {
+    title: 'Echo a greeting',
+    description: 'Return the authenticated caller’s greeting without storing it.',
+    scope: '__PROJECT_NAME__:greeting:read',
+    effect: 'read',
+    input: EchoInputSchema,
+    output: GreetingSchema,
+  },
+  (_context, input) => Promise.resolve(ok(input))
+);

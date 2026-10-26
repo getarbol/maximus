@@ -12,18 +12,17 @@ pipeline, never around it.
 
 ## Workflow
 
-1. **Read the service first.** Find `maximus<Env>(…)` (usually `src/application.ts`), the resource
+1. **Read the service first.** For a project layout, start with `maximus.config.ts` and the project-structure guide; `src/` is optional and routes/middleware are discovered. For explicit composition, find `maximus<Env>(…)` (usually `src/application.ts`), the resource
    modules (`src/api/<resource>/operations.ts`), the composition (`src/app.ts`) and the Worker
    (`src/index.ts`). Keep the project's existing folders and named domain functions.
 2. **Declare, don't wire.** Add an operation to its resource module with strict schemas, a namespaced
-   scope, a truthful effect and only the transports it needs (`http`, `mcp`, `rpc`). Mount new
-   modules in `app.ts`. See `references/adding-an-operation.md`.
+   scope, a truthful effect and only the transports it needs (`http`, `mcp`, `rpc`). Project routes are discovered; explicit service layouts mount modules in `app.ts`. See `references/adding-an-operation.md`.
 3. **Return Results.** Expected failures are `err(catalog.x.create())` from the application's own
    catalog; throw only for the unexpected. See `references/errors-and-results.md`.
 4. **Prepare context with `.derive()`** in the group that needs it, and wrap with `.use()` only for
    cross-cutting behavior after authorization.
-5. **Verify** with the project's typecheck, lint and tests, then `cf build` and a dry-run deploy
-   (`cf deploy --prebuilt --mode production --dry-run`). See `references/testing.md` and
+5. **Verify** with the project's typecheck, lint and Vite+ build, then a dry-run deploy. Run tests only on an explicit human request. Use
+   `cf deploy --prebuilt --mode production --dry-run`. See `references/testing.md` and
    `references/publishing-and-verification.md`.
 
 ## Decisions

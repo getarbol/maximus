@@ -6,6 +6,15 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## 7.4.0 (2026-10-26)
+
+- Add root `maximus.config.ts`, named HTTP method declarations and generated typed Worker/application
+  entries. Project starters no longer require `src/`; existing service and route factory layouts work.
+- Reconcile route exports and optional modules on every Vite+ build and source change without executing
+  application code on the build host. Oxc parses explicit exports and rejects ambiguous route modules.
+- Discover ordered request middleware and post-admission operation middleware with explicit phases,
+  preserving native HTTP security handling and the shared HTTP/MCP/RPC authorization pipeline.
+
 ## 7.3.1 (2026-10-26)
 
 - Preserve project-name substitution in starter README titles when formatting templates with Vite+.

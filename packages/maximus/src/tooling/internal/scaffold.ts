@@ -53,7 +53,9 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
       if (
         layout === 'project' &&
         templateName === 'service' &&
-        (relative(template, source).startsWith('tests/') || file.name === 'vitest.config.ts.template')
+        (relative(template, source).startsWith('tests/') ||
+          relative(template, source).startsWith('src/') ||
+          file.name === 'vitest.config.ts.template')
       ) {
         continue;
       }
@@ -82,7 +84,7 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
     layout,
     next:
       layout === 'project'
-        ? 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in src/application.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.'
+        ? 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in maximus.config.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.'
         : 'Run bun install and bun run dev, and call it with the DEVELOPMENT_TOKEN in .dev.vars. Before the first deployment, set origin, audience and issuer in src/app.ts, run bun run verify, sign in with cf auth login and run bun run deploy.',
   };
 }

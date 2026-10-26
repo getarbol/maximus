@@ -2,10 +2,11 @@
 
 ## A new service (`@arbol-ai/maximus`)
 
-One command, `bunx @arbol-ai/maximus init <dir> --name <name>`: a starter project on the CLI's own
-release, scripted with `cf`; it passes `bun run verify` as generated. Replace the placeholder origin,
-audience and issuer in `src/app.ts` before deploying. Develop, build and deploy with `cf dev`,
-`cf build`, `cf workers types` and `cf deploy`: Maximus does not wrap them.
+Run `bunx @arbol-ai/maximus init <dir> --name <name> --layout project` for a Vite+ project on the CLI's
+own release. Configure its origin and token policy in `maximus.config.ts`. The compatible service
+layout is still available and keeps `src/app.ts`. Use the generated package scripts: Vite+ owns
+development, builds and checks; Cloudflare owns types and deployment. Maximus prepares the source
+graph before Vite loads the generated Worker.
 
 `createOpenApi(app)` builds the document the origin serves at `/openapi.json`, for SDKs or a contract
 check at build time. Nothing is published from the service: deploying it is the release.
@@ -13,15 +14,15 @@ check at build time. Nothing is published from the service: deploying it is the 
 ## Before deploying
 
 ```sh
-bun run typecheck   # cf build does not typecheck
-bun run test
-cf build            # then read .cloudflare/output/v0/workers/default/worker.config.json: no dev token
+bun run verify      # preparation, types, lint/format and build; no tests
+# Read .cloudflare/output/v0/workers/default/worker.config.json: no development token.
+cf deploy --prebuilt --mode production --dry-run
 cf deploy --prebuilt --mode production   # --dry-run first; cf auth login or CLOUDFLARE_API_TOKEN
 ```
 
 `nodejs_compat` on; secrets as `bindings.secret()`, uploaded with `cf deploy --secrets-file` or kept
 in Secrets Store, never in `bindings.text()`; `.dev.vars` local only, and the development token
-declared for `cf dev` alone; Durable Object class names unchanged and declared as exports; preview
+declared for development mode alone; Durable Object class names unchanged and declared as exports; preview
 environments use their own audience, state and credentials.
 
 ## After deploying
@@ -34,6 +35,8 @@ deployment.
 
 ## Releasing Maximus itself (framework repository)
 
-`bun run verify` (build, typecheck, lint, tests, packed-package and isolation checks), packages in
-dependency order from packed tarballs, never with `workspace:` or `file:` dependencies; then install
-from the registry, run consumers' workerd tests and dry bundles, and verify a real deployment.
+Run `bun run verify` for builds, workspace types, lint and format. Inspect a packed tarball and build
+consumers from it; never publish `workspace:` or `file:` dependencies. After publication, install from
+the registry, produce the consumer's dry bundle and verify the deployed service. Test suites and
+package smoke tests are separate: run them only after an explicit human request. Neither release
+authorization nor a successful build is evidence that tests were authorized or passed.

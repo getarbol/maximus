@@ -1,71 +1,320 @@
 # Project structure
 
-`maximus init my-service --name my-service --layout project` creates a backend with optional
-file conventions. Both layouts use Vite+ by default. The default `service` layout remains available for explicit composition.
-The project layout adds discovery without another HTTP router, token system or resource provisioner.
+Maximus is API first: each operation owns one contract, scope, effect and Result handler, shared by
+HTTP/OpenAPI, MCP and native Worker RPC. The project layout adds filesystem discovery to that pipeline.
+
+`maximus init my-service --name my-service --layout project` creates a Vite+ project with no `src/`
+requirement. Existing service layouts and default-export route factories remain supported.
 
 ```text
-routes/v1/greeting.ts       Authenticated operation factory
-pages/index.ts             Public response at /
-middleware/01-policy.ts    Optional operation middleware
+maximus.config.ts          Application, authentication and Worker transport policy
+routes/v1/greeting.ts       Named GET/POST/PUT/PATCH/DELETE operation declarations
+middleware/10-response.ts   Ordered HTTP request middleware
+pages/index.ts             Optional public response at /
 crons/daily.ts             Optional scheduled handler and cron expression
-queues/notifications.ts    Optional consumer for the notifications queue
-email/help@example.com.ts  Optional handler for an exact recipient
+queues/notifications.ts    Optional physical queue consumer
+email/help@example.com.ts  Optional exact-recipient email handler
 durable-objects/session.ts Optional class, exported as Session
 db/                       Application-owned schemas and migrations
-src/application.ts        Configuration and the shared base builder
-src/worker.ts             Explicit transports, HTTP policy and assets
-src/index.ts              Re-exports the generated Worker
+src/                      Optional shared domain code; no framework entrypoints required
 public/                   Assets, when explicitly configured
-.maximus/                 Generated static imports, ignored by Git
-cloudflare.config.ts      Cloudflare bindings, triggers, exports and migrations
+tests/                    Explicitly run tests; never discovered as routes
+.maximus/                 Generated composition, ignored by Git
+cloudflare.config.ts      Infrastructure; imports .maximus/entry.ts as its entrypoint
 vite.config.ts            maximusProject() before cloudflare()
 ```
 
-Every convention directory is optional. The starter creates only the greeting and the home page.
-`maximus prepare` generates imports without evaluating application code. The Vite plugin calls it
-before builds and development, and discovers added/removed modules during development. Use
-`maximus prepare --mode development` for development-only editor types; the default is production.
-Generated composition uses literal imports and chained builder calls, retaining client and RPC types.
+## Configuration and routes
 
-## Routes
-
-A route file default-exports a factory that receives its path and returns a builder derived from
-the application's shared `base`. It can declare several methods for that path. Each operation still
-declares its name, scope, effect, schemas and transports explicitly:
+`maximus.config.ts` is a runtime-neutral module. Configure the application once:
 
 ```ts
-import { EmptyInputSchema, ok, t } from '@arbol-ai/maximus';
+import { defineErrors } from '@arbol-ai/maximus';
+import { defineConfig } from '@arbol-ai/maximus/config';
 
-import { base } from '../../src/application';
-
-export default function greeting(path: string) {
-  return base.operation(
-    'getGreeting',
-    {
-      title: 'Get a greeting',
-      description: 'Return a greeting to an authenticated caller.',
-      scope: 'my-service:greeting:read',
-      effect: 'read',
-      input: EmptyInputSchema,
-      output: t.Object({ message: t.String() }, { additionalProperties: false }),
-      http: { method: 'GET', path },
-    },
-    () => Promise.resolve(ok({ message: 'Hello World' }))
-  );
-}
+export default defineConfig<Env>({
+  name: 'notes',
+  namespace: 'notes',
+  title: 'Notes',
+  version: '1.0.0',
+  origin: 'https://notes.example.com',
+  tokens: { issuer: 'https://identity.example.com/', audience: 'https://notes.example.com' },
+  errors: defineErrors({}),
+  rpc: { callers: [] },
+  worker: { http: { basePath: '/api', healthPath: '/health' } },
+});
 ```
 
-`routes/v1/notes/index.ts` receives `/v1/notes`; `routes/v1/notes/[noteId].ts` receives
-`/v1/notes/{noteId}`. Declare `noteId` in its input schema as usual. `(group)` directories organize
-files without adding a path segment. Duplicate paths, conflicting methods, invalid scopes and
-ambiguous parameters are rejected by discovery or the existing builder. Catch-all operation routes
-are unsupported: explicit versioned templates keep ownership and schema admission unambiguous.
+For derived context, pass `{ application: maximus<Env>({...}).derive(...), worker: {...} }` instead.
+The builder must not already declare operations. Do not import generated modules or route modules
+into configuration: generated composition imports configuration, and the reverse would create a cycle.
+Cloudflare resource bindings, triggers, migrations and secrets stay in `cloudflare.config.ts`.
+The starter defines `#maximus/*` package imports for the generated modules, so route imports do not
+change with directory depth. Relative imports remain supported.
 
-The starter mounts the API at `/api`, so the greeting is `/api/v1/greeting`. Middleware under
-`middleware/` default-exports `OperationMiddleware<Invocation<Env>>`; files run in ascending filename
-order, after authorization, on HTTP, MCP and RPC. Use numeric prefixes for explicit order. Middleware
-must import application types only, not `base`, to avoid a cycle while the base is being built.
+A file exports HTTP method declarations. The generated route helper retains the configured context,
+literal operation names, input/output schemas and MCP/RPC exposure:
+
+```ts
+// routes/v1/greeting.ts
+import { EmptyInputSchema, ok, t } from '@arbol-ai/maximus';
+
+import { defineRoute } from '#maximus/routes';
+
+export const GET = defineRoute(
+  'getGreeting',
+  {
+    title: 'Get a greeting',
+    description: 'Return a greeting.',
+    scope: 'notes:greeting:read',
+    effect: 'read',
+    input: EmptyInputSchema,
+    output: t.Object({ message: t.String() }, { additionalProperties: false }),
+  },
+  async () => ok({ message: 'Hello World' })
+);
+```
+
+Add `POST`, `PUT`, `PATCH` or `DELETE` in that same file with their own operation names, contracts and
+handlers. Use `mcp` and `rpc` on a declaration exactly as with `base.operation`; configuring an MCP
+transport and trusted RPC callers remains explicit. HTTP body/header/response options may be declared
+in `http`, but `http.method` and `http.path` belong to the export and filename. No raw handler bypasses
+authentication or schema validation. Public native responses remain explicit pages/plain routes.
+
+`routes/v1/notes/index.ts` maps to `/v1/notes`; `routes/v1/notes/[noteId].ts` maps to
+`/v1/notes/{noteId}`. Declare `noteId` in the input schema. `(group)` directories organize files without
+adding URL segments. With the starter's `/api` base, greeting is `/api/v1/greeting`. Catch-all operation
+routes are unsupported. Versioned templates retain ownership and schema admission.
+
+Exports must be explicit. Named re-exports such as `export { handler as GET } from './_handler'` work;
+`export *` and mixing a default route factory with method exports in one file are refused. Keep runtime
+helpers private or in `_files`; exported TypeScript types do not register routes. Duplicate paths,
+operation identifiers and conflicting methods fail discovery, type checking or native construction.
+
+### Filename decisions
+
+These mappings assume `worker.http.basePath: '/api'`. Filenames determine the URL; method exports
+determine the HTTP verb. The operation name is explicit and remains stable when a file moves.
+
+| Source                                                     | Export                         | HTTP registration or behavior                                     |
+| ---------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------- |
+| `routes/v1/greeting.ts`                                    | `GET`, `POST`                  | `GET /api/v1/greeting` and `POST /api/v1/greeting`                |
+| `routes/v1/notes/index.ts`                                 | `GET`, `POST`                  | `/api/v1/notes`; `index` adds no segment                          |
+| `routes/v1/notes/[noteId].ts`                              | `GET`, `PATCH`, `DELETE`       | `/api/v1/notes/{noteId}`; `noteId` belongs in each input schema   |
+| `routes/v1/(staff)/reports.ts`                             | `GET`                          | `/api/v1/reports`; the group adds no URL segment or authorization |
+| `routes/v2/notes.ts`                                       | `GET`                          | `/api/v2/notes`; versions are explicit directories                |
+| `routes/v1/debug.dev.ts`                                   | `GET`                          | `/api/v1/debug` only in `development` mode                        |
+| `routes/v1/status.prod.ts`                                 | `GET`                          | `/api/v1/status` only in `production` mode                        |
+| `routes/v1/_schemas.ts`, `routes/_shared/`                 | Any                            | Helpers; ignored by discovery                                     |
+| `routes/v1/greeting.test.ts`, `routes/v1/greeting.spec.ts` | Any                            | Test modules; ignored by discovery                                |
+| `routes/v1/greeting.d.ts`                                  | Types                          | Declaration file; ignored by discovery                            |
+| `routes/greeting.ts`, `routes/v1/index.ts`                 | `GET`                          | Rejected: an operation needs a resource below a version           |
+| `routes/v1/[...rest].ts`, `routes/v1/[[id]].ts`            | `GET`                          | Rejected: no catch-all or optional segments                       |
+| `pages/index.ts`                                           | Default response handler       | Public `GET /` and `HEAD /`, outside the API base                 |
+| `middleware/10-response.ts`                                | Default middleware declaration | Global policy; no route is registered                             |
+
+Use kebab-case for resource files, `[camelCase]` for contract parameters, and zero-padded numeric
+prefixes for middleware order. Segment casing is preserved. Route groups only organize source:
+putting a file in `(staff)` does not make it private. Declare its scope and visibility explicitly.
+
+A route file cannot export a schema or a helper value alongside method declarations. Keep them
+unexported, put them in an ignored helper module, or move shared code to an optional `src/` directory.
+Type-only exports are allowed. `GET.ts` means a resource literally named `GET`; it does not select a
+verb. The verb is the export. `HEAD` and `OPTIONS` are not operation declaration exports in this
+release; HTTP transport handling remains owned by the native pipeline.
+
+Two files resolving to the same path are an error, even if they declare different verbs. Put those
+verbs together. A base file plus a matching `.dev`/`.prod` file is also a collision, not an override.
+Modes other than `development` and `production` include unsuffixed modules only.
+
+## Middleware
+
+Files in `middleware/` run globally in ascending filename order. Numeric prefixes make order explicit.
+The phase is explicit so HTTP admission and transport-independent business policy retain their owners.
+
+```ts
+// middleware/10-response.ts
+import { defineMiddleware } from '@arbol-ai/maximus/config';
+
+export default defineMiddleware<Env>(async (_request, _env, _context, proceed) => {
+  const response = await proceed();
+  if (response.status === 101) return response;
+  const headers = new Headers(response.headers);
+  headers.set('referrer-policy', 'no-referrer');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+});
+```
+
+`defineMiddleware` (also named `defineRequestMiddleware`) wraps HTTP after configured origin admission and before routing/token admission.
+It sees a bodyless request metadata copy, bindings and native request context, never an authenticated principal.
+Header changes affect only that copy; native token admission and bounded body reading keep the original request. Calling
+`proceed()` enters the unchanged HTTP pipeline; it may run only once before the middleware settles. Errors and response security
+headers remain inside native handling. Preserve WebSocket 101 responses and response streams.
+Configuration's `worker.http.middleware` runs before discovered request middleware.
+
+For policy that runs after authentication, scope checks and context preparation on HTTP, MCP and RPC:
+
+```ts
+import { defineOperationMiddleware } from '@arbol-ai/maximus/config';
+import type { ProjectContext } from '@arbol-ai/maximus/config';
+
+import type config from '../maximus.config';
+
+export default defineOperationMiddleware<ProjectContext<typeof config>>(async (context, proceed) => {
+  // context.principal is verified; scope every tenant operation by its organizationId.
+  return proceed();
+});
+```
+
+Bare middleware functions from the 7.3 layout keep their operation phase. Middleware may import
+configuration types, but must not import the generated base or routes at runtime. Configured base
+middleware runs before discovered operation middleware; route factories capture that combined base. Generated composition rejects any factory that omits
+that middleware prefix, including a helper accidentally created from the pre-middleware config base.
+
+### `next()` / `proceed()` and ordering
+
+`next` and `proceed` are names for the same callback argument; Maximus does not export a separate
+`next` function. The examples call it `proceed` to make continuation explicit. Always await or return
+the continuation. Work before it runs on the way in; work after it runs on the way out.
+
+```text
+HTTP origin admission
+  configured worker.http.middleware
+    middleware/10-response.ts             request phase: before proceed()
+      middleware/20-request-policy.ts     request phase: before proceed()
+        native routing, token, scope and input admission
+          configured/derived operation context
+            configured base.use(...) middleware
+              middleware/30-business-policy.ts   operation phase: before proceed()
+                operation handler -> Result
+              operation phase: after proceed()
+            native output/error validation
+      request phase: after proceed()
+    request phase: after proceed()
+native HTTP response/security headers
+```
+
+Filenames are sorted by code units, including nested directory names, independently inside each
+phase. `01-business.ts` cannot move operation middleware ahead of authentication. Folder middleware
+is global: `middleware/v1/` does not scope it to `/v1`. For a particular resource, use a derived base
+with `.use(...)` and `createRoute(derivedBase)`; derive it from `#maximus/base` so global policy stays
+in the chain. Do not import that generated base back into a middleware module.
+
+| Behavior                  | Request middleware                                                   | Operation middleware                                            |
+| ------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Arguments                 | Bodyless request copy, bindings, request context, continuation       | Verified/derived operation context, continuation                |
+| Continuation result       | `Promise<Response>`                                                  | `Promise<Result<unknown, Failure>>`                             |
+| Applies to                | HTTP requests entering the configured HTTP transport                 | HTTP, MCP and RPC operations                                    |
+| Before authentication     | Yes; no trusted principal is available                               | No; admission and context preparation have completed            |
+| Short circuit             | Return a native `Response` without calling `proceed()`               | Return a declared error Result; native validation still applies |
+| Repeat continuation       | Rejected; also rejected after its wrapper has settled                | Rejected by the existing execution chain                        |
+| Modify request body/token | The copy has no body; changing its headers does not change admission | Do not replace trusted identity or bypass schema admission      |
+
+An HTTP short circuit does not execute a protected operation. Use the operation phase for tenant
+policy or anything that must protect MCP and RPC as well. Read tenant identity from the verified
+context, never from a path, header or request body. Returning an error uses the application's declared
+failures; throwing follows the native unexpected-error path. Do not keep a continuation for later
+background work. Use the native background context for independent work instead.
+
+## Reconciliation and compatibility
+
+`maximus prepare` generates `.maximus/base.ts`, `routes.ts`, `app.ts`, `middleware.ts`, `worker.ts` and the stable `entry.ts`.
+The generated Worker exports its default handler, typed `Service` RPC entry and discovered Durable
+Objects. No application module or configuration executes on the build host: Oxc reads route exports,
+and generated code uses literal imports and chained builder calls without widening operation types.
+
+`maximusProject()` runs preparation during Vite configuration and every build. Development reconciles
+added, removed and changed files, including changes to method exports inside a file. Build watch
+tracks discovered modules and existing convention directories; restart it after creating a convention
+directory that was absent when watch started.
+Unchanged generated content is not rewritten. Failed discovery does not replace the prior graph;
+builds fail and development reports an error. A new build always discovers the current mode afresh.
+Deleting a route or method removes it from the generated composition. This reconciles source modules,
+not cloud infrastructure; builds never provision or delete stores, run SQL or change credentials.
+
+Use `maximus prepare --mode development` for development editor types; the default is production.
+`bun run verify` runs preparation, Cloudflare types, TypeScript, lint/format and Vite+ build. A standalone
+`vp build` reconciles and bundles; TypeScript and lint remain the explicit `verify` checks.
+
+Without root configuration, Maximus continues to use `src/application.ts`'s `base` and
+`src/worker.ts`'s `options`. Existing default-export factories still receive the inferred path and
+return a builder. They can coexist with named method modules in other files. For gradual migration,
+keep old factories and re-export their shared base from `.maximus/base` in `src/application.ts` after
+moving configuration to the root. Root configuration itself must not import that compatibility bridge.
+Projects with multiple root configuration files are rejected rather than picking one silently.
+
+### Generated files and the build boundary
+
+| Generated module         | Responsibility                                                             |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `.maximus/middleware.ts` | Import discovered modules and separate request/operation phases            |
+| `.maximus/base.ts`       | Attach operation policy to the configured base; preserve its derived types |
+| `.maximus/routes.ts`     | Export the project's typed `defineRoute` helper                            |
+| `.maximus/app.ts`        | Mount every discovered method/factory and build the typed manifest         |
+| `.maximus/worker.ts`     | Compose HTTP/MCP/RPC, pages, events and Durable Object exports             |
+| `.maximus/entry.ts`      | Stable Cloudflare entry that re-exports the generated Worker               |
+
+The generator validates the source graph before writing files, then writes dependencies before their
+consumers. It replaces changed files individually and leaves identical content untouched. Generated
+files are disposable and ignored by Git. Never hand-edit them or import generated modules from root
+configuration. A clean checkout regenerates them through installation's `prepare` lifecycle, an
+explicit `maximus prepare`, or the Vite plugin before a build. Installation with scripts disabled
+requires one of those explicit preparation paths before editor/type checking.
+
+Adding a method changes the generated manifest at the next reconciliation. Removing a file removes
+its imports and mounts. Changing the root configuration filename or Durable Object exports restarts
+the development server so Cloudflare can refresh its entry exports. A normal operation-body change
+uses Vite's module update path. Production deployment consumes the completed build artifact; it never
+scans the source filesystem at request time.
+
+## Tests and validation
+
+Tests do not register routes, apply migrations or run as part of `maximus prepare`. Keep application
+tests under `tests/`, or colocate `*.test.ts` / `*.spec.ts` with a route. Helpers and fixtures within a
+convention directory must use an ignored `_` path. Merely putting `fixture.ts` next to a route would
+make it a candidate route module.
+
+Suggested application organization, when a test runner is explicitly added:
+
+```text
+tests/
+  routes/greeting.test.ts       Input/output contracts and operation behavior
+  middleware/response.test.ts   Request wrappers and continuation behavior
+  integration/http.test.ts      Local Worker admission and actual HTTP responses
+  _fixtures/                   Synthetic, non-production fixtures
+```
+
+The project starter does not install an application test suite or invent a passing test command.
+Its `bun run verify` performs preparation, Cloudflare type generation, TypeScript, lint/format and
+the production build. Its automatic deployment workflow runs those checks. Tests require a separate
+human request and configured runner; a successful build is not evidence that tests passed.
+
+The framework already owns test sources under `packages/maximus/tests/`. The relevant regression
+matrix for this feature is:
+
+| Area                    | Cases to cover                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Discovery               | Version/index/group/parameter mapping, ignored files, modes, collisions and symlinks                            |
+| Export parsing          | Named verbs, explicit re-exports, type-only exports, malformed modules, forbidden wildcard/mixed exports        |
+| Reconciliation          | Clean generation, identical rebuilds, method edits, file additions/removals, failed discovery and mode switches |
+| Request middleware      | Ordering, response wrapping, short circuits, single continuation, body ownership and unchanged token headers    |
+| Operation middleware    | Verified context, order, schema/error validation, HTTP/MCP/RPC parity and missing global-policy rejection       |
+| Compatibility and types | Legacy factories, derived context, literal operation names, typed RPC and a project with no `src/`              |
+
+Compile-only controls live in `packages/maximus/tests/project-types.ts`; generator test source lives
+in `packages/maximus/tests/tooling/project.test.ts`. The full matrix above describes coverage to
+establish, not a claim that every row has an executed test. When a human requests the relevant suite,
+the framework commands are:
+
+```bash
+# Framework repository only; explicit test authorization required.
+bun run --cwd packages/maximus test
+bun run --cwd packages/maximus test:integration
+```
+
+Use the root `bun run verify` for the framework's builds, workspace types, lint and format without
+running a test suite. The manual GitHub verification workflow also exposes an explicit `run_tests`
+input; ordinary pushes do not enable it.
 
 ## Pages and static files
 

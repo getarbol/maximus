@@ -76,7 +76,14 @@ export type { OAuthResource } from './oauth.ts';
 
 // HTTP: the handler, its routes and the bounded body readers.
 export { createHttpHandler } from './http.ts';
-export type { HttpOptions, HttpTransport, TransportContext, HttpRoute, RouteContext } from './http.ts';
+export type {
+  HttpOptions,
+  HttpTransport,
+  TransportContext,
+  HttpRoute,
+  HttpMiddleware,
+  RouteContext,
+} from './http.ts';
 export { createHttpRouteResolver } from './http-paths.ts';
 export type { HttpRouteDefinition, HttpRouteMatch } from './http-paths.ts';
 export { readBodyText, readBodyBytes } from './internal/body.ts';

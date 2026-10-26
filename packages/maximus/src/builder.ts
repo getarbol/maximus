@@ -30,13 +30,16 @@ type DistinctOperations<Ops, M> = [Extract<keyof M, keyof Ops>] extends [never]
   ? unknown
   : { readonly 'Operations declared twice': Extract<keyof M, keyof Ops> };
 /** An operation's definition as `.operation()` takes it: its scope, exposure, words, schemas and limits. */
-type Definition<I extends TSchema, O extends TSchema, X extends Exposure> = X &
-  Omit<OperationShape, keyof Exposure | 'input' | 'output' | 'execute' | 'pipeline'> & {
-    input: I;
-    output: O;
-  };
+export type OperationFields<I extends TSchema, O extends TSchema> = Omit<
+  OperationShape,
+  keyof Exposure | 'input' | 'output' | 'execute' | 'pipeline'
+> & {
+  input: I;
+  output: O;
+};
+type Definition<I extends TSchema, O extends TSchema, X extends Exposure> = X & OperationFields<I, O>;
 /** Refuses a definition field no operation has, such as a misspelled one, which would otherwise do nothing. */
-type KnownFields<X> = Readonly<Record<Exclude<keyof X, keyof OperationShape>, never>>;
+export type KnownOperationFields<X> = Readonly<Record<Exclude<keyof X, keyof OperationShape>, never>>;
 /** Immutable builders let independent resource modules share inferred context without overwriting routes. */
 export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>> {
   /**
@@ -56,7 +59,7 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
    */
   operation<const N extends string, I extends TSchema, O extends TSchema, const X extends Exposure>(
     name: N extends keyof Ops ? never : N,
-    definition: Definition<I, O, X> & KnownFields<X>,
+    definition: Definition<I, O, X> & KnownOperationFields<X>,
     execute: (
       context: C & (X extends { http: { body: 'bytes' } } ? { body: BinaryBody } : object),
       input: StaticDecode<I>

@@ -2,7 +2,7 @@
 
 A Maximus backend on Cloudflare Workers, with Vite+ as its default toolchain. `GET /` returns **Hello World**, `/health` reports liveness,
 and `/api/openapi.json` describes the API. `GET /api/v1/greeting` is authenticated. The starter refuses
-production tokens until an identity provider or verified resolver is configured in src/application.ts.
+production tokens until an identity provider or verified resolver is configured in maximus.config.ts.
 
 ## Development
 
@@ -17,27 +17,28 @@ uses optional directories. Add only the modules the service needs:
 
 | Directory        | Convention                                                                            |
 | ---------------- | ------------------------------------------------------------------------------------- |
-| routes/          | Versioned API route factories, automatically mounted with their file path.            |
+| routes/          | Versioned named GET/POST declarations; paths and methods are discovered.              |
 | pages/           | Fixed-path public response handlers; index.ts serves `/`.                             |
-| middleware/      | Operation middleware, sorted by filename and run after authorization.                 |
+| middleware/      | Ordered HTTP wrappers or post-admission operation policy.                             |
 | crons/           | A `cron` export and a default native scheduled handler.                               |
 | queues/          | Default queue handlers named after the physical queue.                                |
 | email/           | Default email handlers named after the full recipient; `_default.ts` is the fallback. |
 | durable-objects/ | Default classes re-exported in PascalCase from kebab-case filenames.                  |
 | db/              | Application-owned schemas and SQL migrations, applied explicitly.                     |
-| src/             | Shared domain code, application configuration and Worker options.                     |
+| src/             | Optional shared domain code; application configuration lives at the root.             |
 | public/          | Optional static assets; configure the binding and admitted files before using it.     |
 | .maximus/        | Generated imports; ignored and never edited by hand.                                  |
 
-The Vite plugin prepares the project before development/build and discovers added/removed modules
-during development. `bun run prepare:project` generates the same imports for editors. Files starting
+The Vite plugin reconciles modules and named method exports on every build and source change.
+Root maximus.config.ts owns application and transport policy; the Cloudflare config imports the
+generated .maximus/entry.ts entry. No src/ directory or manual route registration is required. `bun run prepare:project` generates the same imports for editors. Files starting
 with `_` are ignored except `email/_default.ts`; `.dev.ts` and `.prod.ts` select their matching mode.
 Platform bindings, cron triggers, queue subscriptions, email routing and Durable Object migrations
 remain explicit Cloudflare configuration. Adding a handler never provisions infrastructure.
 
 ## Deployment
 
-Before deploying, replace the origin and audience in src/application.ts with the deployed HTTPS URL.
+Before deploying, replace the origin and audience in maximus.config.ts with the deployed HTTPS URL.
 The GitHub workflow checks pull requests and deploys pushes to `main`. Configure repository or
 organization secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The token needs permission to
 deploy this Worker. `bun run deploy` performs the same non-test validation and deployment locally.

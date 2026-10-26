@@ -23,6 +23,7 @@ const entries = {
   'postgres/index': 'src/postgres/index.ts',
   'tooling/testing': 'src/tooling/testing.ts',
   'project/index': 'src/project/index.ts',
+  'project/config': 'src/project/config.ts',
   'tooling/vite': 'src/tooling/vite.ts',
 };
 

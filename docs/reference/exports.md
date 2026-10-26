@@ -44,8 +44,11 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 `createWorker`, `credentials`; types `WorkerOptions` (what `createWorker` takes), `WorkerRuntime`,
 `RpcMethods`, `WorkerAssetsOptions`. Imports `cloudflare:workers`, so only a Worker bundle loads it.
 
-## @arbol-ai/maximus/project and @arbol-ai/maximus/vite
+## Project configuration, composition and Vite integration
 
+`/config` exports runtime-neutral `defineConfig`, `defineMiddleware`, `defineOperationMiddleware`
+, `defineRequestMiddleware` and `createRoute`, plus `ProjectConfiguration`, `ProjectContext`, `ProjectEnv` and middleware types.
+Generated composition uses `collectMiddleware`, `useProjectMiddleware` and `checkProjectPipeline`.
 `/project` exports `createProjectWorker` and types `ProjectModules`, `ProjectCron`, `ProjectEvents`.
 It is Workers-only and composes discovered pages and background handlers through the existing runtime.
 `/vite` exports the Node-only `maximusProject()` plugin; Vite is an optional peer, never a runtime

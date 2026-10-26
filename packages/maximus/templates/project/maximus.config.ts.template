@@ -1,8 +1,7 @@
-import { defineErrors, err, maximus, standardErrors } from '@arbol-ai/maximus';
+import { defineErrors, err, standardErrors } from '@arbol-ai/maximus';
+import { defineConfig } from '@arbol-ai/maximus/config';
 
-import { middleware } from '../.maximus/middleware';
-
-let application = maximus<Env>({
+export default defineConfig<Env>({
   name: '__PROJECT_NAME__',
   namespace: '__PROJECT_NAME__',
   title: '__PROJECT_NAME__',
@@ -17,10 +16,5 @@ let application = maximus<Env>({
   },
   errors: defineErrors({}),
   rpc: { callers: [] },
+  worker: { http: { basePath: '/api', healthPath: '/health' } },
 });
-
-/** All discovered operations share middleware that runs after native authentication and scope checks. */
-for (const handler of middleware) {
-  application = application.use(handler);
-}
-export const base = application;

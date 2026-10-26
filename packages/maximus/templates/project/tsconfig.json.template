@@ -22,6 +22,7 @@
     "email",
     "durable-objects",
     "db",
+    "maximus.config.ts",
     "cloudflare.config.ts",
     "vite.config.ts",
     ".maximus",

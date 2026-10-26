@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * The `maximus` command: `init` creates a new service. Developing, building and deploying it are `cf`'s own
- * commands, which Maximus does not wrap.
+ * The `maximus` command scaffolds services and reconciles project entries. Vite+ owns development and
+ * builds; Cloudflare owns type generation and deployment.
  */
 import { parseArgs } from 'node:util';
 
-import { prepareProject } from './internal/prepare-project.ts';
 import { scaffold } from './internal/scaffold.ts';
 
 const { values, positionals } = parseArgs({
@@ -22,8 +21,8 @@ const [command, target] = positionals;
 const USAGE = [
   'Usage: maximus init <new-directory> --name <name> [--layout service|project]',
   '       maximus prepare [directory] [--mode production|development]',
-  'Creates a new service. Develop, build and deploy it with cf: cf dev, cf build, cf workers types and',
-  'cf deploy.',
+  'Creates a Vite+ service. Use its dev, build, verify and deploy package scripts.',
+  'Project layout generates entries from maximus.config.ts, routes/ and middleware/.',
 ].join('\n');
 if (values.help) {
   console.info(USAGE);
@@ -31,8 +30,9 @@ if (values.help) {
 }
 
 /** Runs the command the arguments name. */
-function run(): void {
+async function run(): Promise<void> {
   if (command === 'prepare') {
+    const { prepareProject } = await import('./internal/prepare-project.ts');
     console.info(JSON.stringify(prepareProject(target ?? '.', values.mode)));
     return;
   }
@@ -51,7 +51,7 @@ function run(): void {
 }
 
 try {
-  run();
+  await run();
 } catch (error) {
   // A refusal or a usage mistake is a sentence for the developer; MAXIMUS_DEBUG=1 shows the stack.
   console.error(error instanceof Error && !process.env.MAXIMUS_DEBUG ? `maximus: ${error.message}` : error);

@@ -1,6 +1,0 @@
-import type { WorkerOptions } from '@arbol-ai/maximus/workers';
-
-/** Keep API ownership separate from public pages. Bindings and triggers belong in cloudflare.config.ts. */
-export const options: WorkerOptions<Env> = {
-  http: { basePath: '/api', healthPath: '/health' },
-};

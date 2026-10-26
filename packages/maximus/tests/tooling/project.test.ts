@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -31,7 +39,8 @@ afterEach(() => {
 
 test('discovery creates static typed imports without evaluating modules', () => {
   const root = project({
-    'routes/(team)/v1/notes/[noteId].ts': 'throw new Error("must not execute during discovery");',
+    'routes/(team)/v1/notes/[noteId].ts':
+      'throw new Error("must not execute during discovery"); export default () => ({});',
     'pages/index.ts': 'export default {};',
     'middleware/02-second.ts': 'export default {};',
     'middleware/01-first.ts': 'export default {};',
@@ -50,8 +59,8 @@ test('discovery creates static typed imports without evaluating modules', () => 
 
 test('mode filtering excludes helpers and tests even when a test carries a mode suffix', () => {
   const root = project({
-    'routes/v1/live.prod.ts': '',
-    'routes/v1/debug.dev.ts': '',
+    'routes/v1/live.prod.ts': 'export default () => ({});',
+    'routes/v1/debug.dev.ts': 'export default () => ({});',
     'routes/v1/hidden.test.prod.ts': '',
     'routes/v1/_helpers.ts': '',
     'email/_default.ts': '',
@@ -65,7 +74,7 @@ test('mode filtering excludes helpers and tests even when a test carries a mode 
 });
 
 test('colliding index and group routes are refused before replacing generated files', () => {
-  const root = project({ 'routes/v1/notes.ts': '' });
+  const root = project({ 'routes/v1/notes.ts': 'export default () => ({});' });
   prepareProject(root);
   const original = readFileSync(join(root, '.maximus/app.ts'), 'utf-8');
   mkdirSync(join(root, 'routes/v1/notes'));
@@ -75,7 +84,49 @@ test('colliding index and group routes are refused before replacing generated fi
 });
 
 test('module symlinks cannot pull code from outside the project', () => {
-  const root = project({ 'routes/v1/notes.ts': '' });
+  const root = project({ 'routes/v1/notes.ts': 'export default () => ({});' });
   symlinkSync(join(root, 'src/application.ts'), join(root, 'routes/v1/external.ts'));
   expect(() => prepareProject(root)).toThrow('Project modules cannot be symlinks');
+});
+
+test('root configuration supports named exports and reconciles method edits and route removal', () => {
+  const root = project({
+    'maximus.config.ts': 'throw new Error("configuration must not execute"); export default {};',
+    'routes/v1/notes.ts': 'export const GET = {}; export const POST = {};',
+  });
+  rmSync(join(root, 'src'), { recursive: true });
+  expect(prepareProject(root)).toMatchObject({ layout: 'config', changed: true });
+  const app = () => readFileSync(join(root, '.maximus/app.ts'), 'utf-8');
+  expect(app()).toContain('routes_0.GET("/v1/notes", "GET")');
+  expect(app()).toContain('routes_0.POST("/v1/notes", "POST")');
+  expect(prepareProject(root).changed).toBe(false);
+  writeFileSync(join(root, 'routes/v1/notes.ts'), 'export const GET = {};');
+  prepareProject(root);
+  expect(app()).not.toContain('POST');
+  unlinkSync(join(root, 'routes/v1/notes.ts'));
+  prepareProject(root);
+  expect(app()).not.toContain('routes_0');
+  expect(readFileSync(join(root, '.maximus/base.ts'), 'utf-8')).toContain('../maximus.config.ts');
+});
+
+test('named methods can coexist with a legacy factory in another file', () => {
+  const root = project({
+    'routes/v1/notes.ts': 'export const GET = {};',
+    'routes/v1/legacy.ts': 'export default () => ({});',
+  });
+  prepareProject(root);
+  const app = readFileSync(join(root, '.maximus/app.ts'), 'utf-8');
+  expect(app).toContain('routes_0("/v1/legacy")');
+  expect(app).toContain('routes_1.GET("/v1/notes", "GET")');
+});
+
+test('ambiguous route forms and wildcard exports are rejected without replacing the graph', () => {
+  const root = project({ 'routes/v1/notes.ts': 'export const GET = {};' });
+  prepareProject(root);
+  const app = readFileSync(join(root, '.maximus/app.ts'), 'utf-8');
+  writeFileSync(join(root, 'routes/v1/notes.ts'), 'export const GET = {}; export default () => ({});');
+  expect(() => prepareProject(root)).toThrow('Choose a default route factory or named method exports');
+  expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toBe(app);
+  writeFileSync(join(root, 'routes/v1/notes.ts'), 'export * from "./_handlers";');
+  expect(() => prepareProject(root)).toThrow('explicit exports');
 });

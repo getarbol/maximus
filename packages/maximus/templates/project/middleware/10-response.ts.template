@@ -1,0 +1,13 @@
+import { defineMiddleware } from '@arbol-ai/maximus/config';
+
+/** Global HTTP policy; protected operations still pass through native token and scope admission. */
+export default defineMiddleware<Env>(async (_request, _env, _context, proceed) => {
+  const response = await proceed();
+  // Reconstructing a WebSocket upgrade would lose its attached socket.
+  if (response.status === 101) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set('referrer-policy', 'no-referrer');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+});

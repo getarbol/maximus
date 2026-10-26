@@ -1,4 +1,5 @@
-/** Optional Vite integration. It generates static imports before Cloudflare reads the Worker. */
+/** Optional Vite integration. It reconciles static imports before Cloudflare reads the Worker. */
+import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 import type { Plugin } from 'vite';
@@ -6,39 +7,69 @@ import type { Plugin } from 'vite';
 import { prepareProject } from './internal/prepare-project.ts';
 import { PROJECT_DIRECTORIES } from './internal/project-files.ts';
 
-/** Prepare on startup/build and refresh discovery when convention files are added or removed. */
+/** Prepare before every build and before Vite invalidates source modules during development. */
 export function maximusProject(): Plugin {
   let root = process.cwd();
   let mode = 'production';
+  let previous: ReturnType<typeof prepareProject> | undefined;
+  const reconcile = () => {
+    const current = prepareProject(root, mode);
+    const restart =
+      previous !== undefined &&
+      (previous.config !== current.config ||
+        previous.durableObjects.join('\n') !== current.durableObjects.join('\n'));
+    previous = current;
+    return { ...current, restart };
+  };
+  const isProjectFile = (file: string) => {
+    const path = relative(root, file).split(/[\\/]/);
+    return (
+      PROJECT_DIRECTORIES.some((name) => name === path[0]) ||
+      (path.length === 1 && /^maximus\.config\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
+      (path[0] === 'src' && ['application.ts', 'worker.ts'].includes(path[1] ?? ''))
+    );
+  };
   return {
     name: 'maximus-project',
     enforce: 'pre',
     config(config, environment) {
       root = resolve(config.root ?? root);
       ({ mode } = environment);
-      prepareProject(root, mode);
+      reconcile();
     },
-    configureServer(server) {
-      const update = (file: string) => {
-        const [directory] = relative(root, file).split(/[\\/]/);
-        if (!PROJECT_DIRECTORIES.some((name) => name === directory)) {
+    buildStart() {
+      const current = reconcile();
+      // Watching the project root would also observe generated output and can loop in build --watch.
+      for (const file of current.files) {
+        this.addWatchFile(file);
+      }
+      if (current.config) {
+        this.addWatchFile(resolve(root, current.config));
+      }
+      for (const directory of PROJECT_DIRECTORIES) {
+        const path = resolve(root, directory);
+        if (existsSync(path)) {
+          this.addWatchFile(path);
+        }
+      }
+    },
+    hotUpdate: {
+      order: 'pre',
+      async handler({ file, server }) {
+        if (!isProjectFile(file)) {
           return;
         }
-        try {
-          prepareProject(root, mode);
-          server.ws.send({ type: 'full-reload' });
-        } catch (error) {
-          server.config.logger.error(error instanceof Error ? error.message : String(error));
-          server.ws.send({
-            type: 'error',
-            err: { message: error instanceof Error ? error.message : String(error), stack: '' },
-          });
+        // This hook receives create/update/delete before affected Worker modules are reloaded.
+        // Throwing reports the discovery failure through Vite instead of loading a stale graph.
+        const current = reconcile();
+        if (current.restart) {
+          await server.restart();
+          return [];
         }
-      };
-      server.watcher.on('add', update).on('unlink', update);
-      server.httpServer?.once('close', () => {
-        server.watcher.off('add', update).off('unlink', update);
-      });
+        if (current.changed) {
+          this.environment.hot.send({ type: 'full-reload' });
+        }
+      },
     },
   };
 }

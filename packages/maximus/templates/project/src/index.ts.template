@@ -1,3 +1,0 @@
-export { default } from '../.maximus/worker';
-// oxlint-disable-next-line oxc/no-barrel-file -- Cloudflare requires every discovered class on its entrypoint.
-export * from '../.maximus/worker';
