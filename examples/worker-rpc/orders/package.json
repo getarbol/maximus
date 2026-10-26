@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^2.0.0-beta.v.1",
-    "cf": "^1.0.0-beta.18",
+    "cf": "^1.0.0-beta.21",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plus": "1.4.0"
   }
