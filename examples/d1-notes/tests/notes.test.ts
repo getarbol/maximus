@@ -3,7 +3,7 @@
  * writing, reading, changing and deleting a note; pages and their cursors; refusals; MCP; and, through the
  * store itself, that one organization never reaches another's notes and that search reads text literally.
  */
-import { beforeEach, expect, it } from 'vite-plus/test';
+import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
 import { noteStore } from '#src/notes.ts';
@@ -83,8 +83,15 @@ it('writes a note, reads it, changes it and deletes it', async () => {
 
 it('pages newest first, forward and back, with the cursors each page gives', async () => {
   const titles = ['one', 'two', 'three', 'four', 'five'];
-  for (const title of titles) {
-    await writeNote(title);
+  // Each note a second after the one before: notes written in the same millisecond have no newest.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (const [second, title] of titles.entries()) {
+      vi.setSystemTime(Date.UTC(2026, 9, 27, 9, 0, second));
+      await writeNote(title);
+    }
+  } finally {
+    vi.useRealTimers();
   }
   const newestTitles = titles.toReversed();
   const firstPage = await listPage('?limit=2');
