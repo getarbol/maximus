@@ -1,5 +1,7 @@
 import { AttachmentOutputSchema, defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
+import { MAX_DOCUMENT_BYTES } from '#src/documents.ts';
+
 /**
  * GET /api/v1/documents/{documentId}/content: the document's bytes as an attachment, streamed from R2 with
  * the exact length its metadata states.
@@ -24,6 +26,6 @@ export default defineHandler(
     output: AttachmentOutputSchema,
     failures: ['DOCUMENT_NOT_FOUND'],
     http: { response: 'attachment' },
-    maxOutputBytes: 10 * 1024 * 1024,
+    maxOutputBytes: MAX_DOCUMENT_BYTES,
   }
 );

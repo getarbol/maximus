@@ -6,7 +6,7 @@
 import { defineAuth, defineContext, defineHandler, defineTool, t } from '../../src/index.ts';
 import type { Failed, HandlerOptions, PreparedContext, Principal, Static } from '../../src/index.ts';
 import { bindRoute, bindTool } from '../../src/project/config.ts';
-import type { RouteName, ToolMcpName, ToolName } from '../../src/project/config.ts';
+import type { ToolMcpName, ToolName } from '../../src/project/config.ts';
 import type { RpcMethods } from '../../src/workers/runtime.ts';
 import { base } from './fixtures/registered.ts';
 
@@ -30,6 +30,10 @@ const complete = defineHandler(
     void fail('MISSING');
     // Standard failures need no declaration.
     void fail('FORBIDDEN');
+    // @ts-expect-error Only admission answers an unknown route or a refused token, never a handler.
+    void fail('UNAUTHORIZED');
+    // @ts-expect-error A body's own failures come from reading it, never from `fail`.
+    void fail('REQUEST_TOO_LARGE');
     return { taskId: id, title: `${prefix} task` };
   },
   {
@@ -150,37 +154,38 @@ const summarize = defineTool(({ prefix }) => ({ summary: prefix }), {
 defineTool(() => ({ summary: '' }), { description: 'No effect.', output: { summary: t.String() } });
 
 const app = base
-  .mount(bindRoute(base, complete, '/v1/tasks/{taskId}/complete', 'POST'))
-  .mount(bindRoute(base, listed, '/v1/tasks', 'GET'))
+  .mount(bindRoute(base, complete, '/v1/tasks/{taskId}/complete', 'POST', 'completeTask'))
+  .mount(bindRoute(base, listed, '/v1/tasks', 'GET', 'listTasks'))
   .mount(bindTool(base, summarize, 'summarize-tasks'))
   .build();
-const effect: 'write' = app.operations.postV1TasksTaskIdComplete.effect;
-const read: 'read' = app.operations.getV1Tasks.effect;
-const path: '/v1/tasks/{taskId}/complete' = app.operations.postV1TasksTaskIdComplete.http.path;
+const effect: 'write' = app.operations.completeTask.effect;
+const read: 'read' = app.operations.listTasks.effect;
+const path: '/v1/tasks/{taskId}/complete' = app.operations.completeTask.http.path;
 const tool: 'summarize_tasks' = app.operations.summarizeTasks.mcp.name;
 void [effect, read, path, tool];
 
-type Completion = Static<typeof app.operations.postV1TasksTaskIdComplete.input>;
+type Completion = Static<typeof app.operations.completeTask.input>;
 const completion: Completion = { taskId: 'task-1' };
 // @ts-expect-error The operation keeps the route's input.
 const wrongCompletion: Completion = { taskId: 1 };
 // @ts-expect-error An MCP-only tool has no HTTP route.
 void app.operations.summarizeTasks.http;
 // @ts-expect-error A route without mcp is no MCP tool.
-void app.operations.postV1TasksTaskIdComplete.mcp.name;
+void app.operations.completeTask.mcp.name;
 void [completion, wrongCompletion];
 
 declare const rpc: RpcMethods<typeof app.operations>;
 declare const principal: Principal;
-void rpc.postV1TasksTaskIdComplete(principal, { taskId: 'task-1' });
+void rpc.completeTask(principal, { taskId: 'task-1' });
 void rpc.summarizeTasks(principal, {});
 // @ts-expect-error A route without rpc is no RPC method.
-void rpc.getV1Tasks;
+void rpc.listTasks;
 
-const named: RouteName<'DELETE', '/v1/task-lists/{list_id}'> = 'deleteV1TaskListsListId';
+// @ts-expect-error A route is named by the name prepare derives, never by its method and path spelled out.
+void app.operations.postV1TasksTaskIdComplete;
 const toolName: ToolName<'summarize-open-tasks'> = 'summarizeOpenTasks';
 const mcpName: ToolMcpName<'summarize-open-tasks'> = 'summarize_open_tasks';
-void [named, toolName, mcpName];
+void [toolName, mcpName];
 
 const prepared = defineContext(({ env, principal: caller, fail }) => {
   const prefix: string = env.PREFIX;
@@ -188,6 +193,8 @@ const prepared = defineContext(({ env, principal: caller, fail }) => {
   const wrong: number = env.PREFIX;
   // @ts-expect-error A context fails with codes of the catalog.
   void fail('NOT_A_CODE');
+  // @ts-expect-error Only routing answers an unknown route, never a context.
+  void fail('NOT_FOUND');
   void wrong;
   return caller.organizationId ? { label: prefix } : fail('TASK_NOT_FOUND');
 });

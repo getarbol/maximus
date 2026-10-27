@@ -1,10 +1,16 @@
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { ReminderSchema } from '../../../src/reminders.ts';
+import { ReminderSchema } from '#src/reminders.ts';
 
-/** GET /api/v1/reminders/{reminderId}, also the MCP tool get_reminder: the reminder and whether it was delivered. */
+/** GET /api/v1/reminders/{reminderId}, also the MCP tool get_reminder: one reminder, and its status. */
 export default defineHandler(
-  async ({ input, reminders, fail }) => (await reminders.get(input.reminderId)) ?? fail('REMINDER_NOT_FOUND'),
+  async ({ input, reminders, fail }) => {
+    const reminder = await reminders.find(input.reminderId);
+    if (!reminder) {
+      return fail('REMINDER_NOT_FOUND');
+    }
+    return reminder;
+  },
   {
     description:
       'Read one reminder of the organization: its text, when it is due and whether it was delivered.',

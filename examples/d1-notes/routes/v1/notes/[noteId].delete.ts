@@ -3,7 +3,8 @@ import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 /** DELETE /api/v1/notes/{noteId}: answers the empty object once the note is gone. */
 export default defineHandler(
   async ({ input, notes, fail }) => {
-    if (!(await notes.remove(input.noteId))) {
+    const wasDeleted = await notes.delete(input.noteId);
+    if (!wasDeleted) {
       return fail('NOTE_NOT_FOUND');
     }
   },

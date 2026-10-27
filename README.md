@@ -47,7 +47,7 @@ export default defineHandler(
 );
 ```
 
-The file's name is its method and path. Maximus derives the operation's name (`getV1NotesNoteId`), its
+The file's name is its method and path. Maximus derives the operation's name (`getNote`), its
 effect (`read`) and the scope a caller needs (`notes:notes:read`); the contract states the rest. `input`
 is decoded and typed from its schema, `fail` accepts only the codes your `errors.ts` declares, and `notes`
 is what `context.ts` prepares for every call, here the notes of the caller's organization. The same file

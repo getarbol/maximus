@@ -21,7 +21,7 @@ export default defineHandler(async ({ input, principal, authority, env, operatio
 | `principal`               | Always                                           | The verified caller: `actorId`, `actorKind`, `organizationId` and `requestId`. Scope every store, query and key by `principal.organizationId`. |
 | `authority`               | On HTTP and MCP calls whose token names a client | What admission verified about the token, frozen: `surface`, `scopes`, `client` and `token`. See below.                                         |
 | `env`                     | Always                                           | The Worker's bindings, typed by the generated `Env`.                                                                                           |
-| `operation`               | Always                                           | The operation's name, such as `getV1NotesNoteId`; never taken from the request.                                                                |
+| `operation`               | Always                                           | The operation's name, such as `getNote`; never taken from the request.                                                                         |
 | `background`              | When the runtime provides one                    | `waitUntil(promise)`, for work that may outlive the answer.                                                                                    |
 | `fail`                    | Always                                           | Answers a failure of the catalog: `return fail('NOTE_NOT_FOUND')`.                                                                             |
 | `body`                    | On routes that declare `http: { body: 'bytes' }` | `read()`, which reads the request's bytes once, within the route's limit. See [Routes](routes.md).                                             |
@@ -355,7 +355,7 @@ with.
 the context and middleware it was declared with. Keep each resource in its own module, with its schemas,
 its named domain functions and its operations, and let one module compose them. A module of another
 application throws `Resource groups must derive from the same application.`, and an operation name
-declared twice throws `Duplicate operation: <name>`.
+declared twice throws `Duplicate operation: <name>`, with the route or tool of each when both have one.
 
 ### Organization credentials
 

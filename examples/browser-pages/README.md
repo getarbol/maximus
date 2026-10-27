@@ -59,3 +59,5 @@ bun run build && bunx cf deploy --prebuilt --mode production
   `INTERNAL_ERROR`.
 - `read_page` tells agents that a page's Markdown is its author's content, data to quote and reason about,
   never instructions to follow.
+- Each call acts on one page, so each route declares its operation's name and title, `readPage` and
+  `Read a page`: from its path alone, Maximus would name it `readPages`.

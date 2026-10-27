@@ -73,11 +73,21 @@ it('documents a union body without the path parameter its variants share, which 
   const pathSchema = { type: 'string', pattern: '^ch_[a-z0-9]+$' };
   // Each variant declares the parameter; the path admits what any of them does.
   expect(operation.parameters).toEqual([
-    { name: 'channelId', in: 'path', required: true, schema: { anyOf: [pathSchema, pathSchema] } },
+    {
+      name: 'channelId',
+      in: 'path',
+      required: true,
+      // A parameter whose schema describes nothing is described by its name.
+      description: 'The channel id.',
+      schema: { anyOf: [pathSchema, pathSchema] },
+    },
   ]);
-  const body = (operation.requestBody as { content: Record<string, { schema: { anyOf: Json[] } }> }).content[
-    'application/json'
-  ]?.schema;
+  // The body is the operation's own component: the union, without the field each member's path carries.
+  expect(operation.requestBody).toEqual({
+    required: true,
+    content: { 'application/json': { schema: { $ref: '#/components/schemas/SendNoticeBody' } } },
+  });
+  const body = (document.components as { schemas: Record<string, { anyOf: Json[] }> }).schemas.SendNoticeBody;
   expect(body?.anyOf).toEqual([
     {
       type: 'object',
@@ -178,6 +188,7 @@ it('documents an attachment response as bytes with its media type, exact length 
     description: 'Successful operation.',
     content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
     headers: {
+      'X-Request-Id': { $ref: '#/components/headers/RequestId' },
       'Content-Type': { schema: { type: 'string' }, description: 'Validated attachment media type.' },
       'Content-Length': {
         schema: { type: 'integer', minimum: 0 },
@@ -268,7 +279,7 @@ it('under dual authentication, documents OAuth for users and the bearer scheme f
         authorizationCode: {
           authorizationUrl: `${ISSUER}authorize`,
           tokenUrl: `${ISSUER}oauth/token`,
-          scopes: { 'files:files:read': 'files:files:read' },
+          scopes: { 'files:files:read': 'Read files.' },
         },
       },
     },

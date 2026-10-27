@@ -138,8 +138,8 @@ What changes:
 - The path and method come from the file's name: `[noteId]` is a path parameter, and `index.post.ts`
   answers the folder's own path. Write one file per method.
 - `input` and `output` take a schema or the fields of a strict object.
-- What a contract leaves out is derived from the method and path: the operation's name
-  (`getV1NotesNoteId`), its effect (`GET` reads, `DELETE` deletes, the others write), its scope
+- What a contract leaves out is derived from the method and path: the operation's name (`getNote` for
+  `GET /v1/notes/{noteId}`, as [Derived names](reference/operations.md#derived-names) describes), its effect (`GET` reads, `DELETE` deletes, the others write), its scope
   (`notes:notes:read`) and its title. **Keep every name and scope your clients and tokens depend on** by
   declaring `operationId` and `scope` where the derived ones differ: the operation's name is its OpenAPI
   `operationId` and its RPC method, and a token holds scopes by their exact text.

@@ -6,8 +6,7 @@
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
-
-import { ALLOWED_REQUESTS, allowedUrl } from '../src/hosts.ts';
+import { ALLOWED_REQUEST_PATTERNS, parseAllowedUrl } from '#src/hosts.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
 const token = 'test-development-token-for-local-tests';
@@ -33,13 +32,35 @@ function call(path: string, body: object) {
 }
 
 /** Reads the page through the API, answering the status and the envelope. */
-async function read(url: string) {
+async function readPage(url: string) {
   const response = await call('/v1/pages/read', { url });
   return { status: response.status, body: (await response.json()) as { data: unknown; error: unknown } };
 }
 
 /** Browser Run's answer to a markdown action. */
-const markdown = (result: unknown) => Response.json({ success: true, result });
+function markdownAnswer(markdown: unknown): Response {
+  return Response.json({ success: true, result: markdown });
+}
+
+/** Calls an MCP method with the development token and answers its result. */
+async function callMcp(method: string, params: object = {}) {
+  const response = await handler(
+    new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2025-11-25',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    }),
+    env
+  );
+  const text = await response.text();
+  return (JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text) as { result: Record<string, unknown> })
+    .result;
+}
 
 it('opens only https addresses at the allowed hosts, and lets Chrome request nothing else', () => {
   for (const allowed of [
@@ -47,7 +68,7 @@ it('opens only https addresses at the allowed hosts, and lets Chrome request not
     'https://en.wikipedia.org/wiki/Aspirin',
     'https://www.who.int/news',
   ]) {
-    expect(allowedUrl(allowed)?.href, allowed).toBe(allowed);
+    expect(parseAllowedUrl(allowed)?.href, allowed).toBe(allowed);
   }
   for (const refused of [
     'http://example.com/',
@@ -61,15 +82,16 @@ it('opens only https addresses at the allowed hosts, and lets Chrome request not
     'javascript:alert(1)',
     'not an address',
   ]) {
-    expect(allowedUrl(refused), refused).toBeUndefined();
+    expect(parseAllowedUrl(refused), refused).toBeUndefined();
   }
-  const requested = (url: string) => ALLOWED_REQUESTS.some((pattern) => new RegExp(pattern).test(url));
+  const isRequestAllowed = (url: string) =>
+    ALLOWED_REQUEST_PATTERNS.some((pattern) => new RegExp(pattern).test(url));
   for (const allowed of [
     'https://example.com/',
     'https://example.com?q=1',
     'https://upload.en.wikipedia.org/a.png',
   ]) {
-    expect(requested(allowed), allowed).toBe(true);
+    expect(isRequestAllowed(allowed), allowed).toBe(true);
   }
   for (const refused of [
     'http://example.com/',
@@ -80,25 +102,28 @@ it('opens only https addresses at the allowed hosts, and lets Chrome request not
     'https://evil.test/.wikipedia.org/',
     'https://wikipedia.org/',
   ]) {
-    expect(requested(refused), refused).toBe(false);
+    expect(isRequestAllowed(refused), refused).toBe(false);
   }
 });
 
 it('reads a page in Markdown, held to the allowed requests and to twenty thousand characters', async () => {
-  quickAction.mockResolvedValueOnce(markdown(`# Example Domain\n\n${'x'.repeat(30_000)}`));
-  const page = await read('https://example.com/');
+  quickAction.mockResolvedValueOnce(markdownAnswer(`# Example Domain\n\n${'x'.repeat(30_000)}`));
+  const page = await readPage('https://example.com/');
   expect(page).toMatchObject({ status: 200, body: { data: { url: 'https://example.com/' } } });
-  const { markdown: text } = page.body.data as { markdown: string };
-  expect(text).toHaveLength(20_000);
-  expect(text.startsWith('# Example Domain')).toBe(true);
+  const { markdown } = page.body.data as { markdown: string };
+  expect(markdown).toHaveLength(20_000);
+  expect(markdown.startsWith('# Example Domain')).toBe(true);
   expect(quickAction).toHaveBeenCalledExactlyOnceWith(
     'markdown',
-    expect.objectContaining({ url: 'https://example.com/', allowRequestPattern: [...ALLOWED_REQUESTS] })
+    expect.objectContaining({
+      url: 'https://example.com/',
+      allowRequestPattern: [...ALLOWED_REQUEST_PATTERNS],
+    })
   );
 });
 
 it('refuses an address it may not open without starting Chrome', async () => {
-  expect(await read('https://evil.test/')).toMatchObject({
+  expect(await readPage('https://evil.test/')).toMatchObject({
     status: 422,
     body: { error: { code: 'HOST_NOT_ALLOWED' } },
   });
@@ -122,7 +147,7 @@ it('answers each way Browser Run fails with the failure a caller can act on', as
     [500, 'INTERNAL_ERROR'],
     [500, 'INTERNAL_ERROR'],
   ] as const) {
-    expect(await read('https://example.com/')).toMatchObject({ status, body: { error: { code } } });
+    expect(await readPage('https://example.com/')).toMatchObject({ status, body: { error: { code } } });
   }
 });
 
@@ -159,30 +184,11 @@ it('captures a page as a PNG attachment, and refuses an image that is not one or
 });
 
 it('serves read_page over MCP, and the screenshot over HTTP alone', async () => {
-  quickAction.mockResolvedValueOnce(markdown('# Example Domain'));
-  const rpc = async (method: string, params: object) => {
-    const response = await handler(
-      new Request('http://localhost/mcp', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          'mcp-protocol-version': '2025-11-25',
-        },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      }),
-      env
-    );
-    const text = await response.text();
-    return (JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text) as { result: Record<string, unknown> })
-      .result;
-  };
-  expect(((await rpc('tools/list', {})).tools as { name: string }[]).map(({ name }) => name)).toEqual([
-    'read_page',
-  ]);
+  quickAction.mockResolvedValueOnce(markdownAnswer('# Example Domain'));
+  const tools = (await callMcp('tools/list')).tools as { name: string }[];
+  expect(tools.map(({ name }) => name)).toEqual(['read_page']);
   expect(
-    await rpc('tools/call', { name: 'read_page', arguments: { url: 'https://example.com/' } })
+    await callMcp('tools/call', { name: 'read_page', arguments: { url: 'https://example.com/' } })
   ).toMatchObject({
     structuredContent: { markdown: '# Example Domain' },
   });

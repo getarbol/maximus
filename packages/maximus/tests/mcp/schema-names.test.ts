@@ -229,8 +229,8 @@ it('lists every tool schema self-contained, with no $id, and Ajv compiles them a
   expect(byName.get('get_contact')?.outputSchema).toStrictEqual({
     type: 'object',
     properties: {
-      contactId: { type: 'string', pattern: UuidSchema.pattern },
-      ownerId: { type: 'string', pattern: UuidSchema.pattern },
+      contactId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
+      ownerId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
       email: { type: 'string', format: 'email', maxLength: 254, description: 'Email address.' },
     },
     required: ['contactId', 'ownerId', 'email'],
@@ -258,7 +258,7 @@ it('lists a union input as one object and still checks every call against the ex
     type: 'object',
     properties: {
       channel: { type: 'string', enum: ['email', 'sms'] },
-      contactId: { type: 'string', pattern: UuidSchema.pattern },
+      contactId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
       address: { type: 'string', format: 'email', maxLength: 254, description: 'Email address.' },
       phone: { type: 'string', pattern: '^\\+[1-9][0-9]{7,14}$' },
     },

@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 
-import { routes } from '../.maximus/app-routes.ts';
+import { routes } from '#maximus/app-routes';
 
 const container = document.querySelector('#root');
 if (!container) {

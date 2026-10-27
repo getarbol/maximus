@@ -1,16 +1,17 @@
-import { defineTool, t } from '@arbol-ai/maximus';
+import { defineTool } from '@arbol-ai/maximus';
 
-/** The MCP tool summarize_tasks: agents only, no HTTP route. */
+import { summarizeTasks, TaskSummarySchema } from '#src/tasks.ts';
+
+/** The MCP tool summarize_tasks, which no HTTP route serves: how many tasks are open and how many done. */
 export default defineTool(
   async ({ tasks }) => {
-    const all = await tasks.list();
-    const done = all.filter((task) => task.done).length;
-    const open = all.length - done;
-    return { open, done, summary: `${open} open and ${done} done.` };
+    const organizationTasks = await tasks.list();
+    return summarizeTasks(organizationTasks);
   },
   {
-    description: "Summarize the organization's tasks for a weekly review: how many are open and done.",
+    description:
+      "Summarize the organization's tasks for a weekly review: how many are open and how many are done.",
     effect: 'read',
-    output: { open: t.Integer(), done: t.Integer(), summary: t.String() },
+    output: TaskSummarySchema,
   }
 );

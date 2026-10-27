@@ -49,10 +49,11 @@ What the contract leaves out, binding derives from the method and the path:
 
 | Field            | Derived                                                                                                                                 | For the file above |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Operation name   | The method and the path's segments, in camelCase: the `operationId` and the RPC method.                                                 | `getV1NotesNoteId` |
+| Operation name   | What the method does to what the path names: the `operationId` and the RPC method. `listNotes`, `createNote`, `archiveNote`.             | `getNote`          |
 | `effect`         | `GET` reads, `DELETE` deletes, every other method writes.                                                                               | `read`             |
 | `scope`          | `<namespace>:<resource>:read` for a read, `:write` otherwise; the resource is the first fixed segment after the version, in kebab-case. | `notes:notes:read` |
-| `title`          | The tool's name, humanized, or else the method and path.                                                                                | `Get note`         |
+| `title`          | The operation's words as a sentence: the OpenAPI `summary` and the MCP tool's title.                                                    | `Get a note`       |
+| `group`          | The first fixed segment after the version, in words: the OpenAPI tag.                                                                   | `Notes`            |
 | `mcp.idempotent` | `true` for `GET`, `PUT` and `DELETE`.                                                                                                   | `true`             |
 
 A route whose path has no fixed segment after the version must declare its `scope`. A `DELETE` never declares

@@ -6,11 +6,17 @@ description: Extend the __PROJECT_NAME__ Maximus project with routes, MCP tools,
 Read CLAUDE.md and the Maximus skill (.agents/skills/maximus/SKILL.md) before changing the project.
 
 - Add a route with `bunx maximus gen route <method> <path>`, then write its handler, its description and its
-  strict input and output schemas. Declare a scope or effect only where the method's default is wrong, and
-  `mcp` or `rpc` only to expose the route there.
+  strict input and output schemas. Its operation name, effect and scope derive from the method and path
+  (`GET /v1/tasks/{taskId}` is `getTask`): declare one only where the derived one is wrong, and `mcp` or
+  `rpc` only to expose the route there.
 - Add a tool only agents use with `bunx maximus gen tool <name>`, in mcp/tools/.
-- Put domain logic in named functions under src/, and what every handler needs in context.ts, scoped to
-  `principal.organizationId`.
+- Write a handler as statements: name each result, test one condition at a time and return early. Move a
+  loop, a calculation or a call to another service into a named function of src/.
+- Put domain logic in modules of src/ named after their domain, imported as `#src/<module>.ts` from any
+  folder, and what every handler needs in context.ts, scoped to `principal.organizationId`. A store answers
+  what it found or `undefined`, and the route answers the failure.
+- Name things in whole English words: functions start with a verb, booleans read as questions, quantities
+  carry their unit. Give every exported declaration a one-sentence JSDoc.
 - Answer expected failures with `fail(code)` from the catalog in errors.ts, declared in `failures`.
 - Declare each binding in maximus()'s `env` with `bindings` from cf/config, and check what you read back
   from storage with `readSchema`.

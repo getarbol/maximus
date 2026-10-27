@@ -6,6 +6,9 @@ import { t, UuidSchema } from '@arbol-ai/maximus';
 import type { Static } from '@arbol-ai/maximus';
 import { readSchema } from '@arbol-ai/maximus/schemas';
 
+/** The largest document the service stores and answers, in bytes. */
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+
 /** A document's name: what a person would see, without control characters or path separators. */
 export const FilenameSchema = t.String({
   minLength: 1,
@@ -28,14 +31,20 @@ export const DocumentSchema = t.Object(
 /** A document. */
 export type Document = Static<typeof DocumentSchema>;
 
-/** A document's SHA-256, in lowercase hexadecimal. */
-async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+/** A document and a stream of its bytes. */
+export interface OpenedDocument {
+  document: Document;
+  body: ReadableStream;
+}
+
+/** The bytes' SHA-256, in lowercase hexadecimal. */
+async function computeSha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** What an object's metadata says of its document, checked against the document's schema. */
-function describe(documentId: string, object: R2Object): Document {
+/** The document an object's metadata describes, checked against the document's schema. */
+function documentFromObject(documentId: string, object: R2Object): Document {
   return readSchema(DocumentSchema, {
     documentId,
     filename: object.customMetadata?.filename,
@@ -46,37 +55,51 @@ function describe(documentId: string, object: R2Object): Document {
   });
 }
 
-/** The organization's documents. */
+/** The documents of one organization, stored under keys that start with its id. */
 export function documentStore(bucket: R2Bucket, organizationId: string) {
-  const key = (documentId: string) => `documents/${organizationId}/${documentId}`;
+  /** The key a document of the organization is stored under. */
+  function documentKey(documentId: string): string {
+    return `documents/${organizationId}/${documentId}`;
+  }
+
   return {
     /** Stores the bytes as a new document of this name and type, and describes it. */
     async create(filename: string, contentType: string, bytes: Uint8Array<ArrayBuffer>): Promise<Document> {
       const documentId = crypto.randomUUID();
-      const digest = await sha256(bytes);
-      const stored = await bucket.put(key(documentId), bytes, {
-        sha256: digest,
+      const sha256 = await computeSha256(bytes);
+      const stored = await bucket.put(documentKey(documentId), bytes, {
+        sha256,
         httpMetadata: { contentType },
-        customMetadata: { filename, sha256: digest },
+        customMetadata: { filename, sha256 },
       });
-      return describe(documentId, stored);
+      return documentFromObject(documentId, stored);
     },
-    /** The document, or undefined when the organization has none with this id. */
+
+    /** The document, without its bytes, or undefined when the organization has none with this id. */
     async describe(documentId: string): Promise<Document | undefined> {
-      const object = await bucket.head(key(documentId));
-      return object ? describe(documentId, object) : undefined;
+      const object = await bucket.head(documentKey(documentId));
+      if (!object) {
+        return undefined;
+      }
+      return documentFromObject(documentId, object);
     },
+
     /** The document and a stream of its bytes, or undefined when the organization has none with this id. */
-    async open(documentId: string): Promise<{ document: Document; body: ReadableStream } | undefined> {
-      const object = await bucket.get(key(documentId));
-      return object ? { document: describe(documentId, object), body: object.body } : undefined;
+    async open(documentId: string): Promise<OpenedDocument | undefined> {
+      const object = await bucket.get(documentKey(documentId));
+      if (!object) {
+        return undefined;
+      }
+      return { document: documentFromObject(documentId, object), body: object.body };
     },
-    /** Deletes the document; false when the organization had none with this id. */
-    async remove(documentId: string): Promise<boolean> {
-      if (!(await bucket.head(key(documentId)))) {
+
+    /** Deletes the document, and answers whether the organization had one with this id. */
+    async delete(documentId: string): Promise<boolean> {
+      const object = await bucket.head(documentKey(documentId));
+      if (!object) {
         return false;
       }
-      await bucket.delete(key(documentId));
+      await bucket.delete(documentKey(documentId));
       return true;
     },
   };

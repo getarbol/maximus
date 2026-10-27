@@ -16,10 +16,12 @@ clients when the route says so, and to other Workers over native RPC.
 
 Build the API:
 
+- [Write code people and agents read easily](guides/writing-code.md): how a route, a handler, a name, a
+  function and a comment are written in a Maximus project.
 - [Project structure](guides/project-structure.md): the files and folders of a project, what each one
   declares, and what `maximus prepare` generates from them.
 - [Routes](guides/routes.md): paths and methods, input from the path, query, body and headers,
-  responses, byte bodies, attachments, limits and the OpenAPI document.
+  responses, byte bodies, attachments, limits, the OpenAPI document and the clients generated from it.
 - [Schemas and validation](guides/schemas-and-validation.md): strict schemas, input codecs, query strings
   and reading data back from storage.
 - [Errors and results](guides/errors-and-results.md): the error catalog, `fail`, declared failures and

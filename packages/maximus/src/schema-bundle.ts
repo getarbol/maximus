@@ -58,6 +58,15 @@ function collectIds(value: unknown, ids: Set<string>): void {
   }
 }
 
+/** Every plain `$id` the values name, which bundling makes components of. */
+export function schemaIds(values: readonly unknown[]): Set<string> {
+  const ids = new Set<string>();
+  for (const value of values) {
+    collectIds(value, ids);
+  }
+  return ids;
+}
+
 /** A copy of a value with every `$ref` passed through `replace`. */
 function replaceReferences(value: unknown, replace: (reference: string) => string): unknown {
   if (Array.isArray(value)) {
@@ -86,10 +95,7 @@ export function bundleSchemas(
   sources: readonly unknown[],
   existing: Readonly<Record<string, unknown>>
 ): { values: unknown[]; components: Record<string, unknown> } {
-  const ids = new Set<string>();
-  for (const source of sources) {
-    collectIds(source, ids);
-  }
+  const ids = schemaIds(sources);
   const components: Record<string, unknown> = {};
   const variants = new Map<string, Map<string, string>>();
   const taken = new Set(Object.keys(existing));

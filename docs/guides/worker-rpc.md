@@ -63,7 +63,7 @@ lists, each of which `rpc.callers` must name, or the Worker does not start:
 `Operation "<name>": RPC callers must be allowed by the application.` A tool of `mcp/tools/` takes `rpc`
 too.
 
-The method's name is the operation's: the method and path in camelCase, `postV1Quotes`, unless
+The method's name is the operation's: what the method does to what the path names, `createQuote`, unless
 `operationId` names it, as `quoteItems` does here. The generated Worker exports one entrypoint, `Service`,
 with one method per route or tool that declares `rpc`. A route that declares no `rpc` is no method, and
 `visibility: 'internal'` keeps this one out of the public OpenAPI document while it still answers over

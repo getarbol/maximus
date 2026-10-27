@@ -66,4 +66,4 @@ export function testBatch(bodies: unknown[], attempts = 1) {
 }
 
 /** The execution context the platform passes; the reminders' handlers never use it. */
-export const context = {} as ExecutionContext;
+export const executionContext = {} as ExecutionContext;

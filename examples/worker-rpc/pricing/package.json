@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#maximus/*": "./.maximus/*.ts"
+    "#maximus/*": "./.maximus/*.ts",
+    "#src/*": "./src/*"
   },
   "exports": {
     "./contract": "./src/contract.ts"

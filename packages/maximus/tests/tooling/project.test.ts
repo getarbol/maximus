@@ -22,7 +22,7 @@ test('discovery creates static typed imports without evaluating modules', () => 
   });
   prepare(root);
   expect(generated(root, 'app.ts')).toContain(
-    '.mount(bindRoute(base, route_0, "/v1/notes/{noteId}", "GET"))'
+    '.mount(bindRoute(base, route_0, "/v1/notes/{noteId}", "GET", "getNote"))'
   );
   const middleware = generated(root, 'middleware.ts');
   expect(middleware.indexOf('01-first')).toBeLessThan(middleware.indexOf('02-second'));
@@ -128,9 +128,9 @@ test('suffixed modules declare one method each and share a path', () => {
   prepare(root);
   const app = generated(root, 'app.ts');
   expect(app).toContain("import { bindRoute, checkProjectPipeline } from '@arbol-ai/maximus/config';");
-  expect(app).toContain('.mount(bindRoute(base, route_0, "/v1/tasks/{taskId}", "DELETE"))');
-  expect(app).toContain('.mount(bindRoute(base, route_1, "/v1/tasks", "GET"))');
-  expect(app).toContain('.mount(bindRoute(base, route_2, "/v1/tasks", "POST"))');
+  expect(app).toContain('.mount(bindRoute(base, route_0, "/v1/tasks/{taskId}", "DELETE", "deleteTask"))');
+  expect(app).toContain('.mount(bindRoute(base, route_1, "/v1/tasks", "GET", "listTasks"))');
+  expect(app).toContain('.mount(bindRoute(base, route_2, "/v1/tasks", "POST", "createTask"))');
   expect(app).not.toContain('debug');
   prepare(root, 'development');
   expect(generated(root, 'app.ts')).toContain('"/v1/debug", "GET"');

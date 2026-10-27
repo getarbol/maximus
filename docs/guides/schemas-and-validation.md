@@ -32,7 +32,7 @@ OpenAPI document and the MCP tool listing, as [Concepts](../concepts.md#schemas)
 - A contract's `input` and `output` are strict objects (`additionalProperties: false`), or unions whose every
   member is one, told apart by a field such as `kind`. A GET's input is one strict object, its query string.
   `.build()` refuses anything else:
-  `Operation "postV1Notes": input and output are strict objects or unions of strict objects; a GET input is one strict object (its query). Use safe operation names, namespaced scopes and strict object schemas.`
+  `Operation "createNote": input and output are strict objects or unions of strict objects; a GET input is one strict object (its query). Use safe operation names, namespaced scopes and strict object schemas.`
   The fields a route gives as `input` or `output`, `{ title: t.String() }`, make a strict object.
 - `.build()` checks the outermost object. Declare nested objects strict as well, or their unknown fields are
   admitted.
@@ -195,7 +195,7 @@ answers `INVALID_INPUT` with this issue:
 
 Wrap every input that uses a codec in `inputSchema()`: a plain decode would apply TypeBox's checks and
 defaults and skip the rest, so `.build()` refuses such an input:
-`Operation "postV1NotesSearch": its input uses codecs (normalize, transform, inspect, refine, pipe or stripObject) that run only inside inputSchema(); wrap the input in inputSchema().`
+`Operation "searchNotes": its input uses codecs (normalize, transform, inspect, refine, pipe or stripObject) that run only inside inputSchema(); wrap the input in inputSchema().`
 
 | Helper                                              | Effect                                                                                                                                               |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

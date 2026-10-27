@@ -81,8 +81,8 @@ test('a route may import the generated base at runtime, and any generated module
   });
   expect(prepare(root).modules).toMatchObject({ routes: 2 });
   const app = generated(root, 'app.ts');
-  expect(app).toContain('bindRoute(base, route_0, "/v1/tags", "GET")');
-  expect(app).toContain('bindRoute(base, route_1, "/v1/tasks", "GET")');
+  expect(app).toContain('bindRoute(base, route_0, "/v1/tags", "GET", "listTags")');
+  expect(app).toContain('bindRoute(base, route_1, "/v1/tasks", "GET", "listTasks")');
 });
 
 test('middleware may not import the generated base, app, API or middleware at runtime, but may name their types', () => {
@@ -168,7 +168,7 @@ test('a declaration default-exported through a binding is still the module’s d
   });
   prepare(root);
   const app = generated(root, 'app.ts');
-  expect(app).toContain('.mount(bindRoute(base, route_0, "/v1/notes", "GET"))');
+  expect(app).toContain('.mount(bindRoute(base, route_0, "/v1/notes", "GET", "listNotes"))');
   expect(app).toContain('.mount(bindTool(base, tool_0, "summarize"))');
 });
 

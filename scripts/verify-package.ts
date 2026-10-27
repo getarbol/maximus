@@ -275,7 +275,7 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   execFileSync('bun', ['run', 'verify'], { cwd: project, stdio: 'inherit' });
   assert.match(
     readFileSync(join(project, '.maximus/app.ts'), 'utf-8'),
-    /bindRoute\(base, route_\d+, "\/v1\/greeting", "GET"\)/
+    /bindRoute\(base, route_\d+, "\/v1\/greeting", "GET", "getGreeting"\)/
   );
   const projectBuild = readFileSync(
     join(project, '.cloudflare/output/v0/workers/default/worker.config.json'),

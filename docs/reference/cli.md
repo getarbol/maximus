@@ -218,6 +218,30 @@ tools, pages, middleware modules, crons, queues, email handlers, Durable Objects
 Prepare's own refusals are listed in [Project structure](../guides/project-structure.md#what-prepare-refuses),
 and those of `maximus()`'s options in [Configuration](configuration.md#refusals).
 
+## maximus openapi
+
+```sh
+maximus openapi [directory] [--out <file>] [--check] [--json]
+```
+
+Writes the OpenAPI document the project's Worker serves to `openapi.json` at its root, or to `--out`. It
+prepares the project for production, as a build does, runs its generated API in Node with the stand-in for
+`cloudflare:workers` its tests use, and asks it for `<basePath>/openapi.json`, so the file is exactly the
+document the Worker serves. The file is JSON indented by two spaces; the format preset leaves every
+`openapi.json` as it is written.
+
+```text
+openapi.json was written: 5 operations.
+```
+
+It says `was written` when the file changed and `was current` when it did not. With `--check` it writes
+nothing: it says `matches the routes`, or that the file `differs from what the routes declare; run maximus
+openapi.` and exits with status 1, which keeps a committed document current in CI. With `--json` it prints
+`{ file, operations, changed }`.
+
+Commit `openapi.json`: SDK generators read it, as [Generate clients](../guides/routes.md#generate-clients)
+shows, and another service's typed RPC binding reads it, as [Worker RPC](../guides/worker-rpc.md) shows.
+
 ## create-maximus
 
 ```sh

@@ -7,7 +7,7 @@ import type { HttpMiddleware } from '../http.ts';
 import type { AppManifest, OperationMiddleware, OperationShape } from '../manifest.ts';
 
 export { bindContext, bindRoute, bindTool, routeName, toolName } from './bind.ts';
-export type { RouteName, ToolMcpName, ToolName } from './bind.ts';
+export type { ToolMcpName, ToolName } from './bind.ts';
 
 /** A `middleware/` module that wraps every HTTP request before token admission: it sees no principal. */
 export interface RequestMiddlewareModule<E> {

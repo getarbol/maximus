@@ -19,8 +19,9 @@ type Failure = { code: string; message: string; retryable: boolean; data: object
 A success answers with the route's `http.successStatus`, `200` unless declared, and a failure with the status
 its definition declares. An [attachment](#attachments) answers its bytes instead. Pages, plain routes,
 mounts and a web app's files answer their own formats, and so do the [service's own
-endpoints](#the-services-own-endpoints). The OpenAPI document names `metadata` `ResponseMetadata` and the
-refusal `FailureResponse`.
+endpoints](#the-services-own-endpoints). The OpenAPI document names `metadata` `ResponseMetadata`, each
+success envelope after what it holds (`NoteResponse`) and each refusal after its code (`NoteNotFoundError`);
+see [Named components](#named-components).
 
 ### Headers
 
@@ -98,57 +99,81 @@ None of them needs a token. `<base path>` is `/api` unless `http.basePath` names
 
 ### The document
 
-The document is OpenAPI 3.1.0 and holds, at its root, only `openapi`, `info` (`title` and `version`),
-`servers`, `paths` and `components` (`schemas` and `securitySchemes`). The Worker's server URL is its origin
-with the base path, `[{ "url": "https://notes.example.com/api" }]`, and each path is a route's template
-without it, `/v1/notes/{noteId}`, with its operations under their lowercase methods. `createOpenApi(app)`
-builds the document an application describes, whose server URL is the origin alone.
+The document is OpenAPI 3.1.0 and holds, at its root, only `openapi`, `info` (`title`, `version`, and
+`description` when `maximus()` states one), `servers`, `tags`, `paths` and `components` (`schemas`,
+`headers` and `securitySchemes`). The Worker's server URL is its origin with the base path,
+`[{ "url": "https://notes.example.com/api" }]`, and each path is a route's template without it,
+`/v1/notes/{noteId}`, with its operations under their lowercase methods. `createOpenApi(app)` builds the
+document an application describes, whose server URL is the origin alone; `maximus openapi` writes the one a
+project's Worker serves to `openapi.json`.
 
-`components.schemas` holds:
+`tags` lists each group of the public operations once, in the order the operations first name it, with the
+description `groups` gives it in `maximus()`. A description of a group no public route has is refused:
+`groups describes "Recrods", which no public route has as its group; the groups are Records.`
 
-| Component          | Schema                                                                                                                                                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ResponseMetadata` | `{ requestId: string }`, strict: every envelope's `metadata`.                                                                                                                                                                                  |
-| `Failure`          | `{ code: string, message: string, retryable: boolean, data: object }`, strict: the base of every failure.                                                                                                                                      |
-| `ValidationIssue`  | `{ path: string, message: string }`, strict, each at most 256 characters: an issue of `INVALID_INPUT`.                                                                                                                                         |
-| `FailureResponse`  | `{ success: false, data: null, error, metadata: ResponseMetadata }`, strict, where `error` is `{ allOf: [Failure], anyOf: [<one variant per code>] }`, each variant fixing its `code`, `message` and `retryable` and giving its `data` schema. |
-| A schema's `$id`   | Each named schema the document uses: the shared schemas, every page and the service's own. Two different shapes of one name are `<name>` and `<name>_2`.                                                                                       |
+### Named components
 
-Every `$ref` is a local `#/components/schemas/<name>`, and the document holds no `$id`. A description given
-where a named schema is used stays beside its reference.
+Every request body, success envelope and failure is a component, named for what it holds, so a generated
+client's types and methods read as the API does: `createNote(body: CreateNoteBody): NoteResponse`.
+`components.schemas` holds, in name order:
+
+| Component                    | Schema                                                                                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResponseMetadata`           | `{ requestId: string }`, strict: every envelope's `metadata`.                                                                                                                                                          |
+| `Empty`                      | The empty strict object: the `data` of an answer or a failure that carries none, and the body of a request that sends no field.                                                                                        |
+| `<Operation>Body`            | A JSON request body: the operation's input without the fields its path carries, `CreateNoteBody`. An input named by its `$id` that the path carries none of is that component instead.                                 |
+| `<Output>Response`           | The success envelope of an output named by its `$id`, `{ success: true, data: <Output>, error: null, metadata }`, which every operation that answers it shares: `NoteResponse`, `NotePageResponse`.                    |
+| `EmptyResponse`              | The success envelope of an output without fields.                                                                                                                                                                      |
+| `<Operation>Result`          | An output without an `$id`, and `<Operation>ResultResponse` its envelope. So is the envelope of a second output that shares an `$id` but not a shape.                                                                  |
+| `<Code>Failure`              | One failure of the catalog, `NoteNotFoundFailure` for `NOTE_NOT_FOUND`: `code` a one-value enum, `message` a string, `retryable` its fixed value, and `data` its schema (`<Code>FailureData` when unnamed) or `Empty`. |
+| `<Code>Error`                | The failure envelope of a status one code answers, `{ success: false, data: null, error: <Code>Failure, metadata }`: `NoteNotFoundError`. A code ending in `_ERROR` drops it: `InternalFailure`, `InternalError`.      |
+| `<Operation><Status>Failure` | The failures of a status several codes answer for one operation, a `oneOf` with a `discriminator` on `code`, and `<Operation><Status>Error` its envelope: `ListNotesBadRequestError`.                                  |
+| `ValidationIssue`            | `{ path: string, message: string }`, strict, each at most 256 characters: an issue of `INVALID_INPUT`.                                                                                                                 |
+| A schema's `$id`             | Each named schema the document uses: the shared schemas, every page and the service's own. Two different shapes of one name are `<name>` and `<name>_2`.                                                               |
+
+`true`, `false` and `null` that an envelope fixes are `{ "type": "boolean", "enum": [true] }` and
+`{ "const": null }`, which every generator reads; no field is a bare `{ "type": "null" }`. Every `$ref` is a
+local `#/components/schemas/<name>` or `#/components/headers/<name>`, and the document holds no `$id`. A
+description given where a named schema is used stays beside its reference.
+
+Two names are refused when the document is built: a schema `$id` that takes the name of a component the
+document writes itself, and any component named as generators name an operation's own types
+(`<Operation>Data`, `Error`, `Errors`, `Response`, `Responses` and `Request`):
+`The schema $id "NoteNotFoundError" is the name of a component the OpenAPI document writes for its bodies, answers or failures; rename the schema.`
+`components.headers` holds `RequestId`, the `X-Request-Id` every answer carries, and `RetryAfter`, an integer
+of seconds, when a failure sends it.
 
 ### Operations
 
 Each public operation with a route is one operation object:
 
-| Field         | Value                                                                                                                                                                                                                                                                                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operationId` | The operation's name.                                                                                                                                                                                                                                                                                                                                |
-| `summary`     | Its title.                                                                                                                                                                                                                                                                                                                                           |
-| `description` | Its description, when it has one.                                                                                                                                                                                                                                                                                                                    |
-| `security`    | The requirements that admit it; see [Security schemes](#security-schemes).                                                                                                                                                                                                                                                                           |
-| `tags`        | `[<group>]`, or `[<operation name>]` without a group.                                                                                                                                                                                                                                                                                                |
-| `x-…`         | Its [extensions](#openapi-extensions).                                                                                                                                                                                                                                                                                                               |
-| `parameters`  | Each path parameter, `in: path` and required. For a GET, each other input field `in: query`, required as the input requires it, and a list of strings with `style: 'form'` and `explode: false`, one comma-separated value. For a byte upload, each other field `in: query`, or `in: header` under the header it is read from, with `x-input-field`. |
-| `requestBody` | For every method but GET, a body: `application/json`, the input without the path's fields, or for a byte upload `application/octet-stream`, `{ type: 'string', format: 'binary' }`. It is required, except for a DELETE whose input requires no field besides the path's.                                                                            |
-| `responses`   | The success status, and one response per status of the failures it may answer.                                                                                                                                                                                                                                                                       |
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operationId` | The operation's name.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `summary`     | Its title.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `description` | Its description, when it has one.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `tags`        | `[<group>]`: the route's group, else its path's first fixed segment after the version, in words, else the service's title.                                                                                                                                                                                                                                                                                                               |
+| `security`    | The requirements that admit it; see [Security schemes](#security-schemes).                                                                                                                                                                                                                                                                                                                                                               |
+| `x-…`         | Its [extensions](#openapi-extensions).                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `parameters`  | Each path parameter, `in: path` and required. For a GET, each other input field `in: query`, required as the input requires it, and a list of strings with `style: 'form'` and `explode: false`, one comma-separated value. For a byte upload, each other field `in: query`, or `in: header` under the header it is read from, with `x-input-field`. Each is described by its schema's description, or else by its name: `The note id.`. |
+| `requestBody` | For every method but GET, a body: `application/json`, a [named component](#named-components), or for a byte upload `application/octet-stream`, `{ type: 'string', format: 'binary' }`. It is required, except for a DELETE whose input requires no field besides the path's, and a DELETE whose path carries its whole input documents none.                                                                                             |
+| `responses`   | The success status, and one response per status of the failures it may answer.                                                                                                                                                                                                                                                                                                                                                           |
 
-The success response is `application/json`, the strict envelope
-`{ success: true, data: <output>, error: null, metadata: ResponseMetadata }`. For an attachment, it is
-`application/octet-stream`, `{ type: 'string', format: 'binary' }`, with the headers `Content-Type`,
-`Content-Length` and `Content-Disposition`.
+The success response is `application/json`, a reference to its envelope, with the `X-Request-Id` header.
+For an attachment, it is `application/octet-stream`, `{ type: 'string', format: 'binary' }`, with the
+headers `X-Request-Id`, `Content-Type`, `Content-Length` and `Content-Disposition`.
 
-The failures an operation may answer are the standard ones and its declared `failures`, or every failure of
-the catalog when it declares none. Each status among them is one response:
+The failures an operation documents are the standard ones its route can meet and its declared `failures`, or
+every failure of the catalog when it declares none. Routing's own, `NOT_FOUND` and
+`HTTP_METHOD_NOT_ALLOWED`, never answer a documented route, and `REQUEST_TOO_LARGE` and
+`UNSUPPORTED_MEDIA_TYPE` only one that sends a body. Each status among them is one response:
 
 - `description`: each code of that status with its message, `` `CODE`: message ``, in catalog order and as a
   list when several codes share it;
-- `headers`: `X-Request-Id`, and `Retry-After` (an integer) for `429` or when one of its codes declares
-  `retryAfter`;
-- `content['application/json'].schema`: `FailureResponse` narrowed to those codes,
-  `{ "$ref": "#/components/schemas/FailureResponse", "properties": { "error": { "properties": { "code": { "enum": [<codes>] } } } } }`.
-  JSON Schema 2020-12 applies keywords beside a `$ref`; a reader that ignores them meets the whole catalog,
-  which `FailureResponse` always holds.
+- `headers`: `X-Request-Id`, and `Retry-After` for `429` or when one of its codes declares `retryAfter`;
+- `x-failure-codes`: its codes, in catalog order;
+- `content['application/json'].schema`: a reference to its envelope, `<Code>Error` or
+  `<Operation><Status>Error`.
 
 ### OpenAPI extensions
 
@@ -168,6 +193,7 @@ the catalog when it declares none. Each status among them is one response:
 | `x-input-headers`      | A byte upload                                | Input field to request header; `{}` when it reads none from a header.                     |
 | `x-response`           | An attachment                                | `attachment`                                                                              |
 | `x-input-field`        | A query or header parameter of a byte upload | The input field the parameter fills.                                                      |
+| `x-failure-codes`      | Every failure response                       | The codes that answer with its status, in catalog order.                                  |
 
 `createOpenApi(app, { operationExtensions: (name, operation) => ({ … }) })` adds an adapter's own
 extensions to each operation; a key without the `x-` prefix throws `OpenAPI extensions must use x- names.`

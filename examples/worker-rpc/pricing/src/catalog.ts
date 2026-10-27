@@ -4,19 +4,25 @@
 import type { Items, Quote } from './contract.ts';
 
 /** The price of one unit of each SKU, in US cents. */
-const CATALOG: Readonly<Record<string, number>> = { 'TEA-001': 450, 'TEA-002': 600, 'MUG-001': 1200 };
+const UNIT_PRICE_CENTS: Readonly<Record<string, number>> = {
+  'TEA-001': 450,
+  'TEA-002': 600,
+  'MUG-001': 1200,
+};
 
-/** The quote of the items, or the position of the first one the catalog does not list. */
-export function quote(items: Items): { quote: Quote } | { unknown: number } {
-  const lines = [];
+/** The items' quote, or the position of the first item the catalog does not list. */
+export type PricedItems = { ok: true; quote: Quote } | { ok: false; unknownIndex: number };
+
+/** Prices the items: their quote, or the position of the first item the catalog does not list. */
+export function priceItems(items: Items): PricedItems {
+  const lines: Quote['lines'] = [];
   for (const [index, item] of items.entries()) {
-    const unitCents = CATALOG[item.sku];
+    const unitCents = UNIT_PRICE_CENTS[item.sku];
     if (unitCents === undefined) {
-      return { unknown: index };
+      return { ok: false, unknownIndex: index };
     }
     lines.push({ ...item, unitCents, totalCents: unitCents * item.quantity });
   }
-  return {
-    quote: { currency: 'USD', lines, totalCents: lines.reduce((sum, line) => sum + line.totalCents, 0) },
-  };
+  const totalCents = lines.reduce((sum, line) => sum + line.totalCents, 0);
+  return { ok: true, quote: { currency: 'USD', lines, totalCents } };
 }

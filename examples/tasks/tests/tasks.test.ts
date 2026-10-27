@@ -7,9 +7,9 @@
 import { beforeEach, expect, it } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
+import { taskStore } from '#src/tasks.ts';
+import type { Task } from '#src/tasks.ts';
 
-import { taskStore } from '../src/tasks.ts';
-import type { Task } from '../src/tasks.ts';
 import { testNamespace } from './kv.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
@@ -37,7 +37,7 @@ async function call(method: string, path: string, body?: unknown) {
 }
 
 /** Calls an MCP method with the development token and answers its result. */
-async function mcp(method: string, params: object = {}) {
+async function callMcp(method: string, params: object = {}) {
   const response = await handler(
     new Request('http://localhost/mcp', {
       method: 'POST',
@@ -103,23 +103,23 @@ it('refuses an empty title, fields it does not know, an id that is no UUID and a
 
 it('serves its tools, its guide and its skill over MCP', async () => {
   await call('POST', '/v1/tasks', { title: 'Renew the domain' });
-  const tools = (await mcp('tools/list')).tools as { name: string }[];
+  const tools = (await callMcp('tools/list')).tools as { name: string }[];
   expect(tools.map(({ name }) => name).toSorted()).toEqual([
     'complete_task',
     'list_tasks',
     'summarize_tasks',
   ]);
-  expect(await mcp('tools/call', { name: 'summarize_tasks', arguments: {} })).toMatchObject({
+  expect(await callMcp('tools/call', { name: 'summarize_tasks', arguments: {} })).toMatchObject({
     structuredContent: { open: 1, done: 0, summary: '1 open and 0 done.' },
   });
-  const resources = (await mcp('resources/list')).resources as { uri: string }[];
+  const resources = (await callMcp('resources/list')).resources as { uri: string }[];
   expect(resources.map(({ uri }) => uri)).toEqual(
     expect.arrayContaining([
       'https://example-tasks.example.workers.dev/guides/task-conventions',
       'skill://weekly-review/SKILL.md',
     ])
   );
-  expect(await mcp('resources/read', { uri: 'skill://weekly-review/SKILL.md' })).toMatchObject({
+  expect(await callMcp('resources/read', { uri: 'skill://weekly-review/SKILL.md' })).toMatchObject({
     contents: [{ text: expect.stringContaining('# Weekly review') }],
   });
 });
@@ -128,16 +128,12 @@ it('keeps each organization to its own tasks, and never answers a stored value i
   const namespace = testNamespace();
   const clinic = taskStore(namespace, 'org_clinic');
   const lab = taskStore(namespace, 'org_lab');
-  const task = await clinic.put({
-    taskId: crypto.randomUUID(),
-    title: 'Restock gloves',
-    done: false,
-    createdAt: new Date().toISOString(),
-  });
-  expect(await lab.get(task.taskId)).toBeNull();
+  const task = await clinic.create('Restock gloves');
+  expect(await lab.find(task.taskId)).toBeUndefined();
+  expect(await lab.complete(task.taskId)).toBeUndefined();
   expect(await lab.list()).toEqual([]);
   await lab.delete(task.taskId);
-  expect(await clinic.get(task.taskId)).toEqual(task);
+  expect(await clinic.find(task.taskId)).toEqual(task);
 
   const taskId = crypto.randomUUID();
   await env.TASKS.put(`tasks/local-development/${taskId}`, JSON.stringify({ taskId, title: 7 }));

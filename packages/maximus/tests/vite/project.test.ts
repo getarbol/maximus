@@ -97,7 +97,7 @@ test('without a root, the plugin prepares the directory Vite was started in', ()
   const root = project({ 'routes/v1/notes.get.ts': ROUTE });
   process.chdir(root);
   configure(tasksPlugin(), {}, { command: 'build' });
-  expect(generated(root, 'app.ts')).toContain('bindRoute(base, route_0, "/v1/notes", "GET")');
+  expect(generated(root, 'app.ts')).toContain('bindRoute(base, route_0, "/v1/notes", "GET", "listNotes")');
 });
 
 test('its api prepares any root for a mode as a build would', () => {

@@ -2,29 +2,38 @@
 import { Form, Link, redirect, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs } from 'react-router';
 
-import { signedIn, tasks } from '../../api.ts';
+import { createTask, isSignedIn, listTasks } from '../../api.ts';
 
+/** The organization's tasks; a person who has not signed in is sent to sign in first. */
 export async function loader() {
-  if (!signedIn()) {
+  if (!isSignedIn()) {
     throw redirect('/');
   }
-  return await tasks.list();
+  return await listTasks();
 }
 
+/** Adds a task with the title the form sends, trimmed; a blank title adds nothing. */
 export async function action({ request }: ActionFunctionArgs) {
-  const title = (await request.formData()).get('title');
-  if (typeof title === 'string' && title.trim()) {
-    await tasks.create({ title: title.trim() });
+  const form = await request.formData();
+  const title = form.get('title');
+  if (typeof title !== 'string') {
+    return null;
   }
+  const trimmedTitle = title.trim();
+  if (trimmedTitle === '') {
+    return null;
+  }
+  await createTask({ title: trimmedTitle });
   return null;
 }
 
+/** Each task as a link to its own page, done ones struck through, and the form that adds a task. */
 export default function Tasks() {
-  const { tasks: list } = useLoaderData<typeof loader>();
+  const { tasks } = useLoaderData<typeof loader>();
   return (
     <>
       <ul>
-        {list.map((task) => (
+        {tasks.map((task) => (
           <li key={task.taskId}>
             <Link to={`/tasks/${task.taskId}`}>{task.done ? <s>{task.title}</s> : task.title}</Link>
           </li>

@@ -49,6 +49,12 @@ type CatalogCode = {
 }[keyof CatalogDefinitions];
 /** The code of every standard failure, which any operation may answer without declaring it. */
 type StandardCode = (typeof STANDARD_FAILURES)[keyof typeof STANDARD_FAILURES]['code'];
+/** The standard codes only routing and admission answer, before an operation runs: never a handler's. */
+type AdmissionCode = 'NOT_FOUND' | 'HTTP_METHOD_NOT_ALLOWED' | 'UNAUTHORIZED';
+/** The standard codes of reading a body, which a byte body's `read()` answers and a handler only returns. */
+type BodyCode = 'REQUEST_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE';
+/** The standard codes a handler, a context or middleware may fail with itself. */
+type OperationStandardCode = Exclude<StandardCode, AdmissionCode | BodyCode>;
 /** The codes a declaration may list in `failures`: the catalog's own. */
 export type DomainCode = Exclude<CatalogCode, StandardCode>;
 /** The definition of the registered catalog that has this code. */
@@ -64,10 +70,13 @@ type DefinitionWithCode<Code> = Extract<
 type FailureArguments<Code extends string> = string extends CatalogCode
   ? [data?: Readonly<Record<string, unknown>>]
   : CreateArguments<DefinitionWithCode<Code>>;
-/** The codes a handler may fail with: the domain failures it declares, or every one, and the standard ones. */
+/**
+ * The codes a handler may fail with: the domain failures it declares, or every one, and the standard ones
+ * an operation answers itself.
+ */
 type AllowedCode<X> =
   | (X extends { failures: readonly (infer C extends string)[] } ? C : DomainCode)
-  | StandardCode;
+  | OperationStandardCode;
 
 /**
  * A failure a handler answers with, `return fail('TASK_NOT_FOUND')`: an expected outcome, never thrown.
@@ -140,7 +149,7 @@ export type HandlerArguments<C, I extends TSchema, X> = Omit<C, 'input' | 'body'
 /** What a handler answers: its output, or a failure from `fail`, at once or as a promise. */
 export type HandlerAnswer<O extends TSchema, X> = Answer<Static<O>, X>;
 /** A value, or a failure from `fail`, at once or as a promise. */
-type Answer<V, X> = V | Failed<AllowedCode<X>> | Promise<V | Failed<AllowedCode<X>>>;
+type Answer<V, X> = V | Failed<AllowedCode<X> | BodyCode> | Promise<V | Failed<AllowedCode<X> | BodyCode>>;
 /** The empty strict object a route answers when it declares no output. */
 type NoOutput = TObject<Record<never, never>>;
 /** The output schema a declaration stands for: the one it declares, or the empty object. */
@@ -176,15 +185,22 @@ export interface HandlerOptions {
   /** The output schema, or its fields; none when the route answers the empty object. */
   output?: SchemaOrFields;
   /**
-   * A short human name: the OpenAPI `summary` and the MCP tool's title. By default, the tool's name in words
-   * (`Get note` for `get_note`) when the route is a tool, else the method and path.
+   * A short human name: the OpenAPI `summary` and the MCP tool's title. By default, the method and path in
+   * words: `Get a note` for `GET /v1/notes/{noteId}`, `List notes` for `GET /v1/notes`.
    */
   title?: string;
   /** What the route does, for people and agents. A route that is also an MCP tool requires it. */
   description?: string;
-  /** The OpenAPI tag; by default, the operation's name. */
+  /**
+   * The OpenAPI tag that groups the route with its resource's other routes. By default, the first fixed
+   * segment after the version, in words: `Notes` for `/v1/notes/{noteId}`.
+   */
   group?: string;
-  /** The OpenAPI `operationId` and native RPC method: by default, the method and path in camelCase. */
+  /**
+   * The OpenAPI `operationId` and the native RPC method. By default, the method and path as an action:
+   * `listNotes` for `GET /v1/notes`, `getNote` for `GET /v1/notes/{noteId}`, `createNote` for
+   * `POST /v1/notes` and `archiveNote` for `POST /v1/notes/{noteId}/archive`.
+   */
   operationId?: string;
   /**
    * The scope a caller needs: by default, `<namespace>:<resource>:read` for a read and
@@ -405,7 +421,7 @@ export function isToolDeclaration(value: unknown): boolean {
 /** What preparing a call's context receives: the verified invocation and `fail`. */
 export type ContextArguments<E = RegisteredEnv> = Invocation<E> & {
   /** Answers the call with a failure of the catalog instead of preparing its context. */
-  readonly fail: Fail<DomainCode | StandardCode>;
+  readonly fail: Fail<DomainCode | OperationStandardCode>;
 };
 /** Every declaration `defineContext` returned. */
 const contexts = new WeakSet<object>();

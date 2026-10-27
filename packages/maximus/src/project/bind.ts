@@ -17,27 +17,19 @@ import type {
   ToolDeclaration,
   ToolOptions,
 } from '../handler.ts';
-import type { Exposure, Invocation, OperationDefinition, OperationHandler } from '../manifest.ts';
+import type { Invocation, OperationDefinition, OperationHandler } from '../manifest.ts';
 import { err, ok } from '../result.ts';
+import { routeGroup, routeTitle } from './names.ts';
+import type { HttpMethod } from './names.ts';
 
-/** A route's HTTP method. */
-type HttpMethod = NonNullable<Exposure['http']>['method'];
+export { routeName } from './names.ts';
+
 /** A segment or parameter name in PascalCase: `task-lists` and `task_lists` are `TaskLists`. */
-type Word<S extends string> = S extends `{${infer Name}}`
-  ? Word<Name>
-  : S extends `${infer Head}-${infer Tail}`
+type Word<S extends string> = S extends `${infer Head}-${infer Tail}`
+  ? `${Word<Head>}${Word<Tail>}`
+  : S extends `${infer Head}_${infer Tail}`
     ? `${Word<Head>}${Word<Tail>}`
-    : S extends `${infer Head}_${infer Tail}`
-      ? `${Word<Head>}${Word<Tail>}`
-      : Capitalize<S>;
-/** Every segment of a path in PascalCase, joined. */
-type PathWords<P extends string> = P extends `/${infer Segment}/${infer Rest}`
-  ? `${Word<Segment>}${PathWords<`/${Rest}`>}`
-  : P extends `/${infer Segment}`
-    ? Word<Segment>
-    : '';
-/** A route's operation name: `POST /v1/tasks/{taskId}/complete` is `postV1TasksTaskIdComplete`. */
-export type RouteName<M extends string, P extends string> = `${Lowercase<M>}${PathWords<P>}`;
+    : Capitalize<S>;
 /** A tool's operation name: the file `summarize-tasks` is `summarizeTasks`. */
 export type ToolName<F extends string> = Uncapitalize<Word<F>>;
 /** A tool's MCP name: the file `summarize-tasks` is `summarize_tasks`. */
@@ -45,10 +37,8 @@ export type ToolMcpName<F extends string> = F extends `${infer Head}-${infer Tai
   ? `${Head}_${ToolMcpName<Tail>}`
   : F;
 
-/** A route's operation name: its `operationId`, else its method and path. */
-type BoundRouteName<X, M extends string, P extends string> = X extends { operationId: infer N extends string }
-  ? N
-  : RouteName<M, P>;
+/** A route's operation name: its `operationId`, else the name its method and path derive. */
+type BoundRouteName<X, N extends string> = X extends { operationId: infer D extends string } ? D : N;
 /** A route's effect: the declared one, else its method's. */
 type RouteEffect<X, M> = X extends { effect: infer E }
   ? E
@@ -85,17 +75,12 @@ function humanize(name: string): string {
   const words = name.replaceAll('_', ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
-/** A segment or parameter name in PascalCase, as `Word` types it. */
+/** A segment name in PascalCase, as `Word` types it. */
 function word(segment: string): string {
   return segment
-    .replace(/^\{(.*)\}$/, '$1')
     .split(/[-_]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join('');
-}
-/** A route's operation name, as `RouteName` types it. */
-export function routeName(method: HttpMethod, path: string): string {
-  return `${method.toLowerCase()}${path.split('/').filter(Boolean).map(word).join('')}`;
 }
 /** A tool's operation name, as `ToolName` types it. */
 export function toolName(file: string): string {
@@ -182,7 +167,8 @@ export function bindContext<E, D extends object>(
 
 /**
  * Binds a `defineHandler` declaration to the application, under the path and method its filename gives. The
- * operation is named by its `operationId`, else by its method and path.
+ * operation is named by its `operationId`, else by `name`, the one `maximus prepare` derives from its method
+ * and path with `routeName`: `getNote` for `GET /v1/notes/{noteId}`.
  */
 export function bindRoute<
   E,
@@ -192,11 +178,13 @@ export function bindRoute<
   X,
   const P extends string,
   const M extends HttpMethod,
+  const N extends string,
 >(
   base: ApplicationBuilder<E, C, Record<never, never>>,
   declaration: HandlerDeclaration<I, O, X, C>,
   path: P,
-  method: M
+  method: M,
+  name: N
 ) {
   if (!isHandlerDeclaration(declaration)) {
     throw new TypeError(`${method} ${path}: a route file's default export must come from defineHandler.`);
@@ -205,7 +193,8 @@ export function bindRoute<
     operationId,
     effect = methodEffect(method),
     scope,
-    title,
+    title = routeTitle(method, path),
+    group = routeGroup(path),
     description = '',
     http,
     mcp,
@@ -224,10 +213,11 @@ export function bindRoute<
     );
   }
   type Bound = BoundRoute<X, M, P>;
-  type Name = BoundRouteName<X, M, P>;
+  type Name = BoundRouteName<X, N>;
   const definition = {
     ...options,
-    title: title ?? (mcp ? humanize(mcp.name) : `${method} ${path}`),
+    title,
+    ...(group === undefined ? {} : { group }),
     description,
     effect,
     scope: scope ?? `${base.definition.namespace}:${resource}:${effect === 'read' ? 'read' : 'write'}`,
@@ -237,8 +227,8 @@ export function bindRoute<
     ...(mcp ? { mcp: { ...mcp, idempotent: mcp.idempotent ?? IDEMPOTENT_METHODS.has(method) } } : {}),
   };
   return base.operation<Name, I, O, Bound>(
-    // `routeName` derives at runtime the name `RouteName` derives in the type.
-    (operationId ?? routeName(method, path)) as Name,
+    // The declaration's type gave `operationId` its literal type, which `Name` takes when it is declared.
+    (operationId ?? name) as Name,
     // The declaration's fields, which its own type checked, and the derived ones; `.build()` still refuses
     // any field no operation has.
     definition as unknown as OperationDefinition<I, O, Bound> & KnownOperationFields<Bound>,

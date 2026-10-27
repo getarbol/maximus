@@ -16,6 +16,12 @@ setting.
 
 Breaking:
 
+- A handler, context or middleware no longer answers the failures only routing and admission answer
+  (`NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED`, `UNAUTHORIZED`), nor a body's (`REQUEST_TOO_LARGE`,
+  `UNSUPPORTED_MEDIA_TYPE`) unless a byte body's `read()` answered it: `fail` does not take them, and one
+  answered anyway is `INTERNAL_ERROR`. The OpenAPI document's `Failure` and `FailureResponse` components
+  give way to one component per code.
+
 - `maximus()` from the new `@arbol-ai/maximus/vite` states the application and its Worker in
   `vite.config.ts`, with Cloudflare's own names for the Worker's settings, and composes Cloudflare's Vite
   plugin. Gone: `maximus.config.ts` and `defineConfig` and `cloudflare.config.ts`, both of which the plugin
@@ -70,9 +76,16 @@ Everything else:
   JSON with `--json`.
 - A route is `defineHandler(handler, contract?)` in `routes/**/<name>.<method>.ts`: the handler receives
   `{ input, principal, env, fail, …context }` and answers its output or `fail(code)`, typed by the
-  contract. Binding derives what a contract leaves out: the operation's name, its effect, its scope
-  `<service>:<resource>:read|write`, its title and its tool's idempotent hint. `defineTool` declares a tool
-  only MCP serves, in `mcp/tools/`. A project registers its base and error catalog in the global
+  contract. Binding derives what a contract leaves out: the operation's name, from what the method does to
+  what the path names (`listNotes`, `getNote`, `createNote`, `archiveNote`, `listDaySlots`), which
+  `maximus prepare` writes into `.maximus/app.ts`; its title, as a sentence (`Get a note`); its group, the
+  OpenAPI tag (`Notes`); its effect; its scope `<service>:<resource>:read|write`; and its tool's idempotent
+  hint. Two routes that derive one name are refused with both named. `defineTool` declares a tool only MCP
+  serves, in `mcp/tools/`.
+- A new project maps `#src/*` to `./src/*` in its `package.json`, so a module of `src/` has one name from
+  any folder: `import { NoteSchema } from '#src/notes.ts'`. The [Write code people and agents read
+  easily](docs/guides/writing-code.md) guide sets the house style the examples, `maximus gen` and the
+  Maximus skill follow. A project registers its base and error catalog in the global
   `MaximusRegister`, which types every handler's context and failures.
 - `context.ts` (`defineContext`) prepares what every handler receives, `errors.ts` declares the error
   catalog and `auth.ts` (`defineAuth`) verifies tokens the application issues; `defineAuth` refuses the
@@ -112,6 +125,17 @@ Everything else:
   the application's diagnostics. The MCP listing of a union input includes a record member's key patterns.
 - Static assets, a web app's build or `createWorker`'s `assets`, answer an immutable asset only for a plain
   path: an encoded slash, an encoded character or a dot segment there is a 404.
+- The OpenAPI document is written for SDK generators. Every request body, answer and failure is a named
+  component (`CreateNoteBody`, `NoteResponse`, `NoteNotFoundFailure` and its answer `NoteNotFoundError`,
+  `ListNotesBadRequestError` with a discriminator on `code` where several codes share a status), each
+  operation has one tag, its group, which `groups` in `maximus()` describes as `description` describes the
+  service, every parameter is described, and `x-failure-codes` names each status's codes. A route lists only
+  the failures it can meet: routing's own `NOT_FOUND` and `HTTP_METHOD_NOT_ALLOWED` never, and a body's
+  `REQUEST_TOO_LARGE` and `UNSUPPORTED_MEDIA_TYPE` only when it sends one. A DELETE whose path carries its
+  whole input documents no body, and a body keeps its `minProperties` net of the path's fields. TypeScript
+  types from openapi-typescript, and Go and Python clients from the OpenAPI Generator, compile from it.
+- `maximus openapi` writes the document the Worker serves to `openapi.json`, and `--check` fails when it is
+  out of date. The format preset leaves every `openapi.json` as written.
 - The OpenAPI document gives a list query parameter `style: form` and `explode: false`, so a generated
   client sends `tags=a,b`, the one form the API reads, rather than repeating the key, which it refuses.
 - Every refusal of `.build()` that concerns one operation names it, and a refusal of a route template names

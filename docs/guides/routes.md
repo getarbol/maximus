@@ -119,19 +119,20 @@ both hold.
 
 Every other field is optional, and what a route leaves out is derived from its method and path:
 
-| Field                            | Declares                                                            | Left out                                                        |
-| -------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `description`                    | What the route does: the OpenAPI `description` and the MCP tool's   | None; a route that is an MCP tool must describe itself          |
-| `failures`                       | The [domain failures](errors-and-results.md) the route may answer   | Every failure of the catalog                                    |
-| `effect`                         | `read`, `write` or `delete`                                         | `read` for GET, `delete` for DELETE, `write` for the others     |
-| `scope`                          | The scope a caller's token must hold                                | `<namespace>:<resource>:read` for a read, `:write` otherwise    |
-| `title`                          | The OpenAPI `summary` and the MCP tool's title                      | The tool's name as words (`Get note`), else the method and path |
-| `operationId`                    | The operation's name                                                | The method and path in camelCase: `patchV1NotesNoteId`          |
-| `mcp`                            | Also serve the route as an [MCP](mcp.md) tool                       | No tool                                                         |
-| `rpc`                            | Also serve it as a [native RPC](worker-rpc.md) method               | No RPC method                                                   |
-| `http`                           | Its success status, a byte body, fields from headers, an attachment | `200`, a JSON body, a JSON answer                               |
-| `maxBodyBytes`, `maxOutputBytes` | Its own [limits](#limits)                                           | The application's                                               |
-| `visibility`                     | `internal` keeps it out of the OpenAPI document                     | `public`                                                        |
+| Field                            | Declares                                                            | Left out                                                     |
+| -------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `description`                    | What the route does: the OpenAPI `description` and the MCP tool's   | None; a route that is an MCP tool must describe itself       |
+| `failures`                       | The [domain failures](errors-and-results.md) the route may answer   | Every failure of the catalog                                 |
+| `effect`                         | `read`, `write` or `delete`                                         | `read` for GET, `delete` for DELETE, `write` for the others  |
+| `scope`                          | The scope a caller's token must hold                                | `<namespace>:<resource>:read` for a read, `:write` otherwise |
+| `title`                          | The OpenAPI `summary` and the MCP tool's title                      | The method and path as a sentence: `Update a note`           |
+| `operationId`                    | The operation's name                                                | The method and path as an action: `updateNote`               |
+| `group`                          | The OpenAPI tag                                                     | The first segment after the version, in words: `Notes`       |
+| `mcp`                            | Also serve the route as an [MCP](mcp.md) tool                       | No tool                                                      |
+| `rpc`                            | Also serve it as a [native RPC](worker-rpc.md) method               | No RPC method                                                |
+| `http`                           | Its success status, a byte body, fields from headers, an attachment | `200`, a JSON body, a JSON answer                            |
+| `maxBodyBytes`, `maxOutputBytes` | Its own [limits](#limits)                                           | The application's                                            |
+| `visibility`                     | `internal` keeps it out of the OpenAPI document                     | `public`                                                     |
 
 `group`, `actorKinds`, `scopeMatch` and `conditionalScopes` complete the contract. [Route and operation
 options](../reference/operations.md#route-contract) gives every field's type, default and rules.
@@ -402,10 +403,32 @@ scopes](authentication-and-scopes.md#rate-limits) shows how to declare it.
 
 ## Name and hide a route
 
-`operationId` names the operation, which is otherwise named after the method and path. The name is the
-OpenAPI `operationId`, the native RPC method and the `operation` of the observations Maximus records: a
+A route is named after what its method does to what its path names, so it needs no name of its own:
+
+| Route                             | Name                 | Title                |
+| --------------------------------- | -------------------- | -------------------- |
+| `GET /v1/notes`                   | `listNotes`          | List notes           |
+| `POST /v1/notes`                  | `createNote`         | Create a note        |
+| `GET /v1/notes/{noteId}`          | `getNote`            | Get a note           |
+| `PATCH /v1/notes/{noteId}`        | `updateNote`         | Update a note        |
+| `DELETE /v1/notes/{noteId}`       | `deleteNote`         | Delete a note        |
+| `POST /v1/notes/{noteId}/archive` | `archiveNote`        | Archive a note       |
+| `POST /v1/notes/search`           | `searchNotes`        | Search notes         |
+| `GET /v1/notes/{noteId}/summary`  | `getNoteSummary`     | Get note summary     |
+| `GET /v1/days/{date}/slots`       | `listDaySlots`       | List day slots       |
+| `GET /v1/me/appointments`         | `listMyAppointments` | List my appointments |
+| `GET /v2/notes`                   | `listNotesV2`        | List notes (v2)      |
+
+The name is the OpenAPI `operationId`, the native RPC method and the `operation` of the observations
+Maximus records; the title is the OpenAPI `summary` and the MCP tool's title; and the first segment after
+the version, `Notes`, is the route's `group`, its OpenAPI tag. [Derived names](../reference/operations.md#derived-names)
+gives every rule, and `maximus prepare` writes each route's name into `.maximus/app.ts`.
+
+Declare `operationId`, `title` or `group` only where the derived one reads wrong. An `operationId` is a
 camelCase name of up to 100 characters that is not a name a Worker entrypoint or a promise already uses,
-such as `fetch` or `then`.
+such as `fetch` or `then`. Two routes that derive one name are refused with both named, so you give one of
+them its own:
+`Duplicate operation: createNote names both POST /v1/notes and POST /v1/note; give one of them its own operationId.`
 
 `visibility: 'internal'` keeps a route out of the OpenAPI document, and its scopes out of the
 `scopes_supported` of the OAuth discovery metadata unless a public route shares them. The route is still
@@ -455,9 +478,10 @@ The Worker publishes its API as an OpenAPI 3.1 document at `/api/openapi.json`, 
 still checks its caller. The document is built from the routes and the error catalog when it is first
 requested. It holds every public route, without internal routes and tools only MCP serves, each with:
 
-- `operationId`, its name; `summary`, its title; `description`; and `tags`, its `group` or else its name;
+- `operationId`, its name; `summary`, its title; `description`; and `tags`, its group;
 - its `security` requirements: the scopes that admit it;
-- its path and query parameters, and its JSON body without the path's fields or the bytes it uploads;
+- its path and query parameters, each described, and its JSON body without the path's fields, or the bytes
+  it uploads;
 - its success response, and one response for each failure status it may answer, naming every code of that
   status with its message;
 - its scopes, effect, limits, MCP tool and RPC exposure, as `x-required-scopes`, `x-effect`,
@@ -466,7 +490,53 @@ requested. It holds every public route, without internal routes and tools only M
 
 The server URL is the origin with the base path, `https://notes.example.com/api`, and the paths are the
 routes' own, `/v1/notes/{noteId}`. Every schema with an `$id`, such as `UuidSchema` or a note's schema, is
-one component of that name, as [Named schemas](schemas-and-validation.md#named-schemas) explains.
+one component of that name, as [Named schemas](schemas-and-validation.md#named-schemas) explains, and so is
+every request body, answer and failure: `CreateNoteBody`, `NoteResponse`, `NoteNotFoundFailure` and its
+answer `NoteNotFoundError`. [Wire formats](../reference/wire-formats.md#named-components) lists each kind.
+
+`description` and `groups` in `maximus()` describe the service and each group of routes:
+
+```ts
+maximus({
+  origin: 'https://notes.example.com',
+  title: 'Notes',
+  description: "The notes of each organization's people, over HTTP and MCP.",
+  groups: { Notes: "The notes of the caller's organization." },
+});
+```
+
+### Generate clients
+
+`bunx maximus openapi` writes the document the Worker serves to `openapi.json`, and
+`bunx maximus openapi --check` fails when the routes changed and the file did not; commit the file and run the
+check in CI. Any OpenAPI generator reads it, and the clients it writes take the document's names:
+
+```sh
+# TypeScript types, for openapi-fetch
+bunx openapi-typescript openapi.json -o src/notes-api.d.ts
+# Go, Python and other languages
+bunx @openapitools/openapi-generator-cli generate -i openapi.json -g go -o notes-go
+```
+
+A TypeScript client then knows each answer and each failure by its code:
+
+```ts
+import createClient from 'openapi-fetch';
+
+import type { paths } from '#src/notes-api.d.ts';
+
+const notes = createClient<paths>({ baseUrl: 'https://notes.example.com/api', headers: { authorization } });
+
+const { data, error } = await notes.GET('/v1/notes/{noteId}', { params: { path: { noteId } } });
+if (error?.error.code === 'NOTE_NOT_FOUND') {
+  // getNote answers no other domain failure; INVALID_CURSOR here would not compile.
+}
+```
+
+The Go client is `NotesAPIService.GetNote(ctx, noteId)`, answering a `*NoteResponse`, and the Python one
+`NotesApi.get_note(note_id)`. A list parameter travels as one comma-separated value, `tags=a,b`, which the
+document declares with `explode: false`; openapi-fetch sends it so with
+`querySerializer: { array: { style: 'form', explode: false } }`.
 
 ## Health
 

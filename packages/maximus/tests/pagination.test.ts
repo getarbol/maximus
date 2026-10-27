@@ -119,9 +119,14 @@ function operationNamed(document: Document, name: string): Json {
   return found;
 }
 
-function successSchema(operation: Json): { properties: Record<string, Json> } {
-  const responses = operation.responses as Record<string, { content: Record<string, { schema: never }> }>;
-  return responses['200']?.content['application/json']?.schema as never;
+/** The success envelope an operation's answer refers to. */
+function successSchema(document: Document, operation: Json): { properties: Record<string, Json> } {
+  const responses = operation.responses as Record<
+    string,
+    { content: Record<string, { schema: { $ref: string } }> }
+  >;
+  const reference = responses['200']?.content['application/json']?.schema.$ref ?? '';
+  return document.components.schemas[reference.slice('#/components/schemas/'.length)] as never;
 }
 
 /** How many times a property name is declared anywhere in the document. */
@@ -183,6 +188,7 @@ it('names the response metadata once and every success and failure envelope refe
   for (const [source, document] of await documents()) {
     expect(document.components.schemas.ResponseMetadata, source).toStrictEqual({
       type: 'object',
+      description: 'What every answer carries besides its data or error.',
       properties: {
         requestId: {
           type: 'string',
@@ -195,10 +201,17 @@ it('names the response metadata once and every success and failure envelope refe
     expect(declarations(document, 'requestId'), source).toBe(1);
     const metadata = { $ref: '#/components/schemas/ResponseMetadata' };
     for (const operation of operationsOf(document)) {
-      expect(successSchema(operation).properties.metadata, source).toStrictEqual(metadata);
+      expect(successSchema(document, operation).properties.metadata, source).toStrictEqual(metadata);
     }
-    const failure = document.components.schemas.FailureResponse as { properties: Json };
-    expect(failure.properties.metadata, source).toStrictEqual(metadata);
+    const envelopes = Object.entries(document.components.schemas).filter(([name]) =>
+      /(Response|Error)$/.test(name)
+    );
+    expect(envelopes.length, source).toBeGreaterThan(2);
+    for (const [name, envelope] of envelopes) {
+      expect((envelope as { properties: Json }).properties.metadata, `${source} ${name}`).toStrictEqual(
+        metadata
+      );
+    }
     expect(JSON.stringify(document), source).not.toContain('"$id"');
   }
 });
@@ -206,17 +219,14 @@ it('names the response metadata once and every success and failure envelope refe
 it('names PageInfo once and each list page by its own name', async () => {
   for (const [source, document] of await documents()) {
     const names = Object.keys(document.components.schemas);
-    expect(names.toSorted(), source).toEqual(
-      [
-        'Failure',
-        'FailureResponse',
-        'NotePage',
-        'PageInfo',
-        'RecordPage',
-        'ResponseMetadata',
-        'ValidationIssue',
-      ].toSorted()
+    expect(names, source).toEqual(
+      expect.arrayContaining(['NotePage', 'NotePageResponse', 'PageInfo', 'RecordPage', 'RecordPageResponse'])
     );
+    // Each list answers its own page's envelope, named after the page.
+    expect(names.filter((name) => name.endsWith('PageResponse')).toSorted(), source).toEqual([
+      'NotePageResponse',
+      'RecordPageResponse',
+    ]);
     expect(document.components.schemas.PageInfo, source).toStrictEqual(pageInfoComponent);
     expect(declarations(document, 'hasNextPage'), source).toBe(1);
     expect(document.components.schemas.RecordPage, source).toStrictEqual(
@@ -225,18 +235,26 @@ it('names PageInfo once and each list page by its own name', async () => {
     expect(document.components.schemas.NotePage, source).toStrictEqual(
       pageComponent(JSON.parse(JSON.stringify(note)))
     );
-    expect(successSchema(operationNamed(document, 'listRecords')).properties.data, source).toStrictEqual({
+    expect(
+      successSchema(document, operationNamed(document, 'listRecords')).properties.data,
+      source
+    ).toStrictEqual({
       $ref: '#/components/schemas/RecordPage',
     });
-    expect(successSchema(operationNamed(document, 'listNotes')).properties.data, source).toStrictEqual({
+    expect(
+      successSchema(document, operationNamed(document, 'listNotes')).properties.data,
+      source
+    ).toStrictEqual({
       $ref: '#/components/schemas/NotePage',
     });
-    // The query fields stay inline parameters, each with its constraints and default.
+    // The query fields stay inline parameters, each with its constraints and default, and its description
+    // also on the parameter, where generators read it.
     expect(operationNamed(document, 'listRecords').parameters, source).toStrictEqual([
       {
         name: 'cursor',
         in: 'query',
         required: false,
+        description: 'Opaque cursor returned by pageInfo; omit it to request the first page.',
         schema: {
           type: 'string',
           description: 'Opaque cursor returned by pageInfo; omit it to request the first page.',
@@ -246,6 +264,7 @@ it('names PageInfo once and each list page by its own name', async () => {
         name: 'direction',
         in: 'query',
         required: false,
+        description: 'Direction to traverse the stable keyset ordering from the supplied cursor.',
         schema: {
           anyOf: [
             { type: 'string', const: 'forward' },
@@ -259,6 +278,8 @@ it('names PageInfo once and each list page by its own name', async () => {
         name: 'limit',
         in: 'query',
         required: false,
+        description:
+          'Maximum items returned in one page. Defaults to 25; larger reads require another cursor.',
         schema: {
           type: 'integer',
           minimum: 1,
@@ -268,7 +289,13 @@ it('names PageInfo once and each list page by its own name', async () => {
           default: 25,
         },
       },
-      { name: 'status', in: 'query', required: false, schema: { type: 'string' } },
+      {
+        name: 'status',
+        in: 'query',
+        required: false,
+        description: 'The status.',
+        schema: { type: 'string' },
+      },
     ]);
   }
 });
@@ -383,18 +410,18 @@ it('keeps a reused page name with another shape as a second component', () => {
       async () => ok({ object: 'list' as const, data: [], pageInfo: onlyPage() })
     )
     .build();
-  const { schemas } = (createOpenApi(app) as unknown as Document).components;
-  expect(Object.keys(schemas).toSorted()).toEqual(
-    [
-      'Failure',
-      'FailureResponse',
-      'ItemPage',
-      'ItemPage_2',
-      'PageInfo',
-      'ResponseMetadata',
-      'ValidationIssue',
-    ].toSorted()
+  const document = createOpenApi(app) as unknown as Document;
+  expect(Object.keys(document.components.schemas)).toEqual(
+    expect.arrayContaining(['ItemPage', 'ItemPage_2'])
   );
+  // The second shape's answer cannot share the first's envelope, so it is named after its operation.
+  expect(successSchema(document, operationNamed(document, 'listRecords')).properties.data).toStrictEqual({
+    $ref: '#/components/schemas/ItemPage',
+  });
+  expect(successSchema(document, operationNamed(document, 'listNotes')).properties.data).toStrictEqual({
+    $ref: '#/components/schemas/ItemPage_2',
+  });
+  expect(document.components.schemas).toHaveProperty('ListNotesResultResponse');
 });
 
 function onlyPage() {

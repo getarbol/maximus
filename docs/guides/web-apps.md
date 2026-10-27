@@ -244,14 +244,14 @@ const task = (taskId: string) => `/v1/tasks/${encodeURIComponent(taskId)}`;
 
 /** The organization's tasks, one function per route. */
 export const tasks = {
-  list: () => call<'getV1Tasks'>('GET', '/v1/tasks'),
-  create: (input: Input<'postV1Tasks'>) => call<'postV1Tasks'>('POST', '/v1/tasks', input),
-  complete: (taskId: string) => call<'postV1TasksTaskIdComplete'>('POST', `${task(taskId)}/complete`),
+  list: () => call<'listTasks'>('GET', '/v1/tasks'),
+  create: (input: Input<'createTask'>) => call<'createTask'>('POST', '/v1/tasks', input),
+  complete: (taskId: string) => call<'completeTask'>('POST', `${task(taskId)}/complete`),
 };
 ```
 
 Each operation is named after its route's method and path, as [Concepts](../concepts.md#routes-and-operations)
-describes: `GET /v1/tasks` is `getV1Tasks`. Every answer is the envelope described in
+describes: `GET /v1/tasks` is `listTasks`. Every answer is the envelope described in
 [Wire formats](../reference/wire-formats.md), and a refusal carries the failure's `code` to branch on.
 
 The token comes from your authorization server, as the person signs in; never build one into the app. The

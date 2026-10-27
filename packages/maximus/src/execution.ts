@@ -8,7 +8,13 @@ import { isAttachmentSchema, validAttachment } from './binary.ts';
 import type { BinaryBody } from './binary.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
-import { STANDARD_CODES, operationMatchesScopes, operationOutputLimit } from './manifest.ts';
+import {
+  ADMISSION_CODES,
+  BODY_CODES,
+  STANDARD_CODES,
+  operationMatchesScopes,
+  operationOutputLimit,
+} from './manifest.ts';
 import type { AppManifest, OperationShape, InvocationAuthority } from './manifest.ts';
 import { err } from './result.ts';
 import type { Result } from './result.ts';
@@ -66,10 +72,18 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
     };
     /**
      * A failure the call answers, from its context, middleware or handler: one of the catalog and, when the
-     * operation declares its failures, a declared or standard one. Any other is the server's error.
+     * operation declares its failures, a declared or standard one. A failure only admission answers, or a
+     * body's for an operation that reads no byte body, is never the operation's. Any other is the server's
+     * error.
      */
     const declared = (answered: Failure): Failure => {
       const failure = manifest.errors.validate(answered);
+      if (
+        ADMISSION_CODES.has(failure.code) ||
+        (BODY_CODES.has(failure.code) && operation.http?.body !== 'bytes')
+      ) {
+        throw new TypeError(`Failure ${failure.code} is answered before an operation runs, never by it`);
+      }
       if (
         operation.failures &&
         !STANDARD_CODES.has(failure.code) &&

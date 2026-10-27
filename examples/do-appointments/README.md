@@ -6,8 +6,8 @@ booking of that day passes through one call at a time, so two callers never hold
 ```text
 vite.config.ts                                         The service, the DaySchedule export and its SCHEDULES binding
 errors.ts                                              SLOT_TAKEN and BOOKING_NOT_FOUND
-context.ts                                             schedule(date): the organization's schedule for that day
-src/schedule.ts                                        The slots, the booking and the patient reference schemas
+context.ts                                             daySchedule(date): the organization's schedule for that day
+src/schedule.ts                                        The day's slots and which are free; a booking's schemas
 durable-objects/day-schedule.ts                        DaySchedule: the day's bookings in its own SQLite storage
 routes/v1/days/[date]/slots.get.ts                     GET    /api/v1/days/{date}/slots      (+ MCP list_slots)
 routes/v1/days/[date]/bookings.get.ts                  GET    /api/v1/days/{date}/bookings
@@ -50,7 +50,7 @@ bun run build && bunx cf deploy --prebuilt --mode production
 - `durable-objects/day-schedule.ts` is exported as `DaySchedule`, the name `exports` declares with its
   SQLite storage. That name is its storage's: renaming or removing the class is a migration, declared in
   `exports`, never a file rename alone.
-- The generated `Env` types `SCHEDULES` by the class it binds, so `schedule(date).book(…)` is checked
+- The generated `Env` types `SCHEDULES` by the class it binds, so `daySchedule(date).book(…)` is checked
   against `DaySchedule`'s methods.
 - A schedule is named after the verified organization and the day, so a caller reaches only its own
   organization's; the slots it lists say which are free, never who holds the others.

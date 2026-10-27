@@ -57,6 +57,14 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   namespace?: string;
   /** The human name OpenAPI, the MCP server and OAuth discovery show; by default, the name. */
   title?: string;
+  /** What the service is for, in a sentence or two, which OpenAPI publishes as `info.description`. */
+  description?: string;
+  /**
+   * What each group of routes holds, by the group's name, which OpenAPI publishes as its tag's description:
+   * `{ Notes: "The notes of the caller's organization." }`. A route's group is the first segment of its path
+   * after the version, in words, unless its contract declares one.
+   */
+  groups?: Readonly<Record<string, string>>;
   /** The version OpenAPI, the MCP server and `/health` report; by default, the package's version. */
   version?: string;
   /**
@@ -112,6 +120,8 @@ function split(options: MaximusOptions) {
     name,
     namespace,
     title,
+    description,
+    groups,
     version,
     origin,
     tokens,
@@ -129,6 +139,8 @@ function split(options: MaximusOptions) {
       name,
       namespace,
       title,
+      description,
+      groups,
       version,
       origin,
       tokens,
@@ -290,6 +302,8 @@ export function projectOptions(
       name,
       namespace: application.namespace ?? name,
       title: application.title ?? name,
+      ...(application.description === undefined ? {} : { description: application.description }),
+      ...(application.groups === undefined ? {} : { groups: application.groups }),
       version,
       origin: application.origin,
       tokens: { ...tokens, audience, ...(development && phase === 'development' ? { development } : {}) },

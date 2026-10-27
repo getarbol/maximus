@@ -13,11 +13,13 @@ const USAGE = [
   '       maximus gen tool <name> [--root <directory>]',
   '       maximus skills [directory]',
   '       maximus prepare [directory] [--mode production|development]',
+  '       maximus openapi [directory] [--out <file>] [--check]',
   '',
   'init      creates a project: an API whose greeting route is also an MCP tool, and with --web a React app.',
   'gen       writes a route file (routes/v1/tasks/[taskId].get.ts) or an MCP tool file (mcp/tools/<name>.ts).',
   "skills    links the installed Maximus skill into the project's .agents, .claude and .codex skill folders.",
   'prepare   writes .maximus/ from vite.config.ts and the project files, as vp dev and vp build do.',
+  'openapi   writes the OpenAPI document the Worker serves to openapi.json; --check fails if it changed.',
   '',
   'Each command says what it did; with --json it prints that as JSON instead, for scripts.',
 ].join('\n');
@@ -61,6 +63,8 @@ async function run(): Promise<void> {
       tool: { type: 'string' },
       root: { type: 'string', default: '.' },
       mode: { type: 'string', default: 'production' },
+      out: { type: 'string' },
+      check: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
@@ -127,6 +131,25 @@ async function run(): Promise<void> {
       const prepared = await prepareConfiguredProject(rest[0] ?? '.', values.mode);
       const state = prepared.changed ? 'Prepared' : 'Kept';
       report(prepared, `${state} .maximus/ for ${prepared.mode}: ${modules(prepared.modules)}.`);
+      return;
+    }
+    case 'openapi': {
+      const { writeOpenApi } = await import('./internal/openapi-file.ts');
+      const written = await writeOpenApi(rest[0] ?? '.', {
+        ...(values.out === undefined ? {} : { out: values.out }),
+        check: values.check,
+      });
+      const counted = `${written.operations} operation${written.operations === 1 ? '' : 's'}`;
+      if (values.check && written.changed) {
+        report(written, `${shown(written.file)} differs from what the routes declare; run maximus openapi.`);
+        process.exitCode = 1;
+        return;
+      }
+      let state = written.changed ? 'was written' : 'was current';
+      if (values.check) {
+        state = 'matches the routes';
+      }
+      report(written, `${shown(written.file)} ${state}: ${counted}.`);
       return;
     }
     default: {

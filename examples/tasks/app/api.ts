@@ -1,17 +1,24 @@
 /**
- * The tasks API under this origin's /api, called with the token the person gave. Each function is one
- * route, typed by the route's own schemas: only types cross from the server's modules into the browser.
+ * The tasks API under this origin's /api, called with the token the person gave. Each function calls one
+ * route, is named after its operation and is typed by the route's own schemas: only types cross from the
+ * server's modules into the browser.
  */
 import type { Failure, Static } from '@arbol-ai/maximus';
 
-import type { app } from '../.maximus/app.ts';
+import type { app } from '#maximus/app';
 
 /** The application's operations, whose schemas type each call. */
 type Operations = typeof app.operations;
-/** What a route takes. */
-type Input<K extends keyof Operations> = Static<Operations[K]['input']>;
-/** What a route answers. */
-type Output<K extends keyof Operations> = Static<Operations[K]['output']>;
+/** The name of one of the application's operations, such as `listTasks`. */
+type OperationName = keyof Operations;
+/** What an operation takes. */
+type Input<Name extends OperationName> = Static<Operations[Name]['input']>;
+/** What an operation answers. */
+type Output<Name extends OperationName> = Static<Operations[Name]['output']>;
+/** The envelope of every answer: the operation's output, or the failure that refused the call. */
+type Envelope<Name extends OperationName> =
+  | { success: true; data: Output<Name> }
+  | { success: false; error: Failure };
 
 /** A call the API refused, with the failure it answered. */
 export class RefusalError extends Error {
@@ -25,38 +32,36 @@ export class RefusalError extends Error {
 }
 
 /** The bearer token the person gave, kept in memory alone: a reload asks for it again. */
-let token = '';
+let bearerToken = '';
 
-/** Keeps the token for the calls that follow. */
-export function signIn(value: string): void {
-  token = value;
+/** Keeps the person's token for the calls that follow. */
+export function signIn(token: string): void {
+  bearerToken = token;
 }
 
 /** Whether the person gave a token. */
-export function signedIn(): boolean {
-  return token !== '';
+export function isSignedIn(): boolean {
+  return bearerToken !== '';
 }
 
 /**
- * Sends one call with the token, and answers its data or throws the refusal it answered. Every write sends
- * a JSON body, `{}` when its fields are all in its path.
+ * Calls one operation with the token, and answers its output or throws the refusal it answered. Every write
+ * sends a JSON body, `{}` when its fields are all in its path.
  */
-async function call<K extends keyof Operations>(
+async function call<Name extends OperationName>(
   method: string,
   path: string,
-  body?: Partial<Input<K>>
-): Promise<Output<K>> {
-  const response = await fetch(`/api${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      ...(method === 'GET' ? {} : { 'content-type': 'application/json' }),
-    },
-    ...(method === 'GET' ? {} : { body: JSON.stringify(body ?? {}) }),
-  });
-  const envelope = (await response.json()) as
-    | { success: true; data: Output<K> }
-    | { success: false; error: Failure };
+  body?: Partial<Input<Name>>
+): Promise<Output<Name>> {
+  const headers = new Headers({ authorization: `Bearer ${bearerToken}` });
+  const request: RequestInit = { method, headers };
+  if (method !== 'GET') {
+    headers.set('content-type', 'application/json');
+    request.body = JSON.stringify(body ?? {});
+  }
+  const response = await fetch(`/api${path}`, request);
+  // The route's schemas type the envelope; checking it again would bring them into the browser.
+  const envelope = (await response.json()) as Envelope<Name>;
   if (!envelope.success) {
     throw new RefusalError(envelope.error);
   }
@@ -64,13 +69,31 @@ async function call<K extends keyof Operations>(
 }
 
 /** A task's path below /api. */
-const task = (taskId: string) => `/v1/tasks/${encodeURIComponent(taskId)}`;
+function taskPath(taskId: string): string {
+  return `/v1/tasks/${encodeURIComponent(taskId)}`;
+}
 
-/** The organization's tasks, one function per route. */
-export const tasks = {
-  list: () => call<'getV1Tasks'>('GET', '/v1/tasks'),
-  create: (input: Input<'postV1Tasks'>) => call<'postV1Tasks'>('POST', '/v1/tasks', input),
-  get: (taskId: string) => call<'getV1TasksTaskId'>('GET', task(taskId)),
-  complete: (taskId: string) => call<'postV1TasksTaskIdComplete'>('POST', `${task(taskId)}/complete`),
-  remove: (taskId: string) => call<'deleteV1TasksTaskId'>('DELETE', task(taskId)),
-};
+/** The organization's tasks, open and done. */
+export function listTasks() {
+  return call<'listTasks'>('GET', '/v1/tasks');
+}
+
+/** Adds an open task to the organization, and answers it. */
+export function createTask(input: Input<'createTask'>) {
+  return call<'createTask'>('POST', '/v1/tasks', input);
+}
+
+/** One task of the organization. */
+export function getTask(taskId: string) {
+  return call<'getTask'>('GET', taskPath(taskId));
+}
+
+/** Marks a task done, and answers it. */
+export function completeTask(taskId: string) {
+  return call<'completeTask'>('POST', `${taskPath(taskId)}/complete`);
+}
+
+/** Deletes a task. */
+export function deleteTask(taskId: string) {
+  return call<'deleteTask'>('DELETE', taskPath(taskId));
+}

@@ -50,7 +50,7 @@ export default defineHandler(
 
 A route that is a tool must have a `description`, which the agent reads to choose it: a route without
 one is refused with `GET /v1/notes/{noteId}: a route that is an MCP tool describes what it does.` Its
-title is the tool's name in words, `Get note`, unless the contract sets `title`. A name that is not
+title is the route's, `Get a note`, unless the contract sets `title`. A name that is not
 valid, or that two tools share, is refused with
 `Operation "<name>": MCP tools require unique safe names.` Exposure is always explicit: a route that
 names no tool is no tool.

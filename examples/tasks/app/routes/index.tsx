@@ -4,15 +4,18 @@ import type { ActionFunctionArgs } from 'react-router';
 
 import { signIn } from '../api.ts';
 
+/** Keeps the token the form sends and opens the tasks; a form without a token stays on this page. */
 export async function action({ request }: ActionFunctionArgs) {
-  const token = (await request.formData()).get('token');
-  if (typeof token !== 'string' || !token) {
+  const form = await request.formData();
+  const token = form.get('token');
+  if (typeof token !== 'string' || token === '') {
     return null;
   }
   signIn(token);
   return redirect('/tasks');
 }
 
+/** The sign-in form. */
 export default function SignIn() {
   return (
     <Form method="post">

@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 /** Asks orders for a quote of the items. */
-async function quote(items: unknown) {
+async function requestQuote(items: unknown) {
   const response = await handler(
     new Request('http://localhost/api/v1/quotes', {
       method: 'POST',
@@ -31,11 +31,13 @@ async function quote(items: unknown) {
   return { status: response.status, body: (await response.json()) as { data: unknown; error: unknown } };
 }
 
+/** The items of an order every test asks a quote for. */
 const items = [
   { sku: 'TEA-001', quantity: 2 },
   { sku: 'MUG-001', quantity: 1 },
 ];
-const priced: Quote = {
+/** What pricing answers for those items. */
+const quote: Quote = {
   currency: 'USD',
   lines: [
     { sku: 'TEA-001', quantity: 2, unitCents: 450, totalCents: 900 },
@@ -45,8 +47,8 @@ const priced: Quote = {
 };
 
 it('prices the order as the caller, through pricing, and answers its total', async () => {
-  pricing.quoteItems.mockResolvedValueOnce({ ok: true, value: priced });
-  expect(await quote(items)).toMatchObject({
+  pricing.quoteItems.mockResolvedValueOnce({ ok: true, value: quote });
+  expect(await requestQuote(items)).toMatchObject({
     status: 200,
     body: { data: { currency: 'USD', totalCents: 2100 } },
   });
@@ -66,22 +68,22 @@ it('names the item pricing does not list in its own failure', async () => {
       data: { index: 1 },
     },
   });
-  expect(await quote(items)).toMatchObject({
+  expect(await requestQuote(items)).toMatchObject({
     status: 422,
     body: { error: { code: 'UNKNOWN_ITEM', data: { index: 1 } } },
   });
 });
 
 it('keeps what pricing may recover from retryable, and answers the rest as its own fault', async () => {
-  const failure = (code: string, retryable: boolean, data = {}) => ({
+  const pricingFailure = (code: string, retryable: boolean, data = {}) => ({
     ok: false as const,
     error: { code, message: 'Pricing failed.', retryable, data },
   });
   pricing.quoteItems
-    .mockResolvedValueOnce(failure('RATE_LIMITED', true))
+    .mockResolvedValueOnce(pricingFailure('RATE_LIMITED', true))
     .mockRejectedValueOnce(new Error('Network connection lost.'))
-    .mockResolvedValueOnce(failure('UNAUTHORIZED', false))
-    .mockResolvedValueOnce(failure('UNKNOWN_SKU', false, { sku: 'XYZ-999' }));
+    .mockResolvedValueOnce(pricingFailure('UNAUTHORIZED', false))
+    .mockResolvedValueOnce(pricingFailure('UNKNOWN_SKU', false, { sku: 'XYZ-999' }));
   for (const [status, code] of [
     [503, 'UPSTREAM_UNAVAILABLE'],
     [503, 'UPSTREAM_UNAVAILABLE'],
@@ -89,13 +91,13 @@ it('keeps what pricing may recover from retryable, and answers the rest as its o
     [500, 'INTERNAL_ERROR'],
     [500, 'INTERNAL_ERROR'],
   ] as const) {
-    expect(await quote(items)).toMatchObject({ status, body: { error: { code } } });
+    expect(await requestQuote(items)).toMatchObject({ status, body: { error: { code } } });
   }
 });
 
 it('refuses the items pricing would refuse without calling it', async () => {
   for (const refused of [[], [{ sku: 'tea', quantity: 1 }], [{ sku: 'TEA-001', quantity: 0 }], 'TEA-001']) {
-    expect((await quote(refused)).status, JSON.stringify(refused)).toBe(400);
+    expect((await requestQuote(refused)).status, JSON.stringify(refused)).toBe(400);
   }
   expect(pricing.quoteItems).not.toHaveBeenCalled();
 });

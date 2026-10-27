@@ -7,9 +7,9 @@
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
+import { documentStore } from '#src/documents.ts';
+import type { Document } from '#src/documents.ts';
 
-import { documentStore } from '../src/documents.ts';
-import type { Document } from '../src/documents.ts';
 import { testBucket } from './r2.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
@@ -36,6 +36,26 @@ function call(method: string, path: string, body?: BodyInit, headers: Record<str
     }),
     env
   );
+}
+
+/** Calls an MCP method with the development token and answers its result. */
+async function callMcp(method: string, params: object = {}) {
+  const response = await handler(
+    new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2025-11-25',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    }),
+    env
+  );
+  const text = await response.text();
+  return (JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text) as { result: Record<string, unknown> })
+    .result;
 }
 
 /** Uploads the bytes under this name and type, answering the status and the envelope. */
@@ -132,42 +152,23 @@ it('keeps each organization to its own documents, and never answers metadata its
   const document = await clinic.create('result.pdf', 'application/pdf', PDF);
   expect(await lab.describe(document.documentId)).toBeUndefined();
   expect(await lab.open(document.documentId)).toBeUndefined();
-  expect(await lab.remove(document.documentId)).toBe(false);
+  expect(await lab.delete(document.documentId)).toBe(false);
   expect(await clinic.describe(document.documentId)).toEqual(document);
 
-  const mine = (await upload(PDF, 'visit.pdf', 'application/pdf')).body.data as Document;
-  const stored = r2.objects.get(`documents/local-development/${mine.documentId}`);
+  const uploaded = (await upload(PDF, 'visit.pdf', 'application/pdf')).body.data as Document;
+  const stored = r2.objects.get(`documents/local-development/${uploaded.documentId}`);
   if (stored) {
     stored.customMetadata = { filename: 'visit.pdf' };
   }
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  expect(await call('GET', `/v1/documents/${mine.documentId}`)).toMatchObject({ status: 500 });
+  expect(await call('GET', `/v1/documents/${uploaded.documentId}`)).toMatchObject({ status: 500 });
 });
 
 it('describes a document to agents over MCP, and never hands them its bytes', async () => {
   const document = (await upload(PDF, 'visit.pdf', 'application/pdf')).body.data as Document;
-  const rpc = async (method: string, params: object) => {
-    const response = await handler(
-      new Request('http://localhost/mcp', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          'mcp-protocol-version': '2025-11-25',
-        },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      }),
-      env
-    );
-    const text = await response.text();
-    return (JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text) as { result: Record<string, unknown> })
-      .result;
-  };
-  expect(((await rpc('tools/list', {})).tools as { name: string }[]).map(({ name }) => name)).toEqual([
-    'get_document',
-  ]);
+  const tools = (await callMcp('tools/list')).tools as { name: string }[];
+  expect(tools.map(({ name }) => name)).toEqual(['get_document']);
   expect(
-    await rpc('tools/call', { name: 'get_document', arguments: { documentId: document.documentId } })
+    await callMcp('tools/call', { name: 'get_document', arguments: { documentId: document.documentId } })
   ).toMatchObject({ structuredContent: document });
 });

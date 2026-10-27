@@ -43,16 +43,19 @@ each one.
    placeholder handler and description, and declare strict `input` and `output` schemas and the
    `failures`. Declare `scope`, `effect` or `operationId` only where the derived one is wrong. See
    [references/routes-and-tools.md](references/routes-and-tools.md).
-3. **Scope by organization in the context.** What every handler needs, such as a store, belongs in
+3. **Write it to be read.** A handler is a few statements that call named functions of `src/`, imported as
+   `#src/<module>.ts`; names are whole English words. See
+   [references/writing-code.md](references/writing-code.md).
+4. **Scope by organization in the context.** What every handler needs, such as a store, belongs in
    `context.ts`, built from `principal.organizationId`.
-4. **Answer failures from the catalog.** `fail(code)` with a code of `errors.ts`, listed in the route's
+5. **Answer failures from the catalog.** `fail(code)` with a code of `errors.ts`, listed in the route's
    `failures`; throw only for what should never happen. See
    [references/errors-and-results.md](references/errors-and-results.md).
-5. **Declare bindings in `maximus()`.** `env: { NOTES: bindings.kv() }`, with `bindings` from `cf/config`;
+6. **Declare bindings in `maximus()`.** `env: { NOTES: bindings.kv() }`, with `bindings` from `cf/config`;
    the generated `Env` types them.
-6. **Test** each route in `tests/` through `handler` from `#maximus/http`: its answer, its refusals and that
+7. **Test** each route in `tests/` through `handler` from `#maximus/http`: its answer, its refusals and that
    one organization never reaches another's data. See [references/testing.md](references/testing.md).
-7. **Verify** with `bun run verify` before you finish.
+8. **Verify** with `bun run verify` before you finish.
 
 ## Commands
 
@@ -136,6 +139,8 @@ Load the one the task needs:
   the contract check and suites against a running Worker.
 - [references/deploying.md](references/deploying.md): the origin and the issuer, secrets, resources,
   `bun run deploy`, the CI workflow and checking a deployment.
+- [references/writing-code.md](references/writing-code.md): the house style for every file you write:
+  handlers as statements, `#src/` imports, names, comments, failures and tests.
 
 ## Documentation
 
@@ -144,7 +149,8 @@ The documentation is in the Maximus repository, indexed by
 
 - [Getting started](https://github.com/getarbol/maximus/blob/main/docs/getting-started.md) and
   [Concepts](https://github.com/getarbol/maximus/blob/main/docs/concepts.md).
-- Build the API: [Project structure](https://github.com/getarbol/maximus/blob/main/docs/guides/project-structure.md),
+- Build the API: [Write code people and agents read easily](https://github.com/getarbol/maximus/blob/main/docs/guides/writing-code.md),
+  [Project structure](https://github.com/getarbol/maximus/blob/main/docs/guides/project-structure.md),
   [Routes](https://github.com/getarbol/maximus/blob/main/docs/guides/routes.md),
   [Schemas and validation](https://github.com/getarbol/maximus/blob/main/docs/guides/schemas-and-validation.md),
   [Errors and results](https://github.com/getarbol/maximus/blob/main/docs/guides/errors-and-results.md),

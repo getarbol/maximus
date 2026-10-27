@@ -123,3 +123,34 @@ it('answers a failure the catalog does not define as INTERNAL_ERROR, from a hand
     warned.mockRestore();
   }
 });
+
+it('answers a failure only admission or a body answers, from a handler or a derivation, as INTERNAL_ERROR', async () => {
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    // An unknown route or method, a refused token, and a JSON body's own failures: never an operation's,
+    // so its document lists none of them for it.
+    const admission: Failure[] = [
+      errors.notFound.create(),
+      errors.methodNotAllowed.create(),
+      errors.unauthorized.create(),
+      errors.tooLarge.create(),
+      errors.unsupportedMedia.create(),
+    ];
+    for (const failure of admission) {
+      const answered = application({})
+        .operation('listRecords', listRecords, async () => err(failure))
+        .build();
+      const derived = application({})
+        .derive(async () => err(failure))
+        .operation('listRecords', listRecords, async () => ok({}))
+        .build();
+      for (const app of [answered, derived]) {
+        const response = await createHttpHandler(app, { verify: async () => claims })(list(), {});
+        expect(response.status, failure.code).toBe(500);
+      }
+    }
+    expect(logged).toHaveBeenCalledTimes(10);
+  } finally {
+    logged.mockRestore();
+  }
+});

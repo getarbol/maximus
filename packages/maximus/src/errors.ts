@@ -43,8 +43,8 @@ export interface ErrorDefinition {
   dataSchema?: TObject<TProperties>;
 }
 /**
- * Every failure, whatever its code: the base each catalog's failures narrow. The OpenAPI document
- * names it `Failure`, so every service's errors share one type.
+ * Every failure, whatever its code: the shape each catalog's failures narrow, which every service's errors
+ * share. The OpenAPI document names each code's own failure, `NoteNotFoundFailure`, which fixes its code.
  */
 export const FailureSchema = Type.Object(
   {

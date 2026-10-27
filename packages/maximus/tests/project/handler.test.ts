@@ -51,20 +51,21 @@ const list = defineHandler(async ({ prefix }) => ({ tasks: [`${prefix} one`] }),
 
 describe('routes', () => {
   const app = base
-    .mount(bindRoute(base, complete, '/v1/tasks/{taskId}/complete', 'POST'))
-    .mount(bindRoute(base, list, '/v1/tasks', 'GET'))
+    .mount(bindRoute(base, complete, '/v1/tasks/{taskId}/complete', 'POST', 'completeTask'))
+    .mount(bindRoute(base, list, '/v1/tasks', 'GET', 'listTasks'))
     .build();
 
   it('derive the name, effect, scope, title and tool hints a declaration leaves out', () => {
-    expect(app.operations.postV1TasksTaskIdComplete).toMatchObject({
-      title: 'POST /v1/tasks/{taskId}/complete',
+    expect(app.operations.completeTask).toMatchObject({
+      title: 'Complete a task',
+      group: 'Tasks',
       description: '',
       effect: 'write',
       scope: 'tasks:tasks:write',
       http: { method: 'POST', path: '/v1/tasks/{taskId}/complete' },
       failures: ['TASK_NOT_FOUND'],
     });
-    expect(app.operations.getV1Tasks).toMatchObject({
+    expect(app.operations.listTasks).toMatchObject({
       title: 'List tasks',
       effect: 'read',
       scope: 'tasks:tasks:read',
@@ -100,8 +101,9 @@ describe('routes', () => {
     };
     const completed = document.paths['/v1/tasks/{taskId}/complete']?.post;
     expect(completed).toMatchObject({
-      operationId: 'postV1TasksTaskIdComplete',
-      summary: 'POST /v1/tasks/{taskId}/complete',
+      operationId: 'completeTask',
+      summary: 'Complete a task',
+      tags: ['Tasks'],
       'x-required-scopes': ['tasks:tasks:write'],
       'x-effect': 'write',
     });
@@ -115,8 +117,9 @@ describe('routes', () => {
 
   it('keep what a declaration names over what binding would derive', () => {
     const declared = defineHandler(() => ({ count: 0 }), {
-      title: 'Search tasks',
-      operationId: 'searchTasks',
+      title: 'Find tasks by their text',
+      group: 'Search',
+      operationId: 'findTasks',
       effect: 'read',
       scope: 'tasks:search:read',
       input: { query: t.String() },
@@ -124,9 +127,11 @@ describe('routes', () => {
       description: 'Search without changing anything.',
       mcp: { name: 'search_tasks', idempotent: false, openWorld: false },
     });
-    const searched = base.mount(bindRoute(base, declared, '/v1/tasks/search', 'POST')).build();
-    expect(searched.operations.searchTasks).toMatchObject({
-      title: 'Search tasks',
+    const searched = base.mount(bindRoute(base, declared, '/v1/tasks/search', 'POST', 'searchTasks')).build();
+    expect(Object.keys(searched.operations)).toEqual(['findTasks']);
+    expect(searched.operations.findTasks).toMatchObject({
+      title: 'Find tasks by their text',
+      group: 'Search',
       effect: 'read',
       scope: 'tasks:search:read',
       mcp: { name: 'search_tasks', idempotent: false, openWorld: false },
@@ -135,12 +140,14 @@ describe('routes', () => {
 
   it('name a resource in kebab-case and delete with a write scope', () => {
     const removed = defineHandler(() => ({}), { input: { listId: t.String() }, output: {} });
-    const lists = base.mount(bindRoute(base, removed, '/v1/taskLists/{listId}', 'DELETE')).build();
-    expect(lists.operations.deleteV1TaskListsListId).toMatchObject({
+    const lists = base
+      .mount(bindRoute(base, removed, '/v1/taskLists/{listId}', 'DELETE', 'deleteTaskList'))
+      .build();
+    expect(lists.operations.deleteTaskList).toMatchObject({
       effect: 'delete',
       scope: 'tasks:task-lists:write',
     });
-    expect(lists.operations.deleteV1TaskListsListId).not.toHaveProperty('mcp');
+    expect(lists.operations.deleteTaskList).not.toHaveProperty('mcp');
   });
 
   it('read a declared byte body, and answer a failure to read it as it is', async () => {
@@ -156,7 +163,9 @@ describe('routes', () => {
         maxBodyBytes: 4,
       }
     );
-    const uploads = base.mount(bindRoute(base, upload, '/v1/tasks/{taskId}/attachment', 'PUT')).build();
+    const uploads = base
+      .mount(bindRoute(base, upload, '/v1/tasks/{taskId}/attachment', 'PUT', 'replaceTaskAttachment'))
+      .build();
     /** Uploads the bytes with these headers besides the token. */
     const put = async (bytes: Uint8Array<ArrayBuffer>, headers: Record<string, string> = {}) => {
       const response = await createHttpHandler(uploads)(
@@ -199,8 +208,8 @@ describe('the execution path', () => {
       output: {},
     });
     const app = base
-      .mount(bindRoute(base, undeclared, '/v1/undeclared', 'POST'))
-      .mount(bindRoute(base, unknown, '/v1/unknown', 'POST'))
+      .mount(bindRoute(base, undeclared, '/v1/undeclared', 'POST', 'createUndeclared'))
+      .mount(bindRoute(base, unknown, '/v1/unknown', 'POST', 'createUnknown'))
       .build();
     for (const path of ['/v1/undeclared', '/v1/unknown']) {
       expect(await call(app, 'POST', path, {}), path).toMatchObject({
@@ -214,7 +223,7 @@ describe('the execution path', () => {
     const quota = defineHandler(({ fail }) => fail('QUOTA_REACHED', { limit: 3 }), {
       output: {},
     });
-    const app = base.mount(bindRoute(base, quota, '/v1/quota', 'POST')).build();
+    const app = base.mount(bindRoute(base, quota, '/v1/quota', 'POST', 'createQuota')).build();
     expect(await call(app, 'POST', '/v1/quota', {})).toMatchObject({
       status: 429,
       body: { error: { code: 'QUOTA_REACHED', data: { limit: 3 } } },
@@ -227,8 +236,8 @@ describe('the execution path', () => {
     });
     const extra = defineHandler(() => ({ count: 1, more: 2 }), { output: { count: t.Integer() } });
     const app = base
-      .mount(bindRoute(base, lookalike, '/v1/lookalike', 'POST'))
-      .mount(bindRoute(base, extra, '/v1/extra', 'POST'))
+      .mount(bindRoute(base, lookalike, '/v1/lookalike', 'POST', 'createLookalike'))
+      .mount(bindRoute(base, extra, '/v1/extra', 'POST', 'createExtra'))
       .build();
     for (const path of ['/v1/lookalike', '/v1/extra']) {
       expect((await call(app, 'POST', path, {})).status, path).toBe(500);
@@ -238,28 +247,40 @@ describe('the execution path', () => {
 
 describe('binding refuses', () => {
   it('a default export that defineHandler or defineTool did not declare', () => {
-    expect(() => bindRoute(base, {} as typeof list, '/v1/tasks', 'GET')).toThrow(
+    expect(() => bindRoute(base, {} as typeof list, '/v1/tasks', 'GET', 'listTasks')).toThrow(
       "GET /v1/tasks: a route file's default export must come from defineHandler."
     );
     expect(() => bindTool(base, list as never, 'list-tasks')).toThrow('must come from defineTool');
   });
 
+  it('two routes that derive one name, naming both, as the type does', () => {
+    const created = defineHandler(() => ({}), { output: {} });
+    const notes = base.mount(bindRoute(base, created, '/v1/notes', 'POST', 'createNote'));
+    const duplicate = bindRoute(base, created, '/v1/note', 'POST', 'createNote');
+    expect(() =>
+      // @ts-expect-error The builder's type refuses a module that declares an operation it already has.
+      notes.mount(duplicate)
+    ).toThrow(
+      'Duplicate operation: createNote names both POST /v1/notes and POST /v1/note; give one of them its own operationId.'
+    );
+  });
+
   it('a route whose path names no resource and that declares no scope', () => {
     const item = defineHandler(() => ({}), { input: { id: t.String() }, output: {} });
-    expect(() => bindRoute(base, item, '/v1/{id}', 'GET')).toThrow('declare its scope');
+    expect(() => bindRoute(base, item, '/v1/{id}', 'GET', 'get')).toThrow('declare its scope');
     const scoped = defineHandler(() => ({}), {
       scope: 'tasks:items:read',
       input: { id: t.String() },
       output: {},
     });
-    expect(base.mount(bindRoute(base, scoped, '/v1/{id}', 'GET')).build().operations.getV1Id.scope).toBe(
+    expect(base.mount(bindRoute(base, scoped, '/v1/{id}', 'GET', 'get')).build().operations.get.scope).toBe(
       'tasks:items:read'
     );
   });
 
   it('a DELETE route that declares it only reads, which would take a read scope', () => {
     const removal = defineHandler(() => ({}), { output: {}, effect: 'read' });
-    expect(() => bindRoute(base, removal, '/v1/tasks/{taskId}', 'DELETE')).toThrow(
+    expect(() => bindRoute(base, removal, '/v1/tasks/{taskId}', 'DELETE', 'deleteTask')).toThrow(
       'DELETE /v1/tasks/{taskId}: a DELETE route deletes; its effect is delete or write, never read.'
     );
   });
@@ -270,15 +291,15 @@ describe('binding refuses', () => {
       mcp: { name: 'silent' },
       description: ' ',
     });
-    expect(() => bindRoute(base, silent, '/v1/silent', 'GET')).toThrow('describes what it does');
+    expect(() => bindRoute(base, silent, '/v1/silent', 'GET', 'getSilent')).toThrow('describes what it does');
   });
 
   it('a field no operation has, which `.build()` names', () => {
     const misspelling = { visiblity: 'internal' };
     const misspelled = defineHandler(() => ({}), { output: {}, ...misspelling });
-    expect(() => base.mount(bindRoute(base, misspelled, '/v1/misspelled', 'GET')).build()).toThrow(
-      '"visiblity" is not an operation field'
-    );
+    expect(() =>
+      base.mount(bindRoute(base, misspelled, '/v1/misspelled', 'GET', 'getMisspelled')).build()
+    ).toThrow('"visiblity" is not an operation field');
   });
 });
 
@@ -323,7 +344,7 @@ describe('tools', () => {
 describe('a route without a contract', () => {
   it('takes no input and answers the empty object, whatever its handler returns', async () => {
     const touched = defineHandler(async () => {});
-    const app = base.mount(bindRoute(base, touched, '/v1/touch', 'POST')).build();
+    const app = base.mount(bindRoute(base, touched, '/v1/touch', 'POST', 'createTouch')).build();
     expect(await call(app, 'POST', '/v1/touch', {})).toMatchObject({
       status: 200,
       body: { success: true, data: {} },
@@ -336,7 +357,7 @@ describe('a route without a contract', () => {
 
   it('still answers a failure from fail', async () => {
     const refused = defineHandler(({ fail }) => fail('FORBIDDEN'));
-    const app = base.mount(bindRoute(base, refused, '/v1/refused', 'POST')).build();
+    const app = base.mount(bindRoute(base, refused, '/v1/refused', 'POST', 'createRefused')).build();
     expect(await call(app, 'POST', '/v1/refused', {})).toMatchObject({
       status: 403,
       body: { error: { code: 'FORBIDDEN' } },
@@ -355,7 +376,7 @@ describe('a route without a contract', () => {
 });
 
 it('derives at runtime the names the types derive', () => {
-  expect(routeName('DELETE', '/v1/task-lists/{list_id}')).toBe('deleteV1TaskListsListId');
-  expect(routeName('GET', '/v1/greeting')).toBe('getV1Greeting');
+  expect(routeName('DELETE', '/v1/task-lists/{list_id}')).toBe('deleteTaskList');
+  expect(routeName('GET', '/v1/greeting')).toBe('getGreeting');
   expect(toolName('summarize-open-tasks')).toBe('summarizeOpenTasks');
 });

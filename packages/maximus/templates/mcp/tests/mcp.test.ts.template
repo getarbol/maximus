@@ -6,8 +6,8 @@ import { handler } from '#maximus/http';
 const token = 'test-development-token-for-local-tests';
 const env = { DEVELOPMENT_TOKEN: token } as Env;
 
-/** Sends one JSON-RPC request to the MCP server and returns its answer, which arrives as a server-sent event. */
-async function rpc(method: string, params: object = {}) {
+/** Sends one JSON-RPC request to the MCP server and answers its reply, which arrives as a server-sent event. */
+async function callMcp(method: string, params: object = {}) {
   const response = await handler(
     new Request('http://localhost/mcp', {
       method: 'POST',
@@ -26,11 +26,11 @@ async function rpc(method: string, params: object = {}) {
 }
 
 it('lists the greeting route as the MCP tool get_greeting', async () => {
-  const { result } = await rpc('tools/list');
+  const { result } = await callMcp('tools/list');
   expect(result.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'get_greeting' })]));
 });
 
 it('runs get_greeting as the route runs', async () => {
-  const { result } = await rpc('tools/call', { name: 'get_greeting', arguments: {} });
+  const { result } = await callMcp('tools/call', { name: 'get_greeting', arguments: {} });
   expect(result).toMatchObject({ structuredContent: { message: 'Hello World' } });
 });

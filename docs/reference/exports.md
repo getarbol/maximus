@@ -506,11 +506,10 @@ with. It loads no Workers or build code.
 | Export                      | Kind     | What it is                                                                                     |
 | --------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
 | `bindContext`               | function | Prepares every call's context with `context.ts`'s declaration.                                 |
-| `bindRoute`                 | function | Binds a `defineHandler` declaration under the path and method its file gives.                  |
+| `bindRoute`                 | function | Binds a `defineHandler` declaration under the path, method and derived name `prepare` gives.   |
 | `bindTool`                  | function | Binds a `defineTool` declaration under the name its file gives.                                |
-| `routeName`                 | function | A route's operation name: `POST /v1/tasks/{taskId}/complete` is `postV1TasksTaskIdComplete`.   |
+| `routeName`                 | function | A route's derived operation name: `POST /v1/tasks/{taskId}/complete` is `completeTask`.        |
 | `toolName`                  | function | A tool's operation name: `summarize-tasks` is `summarizeTasks`.                                |
-| `RouteName`                 | type     | `routeName`, in the type.                                                                      |
 | `ToolMcpName`               | type     | A tool's MCP name: `summarize-tasks` is `summarize_tasks`.                                     |
 | `ToolName`                  | type     | `toolName`, in the type.                                                                       |
 | `RequestMiddlewareModule`   | type     | What `defineMiddleware` returns.                                                               |

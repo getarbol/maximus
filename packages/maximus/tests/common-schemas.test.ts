@@ -126,14 +126,13 @@ const ref = (name: string, description?: string) => ({
 it('names each shared value and object once, and every use refers to it', () => {
   const document = createOpenApi(application()) as unknown as Document;
   const { schemas } = document.components;
-  expect(Object.keys(schemas).toSorted()).toEqual(
-    [
+  // The shared values and objects, beside the envelopes and failures the document names for itself.
+  expect(Object.keys(schemas)).toEqual(
+    expect.arrayContaining([
       'Contact',
       'ContactPage',
       'DeletedObject',
       'EmailAddress',
-      'Failure',
-      'FailureResponse',
       'HexColor',
       'HttpsUrl',
       'NamedReference',
@@ -145,10 +144,10 @@ it('names each shared value and object once, and every use refers to it', () => 
       'SignedUrl',
       'Uuid',
       'ValidationIssue',
-    ].toSorted()
+    ])
   );
   // The scalars: their constraints in the component, their description at each use.
-  expect(schemas.Uuid).toStrictEqual({ type: 'string', pattern: UuidSchema.pattern });
+  expect(schemas.Uuid).toStrictEqual({ type: 'string', format: 'uuid', pattern: UuidSchema.pattern });
   expect(schemas.OrganizationId).toStrictEqual({
     type: 'string',
     pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$',
@@ -219,55 +218,38 @@ it('names each shared value and object once, and every use refers to it', () => 
   });
   // Path and query parameters refer to the same components.
   expect(operationNamed(document, 'getContact').parameters).toStrictEqual([
-    { name: 'contactId', in: 'path', required: true, schema: ref('Uuid') },
+    { name: 'contactId', in: 'path', required: true, description: 'The contact id.', schema: ref('Uuid') },
   ]);
   expect(operationNamed(document, 'listContacts').parameters).toEqual(
     expect.arrayContaining([
-      { name: 'ownerId', in: 'query', required: false, schema: ref('Uuid') },
-      { name: 'email', in: 'query', required: false, schema: ref('EmailAddress', 'Email address.') },
+      { name: 'ownerId', in: 'query', required: false, description: 'The owner id.', schema: ref('Uuid') },
+      {
+        name: 'email',
+        in: 'query',
+        required: false,
+        description: 'Email address.',
+        schema: ref('EmailAddress', 'Email address.'),
+      },
     ])
   );
   expect(JSON.stringify(document)).not.toContain('"$id"');
   expect(Object.keys(schemas).some((name) => /_\d+$/.test(name))).toBe(false);
 });
 
-it('names the failure base every catalog narrows, and the input issue', () => {
+it('names each failure of the catalog by its code, and the input issue', () => {
   const app = application();
   const { schemas } = (createOpenApi(app) as unknown as Document).components;
-  expect(schemas.Failure).toStrictEqual({
-    type: 'object',
-    properties: {
-      code: { type: 'string', description: 'The failure code, stable across releases.' },
-      message: {
-        type: 'string',
-        description: 'What went wrong, for people; it never contains input values.',
-      },
-      retryable: { type: 'boolean', description: 'Whether repeating the same request may succeed.' },
-      data: {
-        type: 'object',
-        properties: {},
-        description: 'Diagnostics the code declares; empty for most codes.',
-      },
-    },
-    required: ['code', 'message', 'retryable', 'data'],
-    additionalProperties: false,
+  // Each failure an operation documents is the component its code names, with its code as the one value.
+  expect(schemas.InvalidInputFailure).toMatchObject({
+    properties: { code: { type: 'string', enum: ['INVALID_INPUT'] }, data: ref('InvalidInputFailureData') },
   });
-  const { properties } = schemas.FailureResponse as { properties: Record<string, Json> };
-  const error = properties.error as {
-    allOf: unknown[];
-    anyOf: { properties: { code: { const: string }; data: Json } }[];
-  };
-  expect(error.allOf).toStrictEqual([ref('Failure')]);
-  // Each code's own variant is unchanged, in catalog order.
-  expect(error.anyOf.map((variant) => variant.properties.code.const)).toEqual(
-    Object.values(app.errors.definitions).map(({ code }) => code)
-  );
-  const invalid = error.anyOf.find((variant) => variant.properties.code.const === 'INVALID_INPUT');
-  expect(invalid?.properties.data).toStrictEqual({
+  expect(schemas.InvalidInputFailureData).toStrictEqual({
     type: 'object',
     properties: { issues: { type: 'array', items: ref('ValidationIssue'), maxItems: 10 } },
     additionalProperties: false,
   });
+  expect(schemas).not.toHaveProperty('Failure');
+  expect(schemas).not.toHaveProperty('FailureResponse');
   expect(schemas.ValidationIssue).toStrictEqual({
     type: 'object',
     properties: {

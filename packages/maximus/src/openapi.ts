@@ -1,18 +1,35 @@
 /**
- * An application's OpenAPI 3.1 document, as its origin serves it: paths, response envelopes, failures by
- * status, security schemes, and the `x-*` extensions that carry what OpenAPI cannot say (scopes, effects,
- * limits, MCP tools and native RPC).
+ * An application's OpenAPI 3.1 document, as its origin serves it and as SDK generators read it: one tag per
+ * group of routes, and every request body, success envelope and failure a named component, so a generated
+ * client reads `createNote(body: CreateNoteBody): NoteResponse`. The `x-*` extensions carry what OpenAPI
+ * cannot say: scopes, effects, limits, MCP tools and native RPC.
  */
 import { Type } from '@sinclair/typebox';
 import type { TSchema } from '@sinclair/typebox';
 
-import { FailureSchema } from './errors.ts';
 import type { ErrorDefinition } from './errors.ts';
 import { operationPathParameters } from './http-paths.ts';
 import { wireInput } from './input-schemas.ts';
 import { queryKinds } from './internal/http-query.ts';
-import { pathParameterSchemas } from './internal/http-routes.ts';
+import { pathParameterSchemas, routeGroup } from './internal/http-routes.ts';
 import {
+  ComponentSchemas,
+  EMPTY_OBJECT,
+  RESPONSE_METADATA,
+  failureEnvelope,
+  failureEnvelopeName,
+  failureName,
+  failureSchema,
+  failureUnion,
+  generatedNames,
+  pascalCase,
+  schemaReference,
+  statusReason,
+  successEnvelope,
+} from './internal/openapi-components.ts';
+import type { SchemaReference } from './internal/openapi-components.ts';
+import {
+  BODY_CODES,
   STANDARD_CODES,
   isPublicOperation,
   mcpOpenWorld,
@@ -21,78 +38,86 @@ import {
   operationScopes,
 } from './manifest.ts';
 import type { AppManifest, OperationShape } from './manifest.ts';
-import { bundleSchemas } from './schema-bundle.ts';
+import { bundleSchemas, schemaIds } from './schema-bundle.ts';
 import { tokenEndpoints } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
 
-/** OpenAPI body ownership excludes fields carried by the path, including each union variant. */
-function bodyWithoutPathParameters(input: TSchema, names: ReadonlySet<string>): unknown {
-  if (input.type === 'object') {
-    return {
-      ...input,
-      properties: Object.fromEntries(Object.entries(input.properties).filter(([name]) => !names.has(name))),
-      required: (input.required ?? []).filter((name: string) => !names.has(name)),
-    };
-  }
-  return {
-    ...input,
-    anyOf: input.anyOf.map((schema: TSchema) => bodyWithoutPathParameters(schema, names)),
-  };
+/** The standard failures only routing answers, before a request reaches any operation's route. */
+const ROUTING_CODES: ReadonlySet<string> = new Set(['NOT_FOUND', 'HTTP_METHOD_NOT_ALLOWED']);
+
+/** The headers every answer, and a failure that asks for a wait, carry, as the document's components. */
+const HEADERS = {
+  RequestId: { description: 'Request correlation identifier.', schema: { type: 'string' } },
+  RetryAfter: { description: 'Seconds before another attempt.', schema: { type: 'integer', minimum: 0 } },
+};
+
+/** A reference to one of `HEADERS`. */
+function headerReference(name: keyof typeof HEADERS): { $ref: string } {
+  return { $ref: `#/components/headers/${name}` };
+}
+
+/** Whether an object schema holds no field at all, so that `{}` is its one value. */
+function isEmptyObject(schema: TSchema): boolean {
+  return (
+    schema.type === 'object' &&
+    Object.keys(schema.properties ?? {}).length === 0 &&
+    schema.patternProperties === undefined &&
+    schema.additionalProperties === false
+  );
 }
 
 /**
- * One status an operation documents: the failure codes that answer with it, each with its message, and
- * `FailureResponse` narrowed to them (`error.code` among them, beside the reference, as JSON Schema
- * 2020-12 allows). `FailureResponse` itself stays whole, so a reader that ignores the narrowing still
- * meets the complete catalog.
+ * A request body without the fields its path carries, in each member of a union. An object that loses
+ * fields is no longer the schema its `$id` names, so it loses the name, and its property counts lose the
+ * path's fields.
  */
-function failureResponse(status: number, failures: readonly ErrorDefinition[]) {
-  const lines = failures.map((failure) => `\`${failure.code}\`: ${failure.message}`);
+function bodyWithoutPathParameters(input: TSchema, names: ReadonlySet<string>): TSchema {
+  if (input.type !== 'object') {
+    const { $id: _id, ...union } = input;
+    return {
+      ...union,
+      anyOf: input.anyOf.map((schema: TSchema) => bodyWithoutPathParameters(schema, names)),
+    };
+  }
+  const carried = Object.keys(input.properties ?? {}).filter((name) => names.has(name)).length;
+  if (!carried) {
+    return input;
+  }
+  const { $id: _id, minProperties, maxProperties, ...object } = input;
   return {
-    description: lines.length === 1 ? lines[0] : lines.map((line) => `- ${line}`).join('\n'),
-    headers: {
-      'X-Request-Id': { schema: { type: 'string' }, description: 'Request correlation identifier.' },
-      ...(status === 429 || failures.some((failure) => failure.retryAfter)
-        ? {
-            'Retry-After': {
-              schema: { type: 'integer' },
-              description: 'Seconds before another attempt.',
-            },
-          }
-        : {}),
-    },
-    content: {
-      'application/json': {
-        schema: {
-          $ref: '#/components/schemas/FailureResponse',
-          properties: { error: { properties: { code: { enum: failures.map((failure) => failure.code) } } } },
-        },
-      },
-    },
-  };
+    ...object,
+    properties: Object.fromEntries(Object.entries(input.properties).filter(([name]) => !names.has(name))),
+    required: (input.required ?? []).filter((name: string) => !names.has(name)),
+    ...(typeof minProperties === 'number' && minProperties > carried
+      ? { minProperties: minProperties - carried }
+      : {}),
+    ...(typeof maxProperties === 'number' ? { maxProperties: maxProperties - carried } : {}),
+  } as TSchema;
 }
 
 /** An OpenAPI document as Maximus writes it: JSON, with its paths, component schemas and extensions. */
 export interface OpenApiDocument {
-  /** The document's other fields: `openapi`, `info` and `servers`. */
+  /** The document's other fields: `openapi`, `info`, `servers` and `tags`. */
   [key: string]: unknown;
   /** The OpenAPI `paths` object: each route template, with its operation under the lowercase HTTP method. */
   paths: unknown;
   /**
-   * The OpenAPI `components` object: the named `schemas`, such as `FailureResponse`, and the
-   * `securitySchemes`.
+   * The OpenAPI `components` object: the named `schemas`, such as `CreateNoteBody`, `NoteResponse` and
+   * `NoteNotFoundError`, the `headers` and the `securitySchemes`.
    */
   components: { [key: string]: unknown; schemas: Record<string, unknown> };
 }
 
 /**
  * The document the origin serves at `/openapi.json`: every public operation that declares an HTTP route,
- * never an internal one. Each operation also carries its scopes, effect, limits in force, MCP tool hints
- * and native RPC as `x-*` extensions.
+ * never an internal one, under one tag per group. Each request body, success envelope and failure is a named
+ * component, which a generated client names its types after; each operation also carries its scopes,
+ * effect, limits in force, MCP tool hints and native RPC as `x-*` extensions.
  *
  * Every schema reference in it is a local `#/components/schemas/<name>` pointer: the `$id`-named
  * schemas of its paths and components (TypeBox Recursive/Ref) become components, as `bundleSchemas`
- * describes.
+ * describes. A schema `$id` that takes the name of a component the document writes itself, and a component
+ * named as a generator names an operation's own types, such as `CreateNoteResponse`, throw a TypeError.
  */
 export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
@@ -124,25 +149,61 @@ export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
     }
   }
   const own = Object.entries(document.components.schemas);
-  const bundled = bundleSchemas(
-    [document.paths, ...own.map(([, schema]) => schema)],
-    document.components.schemas
+  const sources = [document.paths, ...own.map(([, schema]) => schema)];
+  checkComponentNames(
+    own.map(([name]) => name),
+    schemaIds(sources),
+    Object.keys(manifest.operations)
   );
+  const bundled = bundleSchemas(sources, document.components.schemas);
   const [paths, ...schemas] = bundled.values;
+  const named = {
+    ...Object.fromEntries(own.map(([name], index) => [name, schemas[index]])),
+    ...bundled.components,
+  };
   return {
     ...document,
     paths,
     components: {
       ...document.components,
-      schemas: {
-        ...Object.fromEntries(own.map(([name], index) => [name, schemas[index]])),
-        ...bundled.components,
-      },
+      // In name order, so that the document's text changes only where its schemas do.
+      schemas: Object.fromEntries(Object.entries(named).toSorted(([a], [b]) => (a < b ? -1 : Number(a > b)))),
     },
   };
 }
 
-/** The document `createOpenApi` builds, before its schemas are bundled. */
+/**
+ * Refuses the names a document cannot publish: a schema `$id` that takes the name of a component the document
+ * writes itself, which bundling would otherwise rename, and a component a generator would name an operation's
+ * own types after (`CreateNoteResponse` for `createNote`).
+ */
+function checkComponentNames(
+  own: readonly string[],
+  ids: ReadonlySet<string>,
+  operations: readonly string[]
+) {
+  const taken = new Set(own);
+  for (const id of ids) {
+    if (taken.has(id)) {
+      throw new TypeError(
+        `The schema $id "${id}" is the name of a component the OpenAPI document writes for its bodies, answers or failures; rename the schema.`
+      );
+    }
+  }
+  const generated = new Map(
+    operations.flatMap((operation) => generatedNames(operation).map((name) => [name, operation]))
+  );
+  for (const name of [...own, ...ids]) {
+    const operation = generated.get(name);
+    if (operation) {
+      throw new TypeError(
+        `The OpenAPI component ${name} takes the name a generated client gives operation "${operation}"'s own types; rename the schema or the operation.`
+      );
+    }
+  }
+}
+
+/** The document `createOpenApi` builds, before its `$id`-named schemas are bundled. */
 function openApiDocument<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>
 ): OpenApiDocument {
@@ -152,34 +213,36 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
   );
   const scopes = Object.fromEntries(
     entries.flatMap(([, op]) =>
-      [...operationScopes(op), ...(op.conditionalScopes ?? [])].map((scope) => [scope, scope])
+      [...operationScopes(op), ...(op.conditionalScopes ?? [])].map((scope) => [
+        scope,
+        scopeDescription(scope),
+      ])
     )
   );
-  // Named, so the document carries the envelope's metadata once, as a component every response shares.
-  const metadata = Type.Object(
-    { requestId: Type.String({ description: 'Request correlation identifier, also sent as X-Request-Id.' }) },
-    { $id: 'ResponseMetadata', additionalProperties: false }
-  );
-  // Each code's failure, and the base every one narrows, which every service's document shares.
-  const failureError = { allOf: [FailureSchema], ...manifest.errors.schema };
-  const failure = Type.Object(
-    { success: Type.Literal(false), data: Type.Null(), error: failureError, metadata },
-    { additionalProperties: false }
-  );
+  const components = new ComponentSchemas();
+  components.add('ResponseMetadata', RESPONSE_METADATA);
+  const headers = new Set<keyof typeof HEADERS>(['RequestId']);
+  const groups: string[] = [];
   const paths: Record<string, Record<string, unknown>> = {};
   for (const [name, op, http] of entries) {
-    const response = Type.Object(
-      { success: Type.Literal(true), data: op.output, error: Type.Null(), metadata },
-      { additionalProperties: false }
-    );
+    const group = op.group ?? routeGroup(http.path) ?? manifest.title;
+    if (!groups.includes(group)) {
+      groups.push(group);
+    }
+    const request = requestContract(name, op, http, components);
+    const sendsBody = 'requestBody' in request;
+    const failures = failureResponses(name, op, sendsBody, manifest.errors.definitions, components);
+    if (Object.values(failures).some((response) => 'Retry-After' in response.headers)) {
+      headers.add('RetryAfter');
+    }
     (paths[http.path] ??= {})[http.method.toLowerCase()] = {
       operationId: name,
       summary: op.title,
       // A route that says no more than its title documents none.
       ...(op.description ? { description: op.description } : {}),
+      tags: [group],
       // Alternatives: OpenAPI admits a request that satisfies any one security requirement.
       security: operationSecurity(op, manifest.tokens),
-      tags: [op.group ?? name],
       'x-required-scopes': [...operationScopes(op)],
       ...(operationScopes(op).length > 1 ? { 'x-scope-match': op.scopeMatch ?? 'any' } : {}),
       ...(op.conditionalScopes ? { 'x-conditional-scopes': op.conditionalScopes } : {}),
@@ -197,12 +260,19 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       'x-max-output-bytes': operationOutputLimit(manifest, op),
       ...(http.body ? { 'x-body': http.body, 'x-input-headers': http.headers ?? {} } : {}),
       ...(http.response ? { 'x-response': http.response } : {}),
-      ...requestContract(op, http),
+      ...request,
       responses: {
-        [http.successStatus ?? 200]: successResponse(http, response),
-        ...failureResponses(op, manifest.errors.definitions),
+        [http.successStatus ?? 200]: successResponse(name, op, http, components),
+        ...failures,
       },
     };
+  }
+  for (const described of Object.keys(manifest.groups ?? {})) {
+    if (!groups.includes(described)) {
+      throw new TypeError(
+        `groups describes "${described}", which no public route has as its group; the groups are ${groups.join(', ') || 'none'}.`
+      );
+    }
   }
   // A JSON round trip drops TypeBox's symbol metadata from the wire contract; JSON and YAML serve this
   // same document.
@@ -210,15 +280,40 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
   return JSON.parse(
     JSON.stringify({
       openapi: '3.1.0',
-      info: { title: manifest.title, version: manifest.version },
+      info: {
+        title: manifest.title,
+        version: manifest.version,
+        ...(manifest.description ? { description: manifest.description } : {}),
+      },
       servers: [{ url: manifest.origin }],
+      tags: groups.map((group) => {
+        const description = manifest.groups?.[group];
+        return description ? { name: group, description } : { name: group };
+      }),
       paths,
       components: {
-        schemas: { FailureResponse: failure },
+        schemas: components.schemas,
+        headers: Object.fromEntries([...headers].map((name) => [name, HEADERS[name]])),
         securitySchemes: securitySchemes(manifest.tokens, scopes),
       },
     })
   ) as OpenApiDocument;
+}
+
+/** A scope as people read it: `notes:notes:read` reads notes, `notes:task-lists:write` writes task lists. */
+function scopeDescription(scope: string): string {
+  const [namespace, resource, action, ...deeper] = scope.split(':');
+  if (namespace === undefined || resource === undefined || deeper.length) {
+    return scope;
+  }
+  const words = resource.replaceAll('-', ' ');
+  if (action === 'read') {
+    return `Read ${words}.`;
+  }
+  if (action === 'write') {
+    return `Create, change and delete ${words}.`;
+  }
+  return scope;
 }
 
 /** Whether a body schema requires a field, so no empty body is valid: a union does when each member does. */
@@ -228,37 +323,62 @@ function requiresField(schema: unknown): boolean {
 }
 
 /**
- * Where an operation's input travels: its path parameters, then a byte body's query and header
- * metadata, a GET's query, or a JSON body without the fields the path carries.
+ * A parameter, described on the parameter itself, where generators read it: by its schema's description, or
+ * else by its name in words (`noteId` is `The note id.`).
  */
-function requestContract(op: OperationShape, http: NonNullable<OperationShape['http']>): object {
+function parameter(
+  name: string,
+  location: 'path' | 'query' | 'header',
+  required: boolean,
+  schema: TSchema,
+  style: object = {}
+): object {
+  const words = name
+    .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replaceAll(/[_-]+/g, ' ')
+    .toLowerCase();
+  const description = typeof schema.description === 'string' ? schema.description : `The ${words}.`;
+  return { name, in: location, required, description, ...style, schema };
+}
+
+/**
+ * Where an operation's input travels: its path parameters, then a byte body's query and header
+ * metadata, a GET's query, or a JSON body without the fields the path carries. A DELETE whose input the
+ * path carries whole sends no body.
+ */
+function requestContract(
+  name: string,
+  op: OperationShape,
+  http: NonNullable<OperationShape['http']>,
+  components: ComponentSchemas
+): object {
   // As callers send it: a field with a default is optional.
   const input = wireInput(op.input);
   const parameterNames = operationPathParameters(http.path);
   const pathNames = new Set(parameterNames);
-  const pathParameters = parameterNames.map((parameter) => {
-    const schemas = pathParameterSchemas(input, parameter);
-    return {
-      name: parameter,
-      in: 'path',
-      required: true,
-      schema: schemas.length === 1 ? schemas[0] : Type.Union(schemas),
-    };
+  const pathParameters = parameterNames.map((pathName) => {
+    const schemas = pathParameterSchemas(input, pathName);
+    return parameter(
+      pathName,
+      'path',
+      true,
+      schemas.length === 1 && schemas[0] ? schemas[0] : Type.Union(schemas)
+    );
   });
-  const properties = (input.properties ?? {}) as Record<string, unknown>;
+  const properties = (input.properties ?? {}) as Record<string, TSchema>;
   const required = (input.required ?? []) as string[];
   const fields = Object.entries(properties).filter(([field]) => !pathNames.has(field));
   if (http.body === 'bytes') {
     return {
       parameters: [
         ...pathParameters,
-        ...fields.map(([field, schema]) => ({
-          name: http.headers?.[field] ?? field,
-          in: http.headers && Object.hasOwn(http.headers, field) ? 'header' : 'query',
-          required: required.includes(field),
-          schema,
-          'x-input-field': field,
-        })),
+        ...fields.map(([field, schema]) => {
+          const header = http.headers && Object.hasOwn(http.headers, field) ? http.headers[field] : undefined;
+          return {
+            ...parameter(header ?? field, header ? 'header' : 'query', required.includes(field), schema),
+            'x-input-field': field,
+          };
+        }),
       ],
       requestBody: {
         required: true,
@@ -271,38 +391,69 @@ function requestContract(op: OperationShape, http: NonNullable<OperationShape['h
     return {
       parameters: [
         ...pathParameters,
-        ...fields.map(([field, schema]) => ({
-          name: field,
-          in: 'query',
-          required: required.includes(field),
-          // A list travels as one comma-separated value, `tags=a,b`, never as a repeated key.
-          ...(kinds.get(field) === 'list' ? { style: 'form', explode: false } : {}),
-          schema,
-        })),
+        ...fields.map(([field, schema]) =>
+          parameter(
+            field,
+            'query',
+            required.includes(field),
+            schema,
+            // A list travels as one comma-separated value, `tags=a,b`, never as a repeated key.
+            kinds.get(field) === 'list' ? { style: 'form', explode: false } : {}
+          )
+        ),
       ],
     };
   }
   const body = pathNames.size ? bodyWithoutPathParameters(input, pathNames) : input;
+  const located = pathParameters.length ? { parameters: pathParameters } : {};
+  if (http.method === 'DELETE' && isEmptyObject(body)) {
+    return located;
+  }
   return {
-    ...(pathParameters.length ? { parameters: pathParameters } : {}),
+    ...located,
     requestBody: {
       // A DELETE may send no body at all, and is then its empty input: its body is required only when its
-      // input requires a field the path does not carry.
+      // input requires a field the path does not carry. Any other method sends a JSON body, `{}` at least.
       required: http.method !== 'DELETE' || requiresField(body),
-      content: { 'application/json': { schema: body } },
+      content: { 'application/json': { schema: bodySchema(name, body, components) } },
     },
   };
 }
 
+/**
+ * The schema of a JSON request body: `Empty` for one without fields, which still travels as `{}`; the
+ * input's own when it is named and the path carries none of it; else the component `<Operation>Body`.
+ */
+function bodySchema(name: string, body: TSchema, components: ComponentSchemas): TSchema | SchemaReference {
+  if (isEmptyObject(body)) {
+    return components.add('Empty', EMPTY_OBJECT);
+  }
+  if (typeof body.$id === 'string') {
+    return body;
+  }
+  return components.add(`${pascalCase(name)}Body`, body);
+}
+
 /** The success response: the JSON envelope, or a validated attachment's bytes and headers. */
-function successResponse(http: NonNullable<OperationShape['http']>, envelope: TSchema): object {
+function successResponse(
+  name: string,
+  op: OperationShape,
+  http: NonNullable<OperationShape['http']>,
+  components: ComponentSchemas
+): object {
+  const headers = { 'X-Request-Id': headerReference('RequestId') };
   if (http.response !== 'attachment') {
-    return { description: 'Successful operation.', content: { 'application/json': { schema: envelope } } };
+    return {
+      description: 'Successful operation.',
+      headers,
+      content: { 'application/json': { schema: successSchema(name, op.output, components) } },
+    };
   }
   return {
     description: 'Successful operation.',
     content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
     headers: {
+      ...headers,
       'Content-Type': { schema: { type: 'string' }, description: 'Validated attachment media type.' },
       'Content-Length': {
         schema: { type: 'integer', minimum: 0 },
@@ -317,22 +468,123 @@ function successResponse(http: NonNullable<OperationShape['http']>, envelope: TS
 }
 
 /**
- * The failures an operation documents, one response per status naming every code that answers with
- * it, in catalog order: the standard ones and, when it declares `failures`, only those of its own.
+ * The component of a successful answer: named after its output's `$id` (`NoteResponse`, which every
+ * operation that answers a note shares), `EmptyResponse` for an output without fields, and otherwise after
+ * the operation, with its output as `<Operation>Result`.
+ */
+function successSchema(name: string, output: TSchema, components: ComponentSchemas): SchemaReference {
+  if (isEmptyObject(output)) {
+    return components.add('EmptyResponse', successEnvelope(components.add('Empty', EMPTY_OBJECT)));
+  }
+  const operation = pascalCase(name);
+  if (typeof output.$id === 'string') {
+    const envelope = successEnvelope(output);
+    const named = `${output.$id}Response`;
+    // Two outputs that share an `$id` but not a shape each keep an envelope of their own.
+    return components.add(
+      components.holdsOther(named, envelope) ? `${operation}ResultResponse` : named,
+      envelope
+    );
+  }
+  return components.add(
+    `${operation}ResultResponse`,
+    successEnvelope(components.add(`${operation}Result`, output))
+  );
+}
+
+/** One status an operation documents: its description, headers and failure codes, and its envelope. */
+interface FailureResponse {
+  description: string;
+  headers: Record<string, unknown>;
+  'x-failure-codes': string[];
+  content: { 'application/json': { schema: SchemaReference } };
+}
+
+/**
+ * The failures an operation documents, one response per status, in catalog order: the standard failures
+ * its route can meet, never routing's (an unknown path or method) and, when it sends no body, never a
+ * body's; then the domain failures it declares, or every one when it declares none.
  */
 function failureResponses(
+  name: string,
   op: OperationShape,
-  definitions: Readonly<Record<string, ErrorDefinition>>
-): Record<number, unknown> {
+  sendsBody: boolean,
+  definitions: Readonly<Record<string, ErrorDefinition>>,
+  components: ComponentSchemas
+): Record<number, FailureResponse> {
   const statuses = new Map<number, ErrorDefinition[]>();
-  for (const error of Object.values(definitions)) {
-    if (!op.failures || STANDARD_CODES.has(error.code) || op.failures.includes(error.code)) {
-      statuses.set(error.status, [...(statuses.get(error.status) ?? []), error]);
+  for (const definition of Object.values(definitions)) {
+    if (documentsFailure(op, sendsBody, definition.code)) {
+      statuses.set(definition.status, [...(statuses.get(definition.status) ?? []), definition]);
     }
   }
   return Object.fromEntries(
-    [...statuses].map(([status, failures]) => [status, failureResponse(status, failures)])
+    [...statuses].map(([status, failures]) => [status, failureResponse(name, status, failures, components)])
   );
+}
+
+/** Whether an operation's document lists a failure, as `failureResponses` describes. */
+function documentsFailure(op: OperationShape, sendsBody: boolean, code: string): boolean {
+  if (ROUTING_CODES.has(code)) {
+    return false;
+  }
+  if (BODY_CODES.has(code)) {
+    return sendsBody;
+  }
+  return STANDARD_CODES.has(code) || !op.failures || op.failures.includes(code);
+}
+
+/**
+ * One status an operation documents: each failure as its component, and the envelope of the answer, named
+ * after its code when it is the status's only one (`NoteNotFoundError`), else after the operation and the
+ * status (`ListNotesBadRequestError`), whose failures a discriminator on `code` tells apart.
+ */
+function failureResponse(
+  name: string,
+  status: number,
+  failures: readonly ErrorDefinition[],
+  components: ComponentSchemas
+): FailureResponse {
+  for (const failure of failures) {
+    addFailure(failure, components);
+  }
+  const codes = failures.map(({ code }) => code);
+  const [only] = codes;
+  const statusName = `${pascalCase(name)}${statusReason(status)}`;
+  const envelope =
+    codes.length === 1 && only !== undefined
+      ? components.add(failureEnvelopeName(only), failureEnvelope(schemaReference(failureName(only))))
+      : components.add(
+          `${statusName}Error`,
+          failureEnvelope(components.add(`${statusName}Failure`, failureUnion(codes)))
+        );
+  const lines = failures.map((failure) => `\`${failure.code}\`: ${failure.message}`);
+  return {
+    description:
+      lines.length === 1 && lines[0] !== undefined ? lines[0] : lines.map((line) => `- ${line}`).join('\n'),
+    headers: {
+      'X-Request-Id': headerReference('RequestId'),
+      ...(status === 429 || failures.some((failure) => failure.retryAfter)
+        ? { 'Retry-After': headerReference('RetryAfter') }
+        : {}),
+    },
+    'x-failure-codes': codes,
+    content: { 'application/json': { schema: envelope } },
+  };
+}
+
+/** A failure as its component, `<Code>Failure`, with its data: the schema its definition declares, else `Empty`. */
+function addFailure(definition: ErrorDefinition, components: ComponentSchemas): void {
+  const { dataSchema } = definition;
+  let data: unknown;
+  if (dataSchema === undefined || isEmptyObject(dataSchema)) {
+    data = components.add('Empty', EMPTY_OBJECT);
+  } else if (typeof dataSchema.$id === 'string') {
+    data = dataSchema;
+  } else {
+    data = components.add(`${failureName(definition.code)}Data`, dataSchema);
+  }
+  components.add(failureName(definition.code), failureSchema(definition, data));
 }
 
 /**

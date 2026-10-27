@@ -11,7 +11,7 @@ flowchart LR
   subgraph Project
     Route["routes/v1/notes/[noteId].get.ts"]
   end
-  Route -- "maximus prepare" --> Op["operation getV1NotesNoteId"]
+  Route -- "maximus prepare" --> Op["operation getNote"]
   HTTP["HTTP and OpenAPI"] --> Admit
   MCP["MCP tool get_note"] --> Admit
   RPC["Worker RPC"] --> Admit
@@ -79,10 +79,11 @@ out:
 
 | Derived   | From                                                        | Here               |
 | --------- | ----------------------------------------------------------- | ------------------ |
-| Operation | The method and the path, in camelCase                       | `getV1NotesNoteId` |
+| Operation | What the method does to what the path names                 | `getNote`          |
 | Effect    | The method: `GET` reads, `DELETE` deletes, the others write | `read`             |
 | Scope     | The service, the first fixed segment and the effect         | `notes:notes:read` |
-| Title     | The tool's name, or else the method and path                | `Get note`         |
+| Title     | The operation's words as a sentence                         | `Get a note`       |
+| Group     | The first fixed segment, in words: the OpenAPI tag          | `Notes`            |
 
 The operation is the unit everything else refers to: its name is the OpenAPI `operationId`, the native
 RPC method and the name in every log event. A contract may state any derived field itself;

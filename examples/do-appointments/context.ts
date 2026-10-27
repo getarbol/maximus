@@ -8,5 +8,5 @@ export default defineContext(({ env, principal }) => ({
    * The organization's schedule for the day: one Durable Object per organization and day, named after both,
    * so a caller reaches only its own organization's.
    */
-  schedule: (date: string) => env.SCHEDULES.getByName(`${principal.organizationId}/${date}`),
+  daySchedule: (date: string) => env.SCHEDULES.getByName(`${principal.organizationId}/${date}`),
 }));

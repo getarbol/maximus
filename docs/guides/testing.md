@@ -424,7 +424,7 @@ import { handler } from '#maximus/http';
 it('publishes one OpenAPI document, as JSON and YAML, with the operations its routes declare', async () => {
   const env = {} as Env;
   const { operations } = await verifyContract((request) => handler(request, env), 'http://localhost/api');
-  expect(operations).toEqual(['getV1Greeting', 'postV1Greeting', 'postV1Notes', 'getV1NotesNoteId']);
+  expect(operations).toEqual(['getGreeting', 'createGreeting', 'createNote', 'getNote']);
 });
 ```
 
@@ -451,7 +451,7 @@ describe.runIf(origin)('the running Worker', () => {
 
   it('publishes its operations in one document, as JSON and YAML', async () => {
     const { operations } = await verifyContract(fetch, `${origin}/api`);
-    expect(operations).toContain('getV1Greeting');
+    expect(operations).toContain('getGreeting');
   });
 
   it('refuses a call without a token, naming its OAuth metadata', async () => {

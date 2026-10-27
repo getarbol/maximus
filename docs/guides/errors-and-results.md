@@ -143,7 +143,7 @@ So a route that lists its failures answers a code of `context.ts` only when it l
 every failure of the catalog.
 
 `.build()` refuses a list with a code the catalog lacks, a standard code or a repeated one:
-`Operation "deleteV1NotesNoteId": failures lists each domain failure code of the error catalog once; standard failures are always allowed.`
+`Operation "deleteNote": failures lists each domain failure code of the error catalog once; standard failures are always allowed.`
 
 Every failure is also checked against the catalog itself. A code the catalog does not define, a message,
 `retryable` or `data` that differs from its definition, or a `fail` whose data its `dataSchema` refuses, is

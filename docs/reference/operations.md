@@ -15,10 +15,10 @@ Every field of the contract is optional.
 | ------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `input`             | A schema, or the fields of an object     | The empty strict object                                                                                                                                                | The schema each call's input is decoded and checked against. Fields stand for a strict object. A strict object, or a union of strict objects except on a GET; each path parameter is a required string field of it.                         |
 | `output`            | A schema, or the fields of an object     | The empty strict object; the handler may return nothing                                                                                                                | The schema each answer is checked against: a strict object, a union of strict objects, or `AttachmentOutputSchema`.                                                                                                                         |
-| `title`             | `string`                                 | The MCP tool's name as words (`get_note` is `Get note`), else the method and path (`GET /v1/notes/{noteId}`)                                                           | The OpenAPI `summary` and the MCP tool's title.                                                                                                                                                                                             |
+| `title`             | `string`                                 | Derived from the method and path: `Get a note` for `GET /v1/notes/{noteId}`. See [Derived names](#derived-names)                                                       | The OpenAPI `summary` and the MCP tool's title.                                                                                                                                                                                             |
 | `description`       | `string`                                 | None; the OpenAPI document leaves the field out                                                                                                                        | What the route does, for people and agents: the OpenAPI `description` and the MCP tool's. A route that declares `mcp` requires one that is not blank.                                                                                       |
-| `group`             | `string`                                 | The operation's name                                                                                                                                                   | The OpenAPI tag.                                                                                                                                                                                                                            |
-| `operationId`       | `string`                                 | The method and path in camelCase: `PATCH /v1/notes/{noteId}` is `patchV1NotesNoteId`                                                                                   | The operation's name: the OpenAPI `operationId`, the native RPC method and the `operation` of observations. See [Names](#names).                                                                                                            |
+| `group`             | `string`                                 | The first fixed segment after the version, in words: `Notes` for `/v1/notes/{noteId}`                                                                                  | The OpenAPI tag.                                                                                                                                                                                                                            |
+| `operationId`       | `string`                                 | Derived from the method and path: `getNote` for `GET /v1/notes/{noteId}`. See [Derived names](#derived-names)                                                          | The operation's name: the OpenAPI `operationId`, the native RPC method and the `operation` of observations. See [Names](#names).                                                                                                            |
 | `scope`             | `string`, or a non-empty list of strings | `<namespace>:<resource>:read` for a read, `<namespace>:<resource>:write` otherwise, the resource being the path's first fixed segment after the version, in kebab-case | The scope a caller's token must hold. Of a list, any one admits the caller, unless `scopeMatch` is `all`. Each is `<namespace>:<resource>:<action>`, or deeper, in lowercase kebab-case segments, listed once.                              |
 | `scopeMatch`        | `'any'` or `'all'`                       | `'any'`                                                                                                                                                                | Whether the scopes of a list are alternatives or all required.                                                                                                                                                                              |
 | `conditionalScopes` | `string[]`                               | None                                                                                                                                                                   | Scopes the handler checks itself against `authority.scopes`, for particular resources or fields: namespaced, unique, not empty and distinct from `scope`. A call without a verified authority, an RPC call among them, answers `FORBIDDEN`. |
@@ -144,6 +144,39 @@ lowercase letter, then up to 99 letters and digits. It is unique in the applicat
 names a Worker entrypoint or a promise already uses: `fetch`, `connect`, `constructor`, `then`,
 `scheduled`, `queue`, `alarm`, `prototype` and `__proto__`.
 
+### Derived names
+
+A route that declares no `operationId`, `title` or `group` takes them from its method and path, and
+`maximus prepare` writes each route's name into `.maximus/app.ts`. The last segment of the path decides what
+the route acts on:
+
+| The path ends in                                  | The route acts on                                          | Its name                                                                                     | Example                                                                               |
+| ------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| A parameter                                       | One item of the collection before it                       | `get`, `replace` (PUT), `update` (PATCH), `delete` or `post`, then the item, in the singular | `GET /v1/notes/{noteId}` is `getNote`                                                 |
+| A plural                                          | A collection                                               | `list`, `create` (POST, with the singular), `replace`, `update` or `delete`, then the words  | `GET /v1/notes` is `listNotes`; `POST /v1/notes` is `createNote`                      |
+| Another word, under POST                          | An action on what precedes the word                        | The word's verb, what it acts on, then the word's other words                                | `POST /v1/notes/{noteId}/archive` is `archiveNote`; `.../mark-read` is `markNoteRead` |
+| Another word, under POST, alone after the version | Nothing it could act on, so it creates what the word names | `create`, then the word                                                                      | `POST /v1/greeting` is `createGreeting`                                               |
+| Another word, under another method                | A singleton                                                | `get`, `replace`, `update` or `delete`, then the words                                       | `GET /v1/notes/{noteId}/summary` is `getNoteSummary`                                  |
+
+- **What precedes the last segment** names whose item or collection it is: a segment followed by a
+  parameter names one item, in the singular (`/v1/days/{date}/slots` is `listDaySlots`), `me` names the
+  caller's (`/v1/me/appointments` is `listMyAppointments`), and any other fixed segment stays as it is
+  (`/v1/admin/notes` is `listAdminNotes`).
+- **An action's verb** is its first word, with a particle that completes it (`check-in` is
+  `checkInAppointment`) or after a prefix that qualifies it (`bulk-delete` is `bulkDeleteNotes`).
+- **The singular** follows English endings (`categories`, `addresses`, `batches`) and a table of the words
+  they get wrong: `diagnoses` is `diagnosis` and `people` `person`, while `news`, `series` and `analytics`
+  name one thing, so `GET /v1/analytics` is `getAnalytics`.
+- **A version other than 1** ends the name and the title: `GET /v2/notes` is `listNotesV2`, `List notes (v2)`.
+- **The title** says the name's words as a sentence, with `a` or `an` before one item: `Get a note`,
+  `Create an address`, `Mark a note read`, `List my appointments`.
+- **The group** is the first fixed segment after the version, in words: `Task lists` for
+  `/v1/task-lists/{taskListId}`.
+
+Declare the name where the derived one reads wrong, such as `POST /v1/calls/{callId}/transcript`, whose last
+word is a noun the rules read as a verb: `operationId: 'createCallTranscript'`. Two routes that derive one
+name are refused, with both named.
+
 ## What `.build()` enforces
 
 `.build()` checks the whole application before any request is served: a project's generated `.maximus/app.ts`
@@ -229,4 +262,5 @@ The builder refuses some mistakes as soon as they are made:
 - `.derive()` after `.operation()` on the same chain: `Derive context before declaring operations.`
 - `.mount()` of a module built from another `maximus()` call:
   `Resource groups must derive from the same application.`
-- Two operations of one name: `Duplicate operation: listNotes`
+- Two operations of one name: `Duplicate operation: listNotes`, or, when both are routes or tools,
+  `Duplicate operation: createNote names both POST /v1/notes and POST /v1/note; give one of them its own operationId.`

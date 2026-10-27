@@ -8,7 +8,7 @@ vite.config.ts                              The service, the REMINDERS queue, th
                                             and how the queue is consumed (batches, retries, dead letters)
 errors.ts                                   REMINDER_NOT_FOUND
 context.ts                                  The caller's organization's reminders, in every handler
-src/reminders.ts                            The reminder and message schemas, the store and the overdue scan
+src/reminders.ts                            Schemas, a store that schedules and delivers, the overdue scan
 routes/v1/reminders/index.post.ts           POST /api/v1/reminders               202 (+ MCP schedule_reminder)
 routes/v1/reminders/[reminderId].get.ts     GET  /api/v1/reminders/{reminderId}  (+ MCP get_reminder)
 queues/maximus-example-reminders.ts         The consumer, named after its queue

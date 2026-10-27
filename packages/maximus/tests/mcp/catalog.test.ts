@@ -93,8 +93,18 @@ it('pages 400 tools, lists none to a caller without their scope and serves the g
   const denied = createHttpHandler(manifest, { verify: async () => ({ ...claims, scope: 'demo:mcp:use' }) });
   expect((await rpc(denied, 'tools/list')).result.tools).toEqual([]);
 }, 30_000);
-it('refuses to compose two groups of operations that declare the same name', () => {
+it('refuses to compose two groups of operations that declare the same name, naming where each is served', () => {
   expect(() => composeOperations({ same: make(1) }, { same: make(2) })).toThrow(
+    new TypeError(
+      'Duplicate operation: same names both GET /v1/records/r1 and GET /v1/records/r2; give one of them its own operationId.'
+    )
+  );
+  const { http: _http, ...tool } = make(3);
+  expect(() => composeOperations({ same: make(1) }, { same: tool })).toThrow(
+    'names both GET /v1/records/r1 and the tool record_3;'
+  );
+  const { mcp: _mcp, ...bare } = tool;
+  expect(() => composeOperations({ same: make(1) }, { same: bare })).toThrow(
     new TypeError('Duplicate operation: same')
   );
 });

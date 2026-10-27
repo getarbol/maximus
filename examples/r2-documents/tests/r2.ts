@@ -4,7 +4,7 @@
  */
 
 /** One stored object: its bytes and what R2 keeps beside them. */
-interface Stored {
+interface StoredObject {
   bytes: Uint8Array;
   httpMetadata: R2HTTPMetadata;
   customMetadata: Record<string, string>;
@@ -12,7 +12,7 @@ interface Stored {
 }
 
 /** The object's description, as `head` answers it. */
-function described(key: string, stored: Stored) {
+function describeObject(key: string, stored: StoredObject) {
   return {
     key,
     size: stored.bytes.byteLength,
@@ -24,7 +24,7 @@ function described(key: string, stored: Stored) {
 
 /** A bucket, and its objects for a test to read or change directly. */
 export function testBucket() {
-  const objects = new Map<string, Stored>();
+  const objects = new Map<string, StoredObject>();
   const bucket = {
     async put(key: string, value: Uint8Array, options: R2PutOptions = {}) {
       const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', value));
@@ -32,22 +32,22 @@ export function testBucket() {
       if (options.sha256 !== undefined && options.sha256 !== hex) {
         throw new Error('put: The SHA-256 checksum you specified did not match what we received.');
       }
-      const stored: Stored = {
+      const stored: StoredObject = {
         bytes: value,
         httpMetadata: (options.httpMetadata ?? {}) as R2HTTPMetadata,
         customMetadata: options.customMetadata ?? {},
         uploaded: new Date(),
       };
       objects.set(key, stored);
-      return described(key, stored);
+      return describeObject(key, stored);
     },
     async head(key: string) {
       const stored = objects.get(key);
-      return stored ? described(key, stored) : null;
+      return stored ? describeObject(key, stored) : null;
     },
     async get(key: string) {
       const stored = objects.get(key);
-      return stored ? { ...described(key, stored), body: new Blob([stored.bytes]).stream() } : null;
+      return stored ? { ...describeObject(key, stored), body: new Blob([stored.bytes]).stream() } : null;
     },
     async delete(key: string) {
       objects.delete(key);

@@ -27,6 +27,7 @@ export const OrganizationIdSchema = Type.String({
 /** A lowercase RFC 9562 UUID of version 1 to 8, named `Uuid`. */
 export const UuidSchema = Type.String({
   $id: 'Uuid',
+  format: 'uuid',
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });
 

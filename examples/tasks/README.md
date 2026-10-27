@@ -1,9 +1,12 @@
 # Tasks: a project-layout service and its web app
 
 One file per route and method, each a `defineHandler` default export. The filename is the path and
-the method; Maximus derives the operation name, the effect and the scope, and the handler receives one
-object with its input, the verified principal, the task store and `fail`. The same Worker serves a small
-React app whose pages are the files of `app/routes/` and which calls the API with `fetch`, typed by the routes' schemas.
+the method; Maximus derives the operation's name, its effect and its scope (`GET /v1/tasks/{taskId}` is
+`getTask`, a read), and the handler receives one object with its input, the verified principal, the task
+store and `fail`. Routes, tools, tests and `context.ts` import the domain by name, `#src/tasks.ts`, which
+`package.json` maps to `src/`. The same Worker serves a small React app whose pages are the files of
+`app/routes/` and which calls the API with `fetch`, one function per operation, typed by the routes'
+schemas.
 
 ```text
 vite.config.ts                            The only configuration: the application and its Worker
@@ -18,10 +21,10 @@ mcp/tools/summarize-tasks.ts              MCP only: summarize_tasks
 mcp/instructions.md                       What MCP clients read when they connect
 mcp/guides/task-conventions.md            A guide, as an MCP resource and prompt
 mcp/skills/weekly-review.md               An Agent Skill: skill://weekly-review/SKILL.md
-src/tasks.ts                              The organization's tasks in Workers KV
+src/tasks.ts                              The task's schema, the store in Workers KV and the summary
 tests/tasks.test.ts                       The API and MCP in Node, over a Workers KV stand-in
 index.html                                The web app, which loads app/main.tsx
-app/api.ts                                The API's routes as typed fetch calls, and the token in memory
+app/api.ts                                One typed fetch call per operation, named after it, and the token
 app/root.tsx                              The layout around every page, and its error boundary
 app/routes/index.tsx                      /               Sign in with a token
 app/routes/tasks/index.tsx                /tasks          The tasks, and a form that adds one
@@ -42,8 +45,8 @@ Open the app, sign in with the `DEVELOPMENT_TOKEN` from `.dev.vars`, and add a t
 token in memory alone, so a reload asks for it again; a deployed app gets its tokens from your identity
 provider.
 
-`bun run test` runs the API and MCP in Node; `bun run verify` prepares the project, type-checks it and
-builds the Worker. `Env` comes from the bindings in `vite.config.ts`.
+`bun run test` runs the API and MCP in Node; `bun run verify` prepares the project, type-checks it, runs
+the tests and builds the Worker. `Env` comes from the bindings in `vite.config.ts`.
 
 ## Deploy it
 

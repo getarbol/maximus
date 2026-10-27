@@ -103,6 +103,8 @@ test('init writes the API with its MCP server, with the name, release and date i
   }
   const manifest = JSON.parse(read(directory, 'package.json')) as {
     name: string;
+    imports: Record<string, string>;
+    engines: Record<string, string>;
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
     scripts: Record<string, string>;
@@ -113,6 +115,9 @@ test('init writes the API with its MCP server, with the name, release and date i
   expect(Object.keys(manifest.devDependencies)).not.toContain('@arbol-ai/vite-plugin');
   expect(read(directory, 'vite.config.ts')).toContain("import { maximus } from '@arbol-ai/maximus/vite';");
   expect(manifest.scripts.verify).toContain('bun run test');
+  // Any folder imports a module of src/ by name, and Bun runs every command.
+  expect(manifest.imports).toEqual({ '#maximus/*': './.maximus/*.ts', '#src/*': './src/*' });
+  expect(manifest.engines).toMatchObject({ bun: '>=1.4.4' });
   expect(read(directory, 'vite.config.ts')).toContain("origin: 'https://billing-api.example.com',");
   expect([before, after]).toContain(
     /compatibilityDate: '(\d{4}-\d{2}-\d{2})'/.exec(read(directory, 'vite.config.ts'))?.[1]

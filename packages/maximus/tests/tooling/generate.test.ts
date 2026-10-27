@@ -1,11 +1,23 @@
 /**
  * `maximus gen` and `maximus skills`: a route or tool file named and placed by the conventions prepare reads,
- * laid out as the formatter writes it, never over an existing file or a route another file answers; and the
- * Maximus skill linked for each coding agent without replacing what is there. Neither writes through a folder
- * linked from elsewhere.
+ * written as the house style asks (a comment that names it, a handler of statements, a description that says
+ * what to write) and laid out as the formatter writes it, never over an existing file or a route another file
+ * answers; and the Maximus skill linked for each coding agent without replacing what is there. Neither writes
+ * through a folder linked from elsewhere.
  */
-import { lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
@@ -15,7 +27,31 @@ import { generated, prepare, project, removeProjects, ROUTE, temporary } from '.
 
 afterEach(removeProjects);
 
-test('a route takes its path parameters, answers them back and, when asked, is an MCP tool', () => {
+/** Where the workspace installed a formatter or linter binary. */
+const require = createRequire(import.meta.url);
+
+/**
+ * Whether oxfmt, with the Maximus preset a project uses, would leave each file as it is. Under `vp test`,
+ * VP_VERSION would make oxfmt read a Vite+ configuration instead of the preset passed with `-c`.
+ */
+function isFormatted(root: string, files: readonly string[]): boolean {
+  const preset = fileURLToPath(new URL('../../config/oxfmt.mjs', import.meta.url));
+  writeFileSync(join(root, 'oxfmt.config.mjs'), `export { default } from ${JSON.stringify(preset)};\n`);
+  const oxfmt = join(dirname(require.resolve('oxfmt/package.json')), 'bin', 'oxfmt');
+  const { VP_VERSION: _vitePlus, ...environment } = process.env;
+  try {
+    execFileSync(process.execPath, [oxfmt, '-c', 'oxfmt.config.mjs', '--check', ...files], {
+      cwd: root,
+      env: environment,
+      stdio: 'pipe',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('a route names itself in a comment, answers its path parameters back in statements and, when asked, is an MCP tool', () => {
   const root = project({});
   expect(generateRoute(root, 'GET', '/v1/tasks/{taskId}', 'get_task')).toEqual({
     file: join(root, 'routes/v1/tasks/[taskId].get.ts'),
@@ -26,13 +62,19 @@ test('a route takes its path parameters, answers them back and, when asked, is a
     [
       "import { defineHandler, t } from '@arbol-ai/maximus';",
       '',
-      "/** GET /v1/tasks/{taskId} below the API's base path, and the MCP tool get_task. */",
-      'export default defineHandler(({ input }) => ({ taskId: input.taskId }), {',
-      "  description: 'Describe what GET /v1/tasks/{taskId} does for its caller.',",
-      '  input: { taskId: t.String() },',
-      '  output: { taskId: t.String() },',
-      "  mcp: { name: 'get_task' },",
-      '});',
+      '/** GET /api/v1/tasks/{taskId}, also the MCP tool get_task: what it answers, in a few words. */',
+      'export default defineHandler(',
+      '  ({ input }) => {',
+      '    const { taskId } = input;',
+      '    return { taskId };',
+      '  },',
+      '  {',
+      "    description: 'Write one sentence that tells callers what GET /api/v1/tasks/{taskId} does.',",
+      '    input: { taskId: t.String() },',
+      '    output: { taskId: t.String() },',
+      "    mcp: { name: 'get_task' },",
+      '  }',
+      ');',
       '',
     ].join('\n')
   );
@@ -53,17 +95,69 @@ test('a path is written however it is spelled, and a folder that exists takes th
   );
   expect(generateRoute(root, 'put', '/v2/settings').file).toBe(join(root, 'routes/v2/settings.put.ts'));
   // Without a path parameter, the route takes and answers nothing until it declares more.
-  expect(readFileSync(join(root, 'routes/v1/tasks/index.post.ts'), 'utf-8')).toContain(
-    "export default defineHandler(() => {}, {\n  description: 'Describe what POST /v1/tasks does for its caller.',\n});"
+  expect(readFileSync(join(root, 'routes/v1/tasks/index.post.ts'), 'utf-8')).toBe(
+    [
+      "import { defineHandler } from '@arbol-ai/maximus';",
+      '',
+      '/** POST /api/v1/tasks: what it answers, in a few words. */',
+      'export default defineHandler(() => {}, {',
+      "  description: 'Write one sentence that tells callers what POST /api/v1/tasks does.',",
+      '});',
+      '',
+    ].join('\n')
   );
-  // A handler too long for one line lays its arguments out one per line, as the formatter would.
+  // A comment too long for one line wraps, and so does a description, on a line of its own.
   const long = generateRoute(
     root,
     'get',
     '/v1/organizations/{organizationSlug}/projects/{projectSlug}/tasks/{taskId}'
   );
-  expect(readFileSync(long.file, 'utf-8')).toContain('export default defineHandler(\n  ({ input }) => ({');
+  expect(readFileSync(long.file, 'utf-8')).toContain(
+    [
+      '/**',
+      ' * GET /api/v1/organizations/{organizationSlug}/projects/{projectSlug}/tasks/{taskId}: what it answers, in a',
+      ' * few words.',
+      ' */',
+    ].join('\n')
+  );
+  expect(readFileSync(long.file, 'utf-8')).toContain(
+    "    description:\n      'Write one sentence that tells callers what GET /api/v1/organizations/"
+  );
   prepare(root);
+});
+
+test('what gen writes is what the formatter writes, however long its path, its parameters or its tool name', () => {
+  const root = project({});
+  const files = [
+    generateRoute(root, 'get', '/v1/tasks/{taskId}', 'get_task').file,
+    generateRoute(root, 'post', '/v1/tasks').file,
+    generateRoute(root, 'get', '/v1/organizations/{organizationSlug}/projects/{projectSlug}/tasks/{taskId}')
+      .file,
+    // Fields too long for one line, and a pattern that breaks after `=` before its braces do.
+    generateRoute(
+      root,
+      'patch',
+      '/v1/organizations/{organizationIdentifier}/projects/{projectIdentifierNumber}/tasks/{taskIdentifierNumber}'
+    ).file,
+    // A pattern too long even alone, which breaks one name per line.
+    generateRoute(
+      root,
+      'put',
+      '/v1/a/{organizationSlugNumberOne}/b/{projectSlugNumberTwo}/c/{taskIdentifierNumberThree}/d/{anotherLongName}'
+    ).file,
+    generateRoute(
+      root,
+      'get',
+      '/v1/a-very-long-collection-name-for-the-layout/another-long-segment-name/and-one-more',
+      'list_a_very_long_tool_name_that_goes_on_and_on_and_on'
+    ).file,
+    generateTool(root, 'summarize-tasks').file,
+    generateTool(root, 'summarize-every-task-of-the-organization-for-the-weekly-review').file,
+  ];
+  expect(isFormatted(root, files)).toBe(true);
+  // The check refuses a file the formatter would change.
+  writeFileSync(join(root, 'unformatted.ts'), 'export const greeting = "hello"\n');
+  expect(isFormatted(root, [join(root, 'unformatted.ts')])).toBe(false);
 });
 
 test('a route a file already answers, an unknown method, a path outside a version, an unsafe parameter and a bad tool name are refused', () => {
@@ -97,8 +191,25 @@ test('a tool file is named in kebab-case and its tool in snake_case, and an exis
     file: join(root, 'mcp/tools/summarize-tasks.ts'),
     tool: 'summarize_tasks',
   });
-  expect(readFileSync(join(root, 'mcp/tools/summarize-tasks.ts'), 'utf-8')).toContain(
-    "description: 'Describe what summarize_tasks does for the agent that calls it.',"
+  expect(readFileSync(join(root, 'mcp/tools/summarize-tasks.ts'), 'utf-8')).toBe(
+    [
+      "import { defineTool, t } from '@arbol-ai/maximus';",
+      '',
+      '/** The MCP tool summarize_tasks, which no HTTP route serves: what it answers, in a few words. */',
+      'export default defineTool(',
+      '  ({ input }) => {',
+      '    const { text } = input;',
+      '    return { text };',
+      '  },',
+      '  {',
+      "    description: 'Write one sentence that tells agents what summarize_tasks does.',",
+      "    effect: 'read',",
+      '    input: { text: t.String({ maxLength: 1000 }) },',
+      '    output: { text: t.String() },',
+      '  }',
+      ');',
+      '',
+    ].join('\n')
   );
   prepare(root);
   expect(generated(root, 'app.ts')).toContain('bindTool(base, tool_0, "summarize-tasks")');

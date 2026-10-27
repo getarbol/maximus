@@ -28,6 +28,8 @@ export const SLOTS = [
 
 /** One of the day's slots. */
 export const SlotSchema = literalUnion(SLOTS);
+/** One of the day's slots, such as `09:30`. */
+export type Slot = Static<typeof SlotSchema>;
 
 /** A day, `YYYY-MM-DD`. */
 export const DateSchema = t.String({ format: 'date' });
@@ -47,3 +49,9 @@ export const BookingSchema = t.Object(
 );
 /** A booking. */
 export type Booking = Static<typeof BookingSchema>;
+
+/** Every slot the day offers and whether it is free, given the day's bookings; never who holds a slot. */
+export function listSlots(bookings: readonly Booking[]): { slot: Slot; free: boolean }[] {
+  const heldSlots = new Set(bookings.map((booking) => booking.slot));
+  return SLOTS.map((slot) => ({ slot, free: !heldSlots.has(slot) }));
+}

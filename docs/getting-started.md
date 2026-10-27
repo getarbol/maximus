@@ -225,10 +225,10 @@ export default defineHandler(
 A file's name is its route: the path below `routes/`, with `[noteId]` as a parameter, and the method before
 `.ts`. From the method and the path, Maximus derives the rest:
 
-| File                              | Serves                       | Operation          | Scope               |
-| --------------------------------- | ---------------------------- | ------------------ | ------------------- |
-| `routes/v1/notes.post.ts`         | `POST /api/v1/notes`         | `postV1Notes`      | `notes:notes:write` |
-| `routes/v1/notes/[noteId].get.ts` | `GET /api/v1/notes/{noteId}` | `getV1NotesNoteId` | `notes:notes:read`  |
+| File                              | Serves                       | Operation    | Scope               |
+| --------------------------------- | ---------------------------- | ------------ | ------------------- |
+| `routes/v1/notes.post.ts`         | `POST /api/v1/notes`         | `createNote` | `notes:notes:write` |
+| `routes/v1/notes/[noteId].get.ts` | `GET /api/v1/notes/{noteId}` | `getNote`    | `notes:notes:read`  |
 
 A `GET` reads and a `POST` writes, and the scope names the service, the resource and that effect. A token
 calls a route only when it holds the route's scope.

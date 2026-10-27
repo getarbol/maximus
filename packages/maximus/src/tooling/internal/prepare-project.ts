@@ -9,6 +9,8 @@ import { join, relative, resolve, sep } from 'node:path';
 import type { ApplicationConfiguration } from '../../builder.ts';
 import { operationPathParameters } from '../../http-paths.ts';
 import { ownsPrefix, VERSIONED_PATH } from '../../internal/http-layout.ts';
+import { routeName } from '../../project/names.ts';
+import type { HttpMethod } from '../../project/names.ts';
 import { checkPagePaths } from '../../project/pages.ts';
 import type { TokenPolicy } from '../../tokens.ts';
 import { cronExpression, declarationExports, readProjectModule } from './project-exports.ts';
@@ -118,8 +120,14 @@ function relativeModule(module: string): string {
   return JSON.stringify(`../${module}`);
 }
 
-/** A route's HTTP method, from its file's suffix: `index.get.ts` answers GET. */
-const ROUTE_METHOD = /\.(get|post|put|patch|delete)$/;
+/** The HTTP methods a route or page file's suffix names: `index.get.ts` answers GET. */
+const FILE_METHODS: readonly HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+
+/** The method a file's name ends in, and the name before it: `index.get` is GET and `index`. */
+function fileMethod(name: string): { method: HttpMethod; stem: string } | undefined {
+  const method = FILE_METHODS.find((candidate) => name.endsWith(`.${candidate.toLowerCase()}`));
+  return method && { method, stem: name.slice(0, -(method.length + 1)) };
+}
 
 /**
  * The routes `routes/` declares: one `defineHandler` per file, its path and method from the file's name, so
@@ -130,14 +138,14 @@ function discoverRoutes(root: string, files: readonly ProjectFile[], imports: Im
   const owners = new Map<string, string>();
   let mcp = false;
   const mounts = files.map(({ name, file }, index) => {
-    const suffix = ROUTE_METHOD.exec(name);
-    if (!suffix?.[1]) {
+    const suffix = fileMethod(name);
+    if (!suffix) {
       throw new TypeError(
         `Name a route file by its method, such as routes/v1/tasks/index.get.ts: ${relative(root, file)}`
       );
     }
-    const method = suffix[1].toUpperCase();
-    const path = projectPath(name.slice(0, -suffix[0].length), 'routes');
+    const { method, stem } = suffix;
+    const path = projectPath(stem, 'routes');
     // The template rules the Worker applies when it starts, such as safe parameter names, applied now.
     try {
       operationPathParameters(path);
@@ -158,7 +166,8 @@ function discoverRoutes(root: string, files: readonly ProjectFile[], imports: Im
     owners.set(claim, file);
     mcp = declarationExports(root, file, 'defineHandler').mcp || mcp;
     const identifier = imports.add(`route_${index}`, file);
-    return `.mount(bindRoute(base, ${identifier}, ${JSON.stringify(path)}, ${JSON.stringify(method)}))`;
+    const operation = JSON.stringify(routeName(method, path));
+    return `.mount(bindRoute(base, ${identifier}, ${JSON.stringify(path)}, ${JSON.stringify(method)}, ${operation}))`;
   });
   return { mounts, mcp };
 }
@@ -193,9 +202,9 @@ function discoverPages(
   // Each path's methods, each with the file that answers it and the identifier it is imported as.
   const pages = new Map<string, Map<string, { file: string; page: string }>>();
   for (const [index, { name, file }] of files.entries()) {
-    const suffix = ROUTE_METHOD.exec(name);
-    const method = suffix?.[1]?.toUpperCase() ?? 'GET';
-    const path = projectPath(suffix ? name.slice(0, -suffix[0].length) : name, 'pages');
+    const suffix = fileMethod(name);
+    const method = suffix?.method ?? 'GET';
+    const path = projectPath(suffix?.stem ?? name, 'pages');
     const methods = pages.get(path) ?? new Map<string, { file: string; page: string }>();
     const owner = methods.get(method);
     if (owner) {

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#maximus/*": "./.maximus/*.ts"
+    "#maximus/*": "./.maximus/*.ts",
+    "#src/*": "./src/*"
   },
   "scripts": {
     "dev": "vp dev",

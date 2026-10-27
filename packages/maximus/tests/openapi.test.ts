@@ -1,6 +1,7 @@
 /**
  * The OpenAPI document: each public HTTP operation with its scopes, limits and MCP hints, its failures by
- * status and its OAuth flows, and only OpenAPI's own fields at the root.
+ * status and its OAuth flows, only OpenAPI's own fields at the root, and every body, answer and failure a
+ * named component, as SDK generators read it.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -131,12 +132,25 @@ function application() {
 
 type Json = Record<string, unknown>;
 interface Document {
+  tags: { name: string; description?: string }[];
   paths: Record<string, Record<string, Json>>;
-  components: { schemas: Record<string, Json>; securitySchemes: Record<string, Json> };
+  components: {
+    schemas: Record<string, Json>;
+    headers: Record<string, Json>;
+    securitySchemes: Record<string, Json>;
+  };
 }
-interface Narrowed {
-  $ref: string;
-  properties: { error: { properties: { code: { enum: string[] } } } };
+/** A response's JSON schema: a reference to its component. */
+interface JsonContent {
+  content: { 'application/json': { schema: { $ref: string } } };
+}
+/** The component a reference names. */
+function componentAt(document: Document, reference: string): Json {
+  const found = document.components.schemas[reference.slice('#/components/schemas/'.length)];
+  if (!found) {
+    throw new Error(`${reference} names no component`);
+  }
+  return found;
 }
 function operationsOf(document: Document): Json[] {
   return Object.values(document.paths).flatMap((methods) => Object.values(methods));
@@ -163,7 +177,7 @@ it('documents each public HTTP operation with its scopes, limits and MCP hints',
   expect(operationNamed(document, 'listRecords')).toMatchObject({
     summary: 'Records',
     description: 'The organization records.',
-    tags: ['listRecords'],
+    tags: ['Records'],
     security: [{ oauth2: ['fixture:records:read'] }, { oauth2: ['fixture:records:write'] }],
     'x-required-scopes': ['fixture:records:read', 'fixture:records:write'],
     'x-scope-match': 'any',
@@ -228,11 +242,12 @@ it('documents a list query field as one comma-separated value, the form the API 
       name: 'tags',
       in: 'query',
       required: false,
+      description: 'The tags.',
       style: 'form',
       explode: false,
       schema: { type: 'array', items: { type: 'string' } },
     },
-    { name: 'limit', in: 'query', required: false, schema: { type: 'integer' } },
+    { name: 'limit', in: 'query', required: false, description: 'The limit.', schema: { type: 'integer' } },
   ]);
   const handle = createHttpHandler(app, {
     verify: async () => ({
@@ -304,7 +319,12 @@ it('publishes a field with a default as optional, since decoding fills it in, wh
     ['limit', false],
   ]);
   expect(paths?.post).toMatchObject({
-    requestBody: { content: { 'application/json': { schema: { required: ['title'] } } } },
+    requestBody: {
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateRecordBody' } } },
+    },
+  });
+  expect((createOpenApi(app) as unknown as Document).components.schemas.CreateRecordBody).toMatchObject({
+    required: ['title'],
   });
 });
 
@@ -318,7 +338,7 @@ it('fills the default limits', () => {
 
 it("keeps the root to OpenAPI's own fields and every extension to an operation", () => {
   const document = documentOf(application());
-  expect(Object.keys(document)).toEqual(['openapi', 'info', 'servers', 'paths', 'components']);
+  expect(Object.keys(document)).toEqual(['openapi', 'info', 'servers', 'tags', 'paths', 'components']);
   expect(document).toMatchObject({
     openapi: '3.1.0',
     info: { title: 'Fixture', version: '1' },
@@ -371,42 +391,102 @@ it("publishes the OAuth flows at the authorization server's endpoints, Auth0's b
   });
 });
 
-it('documents one failure response per status, naming the codes that answer with it', async () => {
-  const app = application();
-  const document = documentOf(app);
-  const listing = operationNamed(document, 'listRecords').responses as Record<string, Json>;
-  const reading = operationNamed(document, 'getRecord').responses as Record<string, Json>;
-  const standard = ['400', '401', '403', '404', '405', '413', '415', '429', '500', '502', '503', '504'];
-  expect(Object.keys(listing)).toEqual(['200', ...standard]);
-  expect(Object.keys(reading)).toEqual(['200', ...standard, '409'].toSorted());
-  const narrowed = (codes: string[]): Narrowed => ({
-    $ref: '#/components/schemas/FailureResponse',
-    properties: { error: { properties: { code: { enum: codes } } } },
+it('documents one failure response per status, naming the codes that answer with it', () => {
+  const document = documentOf(application());
+  const listing = operationNamed(document, 'listRecords').responses as Record<string, Json & JsonContent>;
+  const reading = operationNamed(document, 'getRecord').responses as Record<string, Json & JsonContent>;
+  const importing = operationNamed(document, 'importRecords').responses as Record<string, Json>;
+  // Routing's own failures, an unknown path or method, never answer a documented route, and a GET sends no
+  // body to be too large or of another media type.
+  const standard = ['400', '401', '403', '429', '500', '502', '503', '504'];
+  expect(Object.keys(listing)).toEqual(['200', ...standard, '404'].toSorted());
+  expect(Object.keys(reading)).toEqual(['200', ...standard, '404', '409'].toSorted());
+  expect(Object.keys(importing)).toEqual(['200', ...standard, '404', '409', '413', '415'].toSorted());
+  // A status one code answers refers to that code's envelope, which every operation shares.
+  expect(listing['404']).toStrictEqual({
+    description: '`RECORD_MISSING`: The record does not exist.',
+    headers: { 'X-Request-Id': { $ref: '#/components/headers/RequestId' } },
+    'x-failure-codes': ['RECORD_MISSING'],
+    content: { 'application/json': { schema: { $ref: '#/components/schemas/RecordMissingError' } } },
   });
-  expect(listing['404']).toMatchObject({
-    description:
-      '- `NOT_FOUND`: The requested operation does not exist.\n- `RECORD_MISSING`: The record does not exist.',
-    content: { 'application/json': { schema: narrowed(['NOT_FOUND', 'RECORD_MISSING']) } },
-  });
-  expect(listing['400']).toMatchObject({
-    description: '`INVALID_INPUT`: The request does not match the published schema.',
-    content: { 'application/json': { schema: narrowed(['INVALID_INPUT']) } },
-  });
-  expect(listing['400']?.headers).not.toHaveProperty('Retry-After');
-  // Undeclared domain failures stay out: only RATE_LIMITED answers 429 here.
+  expect(listing['400']?.content['application/json'].schema.$ref).toBe(
+    '#/components/schemas/InvalidInputError'
+  );
   expect(listing['429']).toMatchObject({
-    content: { 'application/json': { schema: narrowed(['RATE_LIMITED']) } },
-    headers: { 'Retry-After': { schema: { type: 'integer' } } },
+    'x-failure-codes': ['RATE_LIMITED'],
+    headers: { 'Retry-After': { $ref: '#/components/headers/RetryAfter' } },
   });
+  // Undeclared domain failures stay out of an operation that declares its own: only RATE_LIMITED answers
+  // 429 for listRecords, while getRecord, which declares none, may also answer QUOTA_REACHED.
   expect(reading['429']).toMatchObject({
-    content: { 'application/json': { schema: narrowed(['RATE_LIMITED', 'QUOTA_REACHED']) } },
+    description:
+      '- `RATE_LIMITED`: The request rate limit was exceeded. Try again later.\n- `QUOTA_REACHED`: The record quota is reached.',
+    'x-failure-codes': ['RATE_LIMITED', 'QUOTA_REACHED'],
+    content: {
+      'application/json': { schema: { $ref: '#/components/schemas/GetRecordTooManyRequestsError' } },
+    },
+  });
+  expect(document.components.schemas.GetRecordTooManyRequestsFailure).toStrictEqual({
+    oneOf: [
+      { $ref: '#/components/schemas/RateLimitedFailure' },
+      { $ref: '#/components/schemas/QuotaReachedFailure' },
+    ],
+    discriminator: {
+      propertyName: 'code',
+      mapping: {
+        RATE_LIMITED: '#/components/schemas/RateLimitedFailure',
+        QUOTA_REACHED: '#/components/schemas/QuotaReachedFailure',
+      },
+    },
   });
   expect(reading['409']).toMatchObject({
     description: '`RECORD_LOCKED`: The record is locked.',
-    headers: { 'Retry-After': { schema: { type: 'integer' } } },
+    headers: { 'Retry-After': { $ref: '#/components/headers/RetryAfter' } },
   });
-
-  // Every code a status names answers with that status, and FailureResponse stays the whole catalog.
+  // Each failure is its code's component: a one-value code, a plain message and its fixed retryability.
+  expect(document.components.schemas.RecordLockedFailure).toStrictEqual({
+    type: 'object',
+    description: 'The record is locked.',
+    additionalProperties: false,
+    required: ['code', 'message', 'retryable', 'data'],
+    properties: {
+      code: {
+        type: 'string',
+        enum: ['RECORD_LOCKED'],
+        description: 'The failure code, stable across releases.',
+      },
+      message: {
+        type: 'string',
+        description: 'What went wrong, for people; it never contains input values.',
+      },
+      retryable: {
+        type: 'boolean',
+        enum: [true],
+        description: 'Whether repeating the same request may succeed.',
+      },
+      data: { $ref: '#/components/schemas/Empty' },
+    },
+  });
+  expect(document.components.schemas.RecordLockedError).toStrictEqual({
+    type: 'object',
+    description: 'A failed answer.',
+    additionalProperties: false,
+    required: ['success', 'data', 'error', 'metadata'],
+    properties: {
+      success: { type: 'boolean', enum: [false] },
+      data: { const: null },
+      error: { $ref: '#/components/schemas/RecordLockedFailure' },
+      metadata: { $ref: '#/components/schemas/ResponseMetadata' },
+    },
+  });
+  // The input issue a refused input lists is named, inside the data INVALID_INPUT declares.
+  expect(document.components.schemas.InvalidInputFailure).toMatchObject({
+    properties: { data: { $ref: '#/components/schemas/InvalidInputFailureData' } },
+  });
+  expect(JSON.stringify(document.components.schemas.InvalidInputFailureData)).toContain(
+    '"$ref":"#/components/schemas/ValidationIssue"'
+  );
+  // Every code a response lists answers with its status, and its description names it.
   const statusOf = new Map<string, number>(
     Object.values(errors.definitions).map((failure) => [failure.code, failure.status])
   );
@@ -415,27 +495,222 @@ it('documents one failure response per status, naming the codes that answer with
       if (Number(status) < 400) {
         continue;
       }
-      const { schema } = (response.content as Record<'application/json', { schema: Narrowed }>)[
-        'application/json'
-      ];
-      expect(schema.$ref).toBe('#/components/schemas/FailureResponse');
-      for (const code of schema.properties.error.properties.code.enum) {
+      for (const code of response['x-failure-codes'] as string[]) {
         expect(statusOf.get(code)).toBe(Number(status));
         expect(response.description).toContain(`\`${code}\``);
       }
     }
   }
-  // The whole catalog, beside the Failure base each code's variant narrows; its input issue is named.
-  const failureResponse = document.components.schemas.FailureResponse as { properties: Json };
-  const issue = JSON.stringify({ $ref: '#/components/schemas/ValidationIssue' });
-  const resolved = JSON.stringify(failureResponse.properties.error).replace(
-    issue,
-    JSON.stringify(document.components.schemas.ValidationIssue)
-  );
-  expect(JSON.parse(resolved)).toStrictEqual({
-    allOf: [{ $ref: '#/components/schemas/Failure' }],
-    ...JSON.parse(JSON.stringify(errors.schema, (key, value) => (key === '$id' ? undefined : value))),
+});
+
+it('names every body, answer and failure as a component, the names a generated client takes', () => {
+  const document = documentOf(application());
+  expect(document.tags).toStrictEqual([{ name: 'Records' }]);
+  for (const operation of operationsOf(document)) {
+    const responses = operation.responses as Record<string, JsonContent>;
+    for (const [status, response] of Object.entries(responses)) {
+      const reference = response.content['application/json'].schema.$ref;
+      expect(reference, `${String(operation.operationId)} ${status}`).toMatch(
+        Number(status) < 400 ? /Response$/ : /Error$/
+      );
+      componentAt(document, reference);
+    }
+    const body = operation.requestBody as JsonContent | undefined;
+    if (body) {
+      componentAt(document, body.content['application/json'].schema.$ref);
+    }
+  }
+  // An answer without fields shares one envelope, whose data is the one empty object.
+  expect(
+    (operationNamed(document, 'listRecords').responses as Record<string, JsonContent>)['200']?.content[
+      'application/json'
+    ].schema.$ref
+  ).toBe('#/components/schemas/EmptyResponse');
+  expect(document.components.schemas.EmptyResponse).toMatchObject({
+    properties: {
+      success: { type: 'boolean', enum: [true] },
+      data: { $ref: '#/components/schemas/Empty' },
+      error: { const: null },
+    },
   });
+  // No field is only null, which generators turn into types of their own, and no reference has siblings
+  // other than the annotations of its use.
+  for (const node of schemaNodes(document)) {
+    for (const field of Object.values((node.properties ?? {}) as Record<string, Json>)) {
+      expect(field).not.toStrictEqual({ type: 'null' });
+    }
+    if (typeof node.$ref === 'string') {
+      expect(
+        Object.keys(node).filter(
+          (key) =>
+            ![
+              '$ref',
+              'description',
+              'title',
+              'default',
+              'examples',
+              'deprecated',
+              'readOnly',
+              'writeOnly',
+            ].includes(key)
+        )
+      ).toEqual([]);
+    }
+  }
+  // The scopes read as what they let a caller do.
+  const { flows } = document.components.securitySchemes.oauth2 as { flows: Record<string, { scopes: Json }> };
+  expect(flows.authorizationCode?.scopes).toStrictEqual({
+    'fixture:records:read': 'Read records.',
+    'fixture:records:write': 'Create, change and delete records.',
+    'fixture:records:import-sensitive': 'fixture:records:import-sensitive',
+  });
+});
+
+/** Every object of a value, depth first, for the checks that hold for every schema node. */
+function schemaNodes(value: unknown, found: Json[] = []): Json[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      schemaNodes(entry, found);
+    }
+  } else if (value && typeof value === 'object') {
+    found.push(value as Json);
+    for (const child of Object.values(value)) {
+      schemaNodes(child, found);
+    }
+  }
+  return found;
+}
+
+/** An application of one operation, so a test can vary that operation's contract. */
+function single(
+  definition: Pick<OperationShape, 'effect' | 'scope' | 'input' | 'output'> & {
+    http: NonNullable<OperationShape['http']>;
+  },
+  extra: object = {}
+) {
+  return maximus<Record<string, never>>({
+    name: 'fixture',
+    namespace: 'fixture',
+    title: 'Fixture',
+    version: '1',
+    origin: 'https://fixture.example.test',
+    tokens: { issuer: ISSUER, audience: 'https://fixture.example.test' },
+    errors,
+    rpc: { callers: [] },
+    telemetry: { enabled: false },
+    ...extra,
+  })
+    .operation('changeRecord', { ...words, actorKinds: ['user'], ...definition }, async () => ok({}))
+    .build();
+}
+
+it('documents a body without the fields its path carries, and no body for a DELETE the path names whole', () => {
+  const changed = documentOf(
+    single({
+      effect: 'write',
+      scope: 'fixture:records:write',
+      input: t.Object(
+        { recordId: t.String(), title: t.Optional(t.String()), note: t.Optional(t.String()) },
+        { additionalProperties: false, minProperties: 2 }
+      ),
+      output: empty,
+      http: { method: 'PATCH', path: '/v1/records/{recordId}' },
+    })
+  );
+  // At least one field besides the record's id, which travels in the path.
+  expect(changed.components.schemas.ChangeRecordBody).toStrictEqual({
+    type: 'object',
+    additionalProperties: false,
+    minProperties: 1,
+    properties: { title: { type: 'string' }, note: { type: 'string' } },
+    required: [],
+  });
+  const removed = documentOf(
+    single({
+      effect: 'delete',
+      scope: 'fixture:records:write',
+      input: item,
+      output: empty,
+      http: { method: 'DELETE', path: '/v1/records/{recordId}' },
+    })
+  );
+  expect(operationNamed(removed, 'changeRecord')).not.toHaveProperty('requestBody');
+  // Without a body, a request cannot be too large or of another media type.
+  expect(operationNamed(removed, 'changeRecord').responses).not.toHaveProperty('413');
+  expect(operationNamed(removed, 'changeRecord').responses).not.toHaveProperty('415');
+  // An action the path names whole still sends its JSON body, `{}`.
+  const archived = documentOf(
+    single({
+      effect: 'write',
+      scope: 'fixture:records:write',
+      input: item,
+      output: empty,
+      http: { method: 'POST', path: '/v1/records/{recordId}/archive' },
+    })
+  );
+  expect(operationNamed(archived, 'changeRecord').requestBody).toStrictEqual({
+    required: true,
+    content: { 'application/json': { schema: { $ref: '#/components/schemas/Empty' } } },
+  });
+});
+
+it('describes the service and each group it lists, and refuses a description of a group no route has', () => {
+  const read = {
+    effect: 'read' as const,
+    scope: 'fixture:records:read',
+    input: empty,
+    output: empty,
+    http: { method: 'GET' as const, path: '/v1/records' },
+  };
+  const described = documentOf(
+    single(read, { description: 'Records of the organization.', groups: { Records: 'The records.' } })
+  ) as Document & { info: Json };
+  expect(described.info).toStrictEqual({
+    title: 'Fixture',
+    version: '1',
+    description: 'Records of the organization.',
+  });
+  expect(described.tags).toStrictEqual([{ name: 'Records', description: 'The records.' }]);
+  expect(() => documentOf(single(read, { groups: { Recrods: 'The records.' } }))).toThrow(
+    'groups describes "Recrods", which no public route has as its group; the groups are Records.'
+  );
+});
+
+it('refuses a schema name the document gives its own components, or a generated client its own types', () => {
+  const named = t.Object(
+    { recordId: t.String() },
+    { $id: 'RecordMissingError', additionalProperties: false }
+  );
+  expect(() =>
+    documentOf(
+      single({
+        effect: 'read',
+        scope: 'fixture:records:read',
+        input: empty,
+        output: named,
+        http: { method: 'GET', path: '/v1/records' },
+      })
+    )
+  ).toThrow(
+    'The schema $id "RecordMissingError" is the name of a component the OpenAPI document writes for its bodies, answers or failures; rename the schema.'
+  );
+  const generated = t.Object(
+    { recordId: t.String() },
+    { $id: 'ChangeRecordResponse', additionalProperties: false }
+  );
+  expect(() =>
+    documentOf(
+      single({
+        effect: 'read',
+        scope: 'fixture:records:read',
+        input: empty,
+        output: generated,
+        http: { method: 'GET', path: '/v1/records' },
+      })
+    )
+  ).toThrow(
+    'The OpenAPI component ChangeRecordResponse takes the name a generated client gives operation "changeRecord"\'s own types; rename the schema or the operation.'
+  );
 });
 
 it('bundles a recursive $id schema into a local component, in the built and the served document', async () => {
@@ -533,9 +808,9 @@ it('bundles a recursive $id schema into a local component, in the built and the 
   for (const [source, document] of documents) {
     // Every reference names a component of the document itself, and no `$id` is left to resolve.
     for (const reference of references(document)) {
-      expect(reference, source).toMatch(/^#\/components\/schemas\//);
-      expect(document.components.schemas, source).toHaveProperty(
-        reference.slice('#/components/schemas/'.length)
+      const [, section = '', name = ''] = /^#\/components\/(schemas|headers)\/(.+)$/.exec(reference) ?? [];
+      expect(document.components[section as 'schemas' | 'headers'], `${source} ${reference}`).toHaveProperty(
+        name
       );
     }
     expect(JSON.stringify(document), source).not.toContain('"$id"');
@@ -543,20 +818,17 @@ it('bundles a recursive $id schema into a local component, in the built and the 
     // Each use site keeps its own description beside the reference, spread or not.
     expect(operationNamed(document, 'createSetting'), source).toMatchObject({
       requestBody: {
-        content: {
-          'application/json': {
-            schema: {
-              properties: {
-                value: { $ref: '#/components/schemas/JsonValue', description: 'A bounded JSON value.' },
-                fallback: {
-                  $ref: '#/components/schemas/JsonValue',
-                  description: 'The value used when none is set.',
-                },
-                when: { $ref: '#/components/schemas/Condition' },
-              },
-            },
-          },
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/CreateSettingBody' } } },
+      },
+    });
+    expect(document.components.schemas.CreateSettingBody, source).toMatchObject({
+      properties: {
+        value: { $ref: '#/components/schemas/JsonValue', description: 'A bounded JSON value.' },
+        fallback: {
+          $ref: '#/components/schemas/JsonValue',
+          description: 'The value used when none is set.',
         },
+        when: { $ref: '#/components/schemas/Condition' },
       },
     });
     expect(document.components.schemas.Condition, source).toMatchObject({
@@ -598,6 +870,6 @@ it('bundles schemas in adapter operation extensions with the native document', (
   });
   const found = references(document);
   expect(found).toContain('#/components/schemas/ExtensionTree');
-  expect(found.every((reference) => reference.startsWith('#/components/schemas/'))).toBe(true);
+  expect(found.every((reference) => /^#\/components\/(schemas|headers)\//.test(reference))).toBe(true);
   expect(JSON.stringify(schema)).toContain('"$id":"ExtensionTree"');
 });

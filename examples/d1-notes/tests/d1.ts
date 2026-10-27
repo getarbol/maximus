@@ -18,9 +18,9 @@ export function testDatabase(): D1Database {
     .toSorted()) {
     database.exec(readFileSync(join(MIGRATIONS, file), 'utf-8'));
   }
-  /** A statement with the values bound so far. */
-  const statement = (sql: string, values: readonly SQLInputValue[] = []) => ({
-    bind: (...bound: SQLInputValue[]) => statement(sql, bound),
+  /** A prepared statement, with the values bound so far. */
+  const prepareStatement = (sql: string, values: readonly SQLInputValue[] = []) => ({
+    bind: (...bound: SQLInputValue[]) => prepareStatement(sql, bound),
     first: async () => database.prepare(sql).get(...values) ?? null,
     all: async () => ({ results: database.prepare(sql).all(...values), success: true, meta: {} }),
     run: async () => {
@@ -29,5 +29,5 @@ export function testDatabase(): D1Database {
     },
   });
   // The notes use prepare, bind, first, all and run alone: what D1Database declares besides goes unused.
-  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
+  return { prepare: (sql: string) => prepareStatement(sql) } as unknown as D1Database;
 }

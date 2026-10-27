@@ -255,9 +255,16 @@ export function operation<C, I extends TSchema, O extends TSchema, const X exten
 type Intersection<U> = (U extends unknown ? (value: U) => void : never) extends (value: infer I) => void
   ? I
   : never;
+/** Where an operation is served, for a refusal that names it: its HTTP route, else its MCP tool. */
+function servedAs(declared: OperationShape | undefined): string | undefined {
+  if (declared?.http) {
+    return `${declared.http.method} ${declared.http.path}`;
+  }
+  return declared?.mcp && `the tool ${declared.mcp.name}`;
+}
 /**
  * Merges groups of operations into one, never overwriting: a name two groups declare throws a TypeError,
- * `Duplicate operation: <name>`.
+ * `Duplicate operation: <name>`, which names the route or tool of each when both have one.
  */
 export function composeOperations<const G extends readonly Record<string, OperationShape>[]>(
   ...groups: G
@@ -266,7 +273,13 @@ export function composeOperations<const G extends readonly Record<string, Operat
   for (const group of groups) {
     for (const [name, op] of Object.entries(group)) {
       if (Object.hasOwn(result, name)) {
-        throw new TypeError(`Duplicate operation: ${name}`);
+        const first = servedAs(result[name]);
+        const second = servedAs(op);
+        throw new TypeError(
+          first && second
+            ? `Duplicate operation: ${name} names both ${first} and ${second}; give one of them its own operationId.`
+            : `Duplicate operation: ${name}`
+        );
       }
       Object.defineProperty(result, name, { value: op, enumerable: true });
     }
@@ -338,6 +351,13 @@ export interface AppManifest<Env, C, Ops extends Record<string, OperationShape>>
   namespace: string;
   /** The service's human name: OpenAPI `info.title`, the MCP server title and the OAuth `resource_name`. */
   title: string;
+  /** What the service is for, in a sentence or two: OpenAPI `info.description`. */
+  description?: string;
+  /**
+   * What each group of operations holds, by the group's name, such as
+   * `{ Notes: "The notes of the caller's organization." }`: the description of its OpenAPI tag.
+   */
+  groups?: Readonly<Record<string, string>>;
   /**
    * The service's version: OpenAPI `info.version`, the MCP server version and the `version` that `/health`
    * reports.
@@ -399,6 +419,23 @@ export interface AppManifest<Env, C, Ops extends Record<string, OperationShape>>
 export const STANDARD_CODES: ReadonlySet<string> = new Set(
   Object.values(STANDARD_FAILURES as Record<string, { code: string }>).map(({ code }) => code)
 );
+/**
+ * The standard failures only routing and admission answer, before an operation runs: an unknown path or
+ * method, and a missing or refused token. An operation's context, middleware or handler never answers them.
+ */
+export const ADMISSION_CODES: ReadonlySet<string> = new Set([
+  STANDARD_FAILURES.notFound.code,
+  STANDARD_FAILURES.methodNotAllowed.code,
+  STANDARD_FAILURES.unauthorized.code,
+]);
+/**
+ * The standard failures of reading a request body: admission answers them for a JSON body, and a byte body's
+ * `read()` for the operation that reads one.
+ */
+export const BODY_CODES: ReadonlySet<string> = new Set([
+  STANDARD_FAILURES.tooLarge.code,
+  STANDARD_FAILURES.unsupportedMedia.code,
+]);
 
 /** Default request body limit when neither the operation nor the application sets one. */
 export const DEFAULT_MAX_BODY_BYTES = 32_768;

@@ -9,15 +9,14 @@ import { expect, expectTypeOf, it } from 'vite-plus/test';
 
 import type { app } from '#maximus/app';
 import { handler } from '#maximus/http';
-
-import type { PricingService } from '../src/contract.ts';
+import type { PricingService } from '#src/contract.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
 const token = 'test-development-token-for-local-tests';
 const env = { DEVELOPMENT_TOKEN: token } as Env;
 
 /** Asks for a quote of the items. */
-async function quote(items: unknown) {
+async function requestQuote(items: unknown) {
   const response = await handler(
     new Request('http://localhost/api/v1/quotes', {
       method: 'POST',
@@ -31,7 +30,7 @@ async function quote(items: unknown) {
 
 it('prices each line and the order', async () => {
   expect(
-    await quote([
+    await requestQuote([
       { sku: 'TEA-001', quantity: 2 },
       { sku: 'MUG-001', quantity: 1 },
     ])
@@ -43,7 +42,7 @@ it('prices each line and the order', async () => {
 
 it('names the position of an item the catalog does not list, never its value', async () => {
   expect(
-    await quote([
+    await requestQuote([
       { sku: 'TEA-001', quantity: 1 },
       { sku: 'XYZ-999', quantity: 1 },
     ])
@@ -51,8 +50,8 @@ it('names the position of an item the catalog does not list, never its value', a
     status: 422,
     body: { error: { code: 'UNKNOWN_SKU', data: { index: 1 } } },
   });
-  expect((await quote([])).status).toBe(400);
-  expect((await quote([{ sku: 'tea', quantity: 0 }])).status).toBe(400);
+  expect((await requestQuote([])).status).toBe(400);
+  expect((await requestQuote([{ sku: 'tea', quantity: 0 }])).status).toBe(400);
 });
 
 it('keeps the internal quote route out of the public OpenAPI document', async () => {

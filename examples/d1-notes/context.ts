@@ -3,7 +3,7 @@
  */
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
 export default defineContext(({ env, principal }) => ({
   notes: noteStore(env.NOTES_DB, principal.organizationId),
