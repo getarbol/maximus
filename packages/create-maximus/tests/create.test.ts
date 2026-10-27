@@ -1,10 +1,10 @@
 /**
  * `create-maximus`: the project the arguments describe, what it asks for in a terminal and how it reads the
- * answers, and the `maximus init` arguments it runs.
+ * answers, the `maximus init` it runs, and what it says to run next.
  */
 import { expect, test, vi } from 'vite-plus/test';
 
-import { chooseProject, initArguments } from '../src/create.ts';
+import { chooseProject, create, initArguments, USAGE } from '../src/create.ts';
 
 test('the arguments alone describe the project, with MCP and without a web app by default', async () => {
   expect(await chooseProject(['billing-api'])).toEqual({
@@ -83,4 +83,27 @@ test('the project becomes the arguments of maximus init', () => {
     '--web',
     '--no-mcp',
   ]);
+});
+
+test('creates the project with maximus init and says what to run next, or shows the usage for --help', async () => {
+  const io = { maximus: vi.fn(), print: vi.fn() };
+  await create(['apps/clinic', '--web'], io, '/work');
+  expect(io.maximus).toHaveBeenCalledExactlyOnceWith(['init', 'apps/clinic', '--name', 'clinic', '--web']);
+  const [said] = io.print.mock.lastCall ?? [];
+  expect(said).toContain('Created clinic, an API and its MCP server with a web app.');
+  expect(said).toContain('  cd apps/clinic\n  bun install\n  bun run dev');
+  // A project made where the command runs is entered as it is.
+  await create(['/work', '--no-mcp'], io, '/work');
+  expect(io.print.mock.lastCall?.[0]).toMatch(/^Created work, an API\.\n\n {2}cd \.\n/);
+  io.maximus.mockClear();
+  await create(['--help'], io, '/work');
+  expect(io.print).toHaveBeenLastCalledWith(USAGE);
+  expect(io.maximus).not.toHaveBeenCalled();
+  // A refusal of maximus init is the command's, and nothing more is said.
+  io.maximus.mockImplementation(() => {
+    throw new Error('The directory is not empty.');
+  });
+  io.print.mockClear();
+  await expect(create(['tasks'], io, '/work')).rejects.toThrow('The directory is not empty.');
+  expect(io.print).not.toHaveBeenCalled();
 });

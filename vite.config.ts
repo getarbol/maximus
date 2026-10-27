@@ -64,6 +64,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],
+      // A command's entry wires the terminal and the process to code the suites test; the packed-package
+      // check runs it.
+      exclude: ['packages/create-maximus/src/index.ts'],
       thresholds: {
         lines: MINIMUM_COVERAGE,
         branches: MINIMUM_COVERAGE,

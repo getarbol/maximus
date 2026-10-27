@@ -67,6 +67,22 @@ it('infers derived context, isolates resource composition and runs middleware ar
   // @ts-expect-error Mounting an operation twice is refused by the type as well as at run time.
   expect(() => resource.mount(resource)).toThrow('Duplicate');
 });
+it('stops at the first derivation that fails, and derives only before any operation', async () => {
+  const later = vi.fn(async () => ok({ audited: true }));
+  const app = maximus<Record<string, never>>(configuration)
+    .derive(async () => err(standardErrors.forbidden.create()))
+    .derive(later)
+    .operation('readRecord', route, async (_context, input) => ok(input))
+    .build();
+  expect((await createHttpHandler(app, { verify: async () => claims })(request(), {})).status).toBe(403);
+  expect(later).not.toHaveBeenCalled();
+  const declared = maximus<Record<string, never>>(configuration).operation(
+    'readRecord',
+    route,
+    async (_c, input) => ok(input)
+  );
+  expect(() => declared.derive(async () => ok({}))).toThrow('Derive context before declaring operations.');
+});
 it('rejects middleware double-proceed and validates middleware output before returning it', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   try {

@@ -27,6 +27,16 @@ test('a root module or the generated directory that is a symlink is refused, and
   expect(readdirSync(outside)).toEqual([]);
 });
 
+test('a convention directory linked from elsewhere, and a route outside a version, are refused', () => {
+  const linked = project({ 'shared/routes/v1/tasks.get.ts': ROUTE });
+  symlinkSync(join(linked, 'shared/routes'), join(linked, 'routes'));
+  expect(() => prepare(linked)).toThrow('Project directory cannot be a symlink: routes');
+  const unversioned = project({ 'routes/tasks.get.ts': ROUTE });
+  expect(() => prepare(unversioned)).toThrow(
+    'Operation file must live below routes/v1/ (or another version): tasks'
+  );
+});
+
 test('a generated file that is a symlink or a directory is refused before any output is replaced', () => {
   const root = project({ 'routes/v1/notes.get.ts': ROUTE });
   prepare(root);

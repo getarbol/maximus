@@ -91,9 +91,7 @@ export async function readBodyBytes(
   let size = 0;
   try {
     while (true) {
-      if (options.signal?.aborted) {
-        return fail('aborted');
-      }
+      // A deadline before the first read was refused above; one that fires while a read waits cancels it.
       const chunk = await reader.read();
       if (options.signal?.aborted) {
         return fail('aborted');

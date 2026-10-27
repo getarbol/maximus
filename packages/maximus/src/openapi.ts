@@ -139,7 +139,10 @@ export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
 function openApiDocument<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>
 ): OpenApiDocument {
-  const entries = Object.entries(manifest.operations).filter(([, op]) => op.http && isPublicOperation(op));
+  // Each public operation that declares a route, with that route.
+  const entries = Object.entries(manifest.operations).flatMap(([name, op]) =>
+    op.http && isPublicOperation(op) ? [[name, op, op.http] as const] : []
+  );
   const scopes = Object.fromEntries(
     entries.flatMap(([, op]) =>
       [...operationScopes(op), ...(op.conditionalScopes ?? [])].map((scope) => [scope, scope])
@@ -157,15 +160,12 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
     { additionalProperties: false }
   );
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const [name, op] of entries) {
-    if (!op.http) {
-      continue;
-    }
+  for (const [name, op, http] of entries) {
     const response = Type.Object(
       { success: Type.Literal(true), data: op.output, error: Type.Null(), metadata },
       { additionalProperties: false }
     );
-    (paths[op.http.path] ??= {})[op.http.method.toLowerCase()] = {
+    (paths[http.path] ??= {})[http.method.toLowerCase()] = {
       operationId: name,
       summary: op.title,
       // A route that says no more than its title documents none.
@@ -188,11 +188,11 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       // The limits in force: the operation's, else the application's, else the default.
       'x-max-body-bytes': operationBodyLimit(manifest, op),
       'x-max-output-bytes': operationOutputLimit(manifest, op),
-      ...(op.http.body ? { 'x-body': op.http.body, 'x-input-headers': op.http.headers ?? {} } : {}),
-      ...(op.http.response ? { 'x-response': op.http.response } : {}),
-      ...requestContract(op.input, op.http),
+      ...(http.body ? { 'x-body': http.body, 'x-input-headers': http.headers ?? {} } : {}),
+      ...(http.response ? { 'x-response': http.response } : {}),
+      ...requestContract(op.input, http),
       responses: {
-        [op.http.successStatus ?? 200]: successResponse(op.http, response),
+        [http.successStatus ?? 200]: successResponse(http, response),
         ...failureResponses(op, manifest.errors.definitions),
       },
     };

@@ -80,6 +80,55 @@ test('brings the lint and format presets a configuration does not set itself', a
   expect(await configure(plugins, { root, lint: {}, fmt: {} })).toEqual({});
 });
 
+test('a preset that fails for any reason but a missing optional peer is never dropped silently', async () => {
+  const root = project({});
+  const options = { origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' };
+  /** maximus() with the lint preset's module failing to load as `error` does. */
+  const failing = async (error: Error) => {
+    vi.resetModules();
+    // The preset fails as the plugin reads it, as a module that cannot load would.
+    vi.doMock('@arbol-ai/maximus/oxlint', () => ({
+      get default(): never {
+        throw error;
+      },
+    }));
+    const { maximus: withFailingPreset } = await import('../src/index.ts');
+    return configure(withFailingPreset(options), { root, fmt: {} });
+  };
+  try {
+    // Without oxlint and Ultracite installed, Vite+'s own lint applies.
+    const missing = Object.assign(new Error('Cannot find package oxlint'), { code: 'ERR_MODULE_NOT_FOUND' });
+    expect(await failing(missing)).toEqual({});
+    await expect(failing(new SyntaxError('Unexpected token in the preset'))).rejects.toThrow(
+      'Unexpected token in the preset'
+    );
+  } finally {
+    vi.doUnmock('@arbol-ai/maximus/oxlint');
+    vi.resetModules();
+  }
+});
+
+test('the stand-in for cloudflare:workers keeps what a test constructs a class with', async () => {
+  const workers = await import('../src/testing/cloudflare-workers.ts');
+  /** A Durable Object that answers what it was constructed with. */
+  class Counter extends workers.DurableObject<{ LIMIT: number }> {
+    limit = () => this.env.LIMIT;
+    state = () => this.ctx;
+  }
+  const state = { id: 'clinic/2026-11-02' };
+  expect(new Counter(state, { LIMIT: 3 }).limit()).toBe(3);
+  expect(new Counter(state, { LIMIT: 3 }).state()).toBe(state);
+  // An entrypoint keeps its context and bindings the same way.
+  const context = { props: { caller: 'orders' } };
+  const entrypoint = new workers.WorkerEntrypoint(context, { CURRENCY: 'USD' });
+  expect([Reflect.get(entrypoint, 'ctx'), Reflect.get(entrypoint, 'env')]).toEqual([
+    context,
+    { CURRENCY: 'USD' },
+  ]);
+  expect(new workers.RpcTarget()).toBeInstanceOf(workers.RpcTarget);
+  expect(workers.tracing.getActiveSpan).toBeUndefined();
+});
+
 test('refuses cloudflare.config.ts, which a second Worker configuration would be', async () => {
   const root = project({ 'cloudflare.config.ts': 'export default {};' });
   await expect(

@@ -126,4 +126,23 @@ test('guides and skills are kebab-case ordinary files', () => {
   expect(() => prepare(folder)).toThrow(
     'MCP Markdown must be an ordinary file: mcp/guides/task-conventions.md'
   );
+  const instructions = project({ 'mcp/instructions.md/notes.txt': '' });
+  expect(() => prepare(instructions)).toThrow('MCP Markdown must be an ordinary file: mcp/instructions.md');
+  // A whole directory linked from elsewhere is refused as its files are.
+  const directory = project({ 'shared/guides/task-conventions.md': '# Task conventions\n' });
+  mkdirSync(join(directory, 'mcp'));
+  symlinkSync(join(directory, 'shared/guides'), join(directory, 'mcp/guides'));
+  expect(() => prepare(directory)).toThrow('Project modules cannot be symlinks: mcp/guides');
+});
+
+test('guides and skills are described in the order of their names, whatever order the files are read in', () => {
+  const root = project({
+    'mcp/guides/triage.md': '# Triage\n',
+    'mcp/guides/discharge.md': '# Discharge\n',
+    'mcp/guides/admission.md': '# Admission\n',
+  });
+  prepare(root);
+  expect(described(root)).toMatchObject({
+    guides: [{ name: 'admission' }, { name: 'discharge' }, { name: 'triage' }],
+  });
 });

@@ -1,9 +1,9 @@
 /**
  * What `create-maximus` asks and does: the project's directory, whether it serves MCP and whether it is a web
  * app, from the arguments or, in a terminal, from the person running it; then `maximus init` of the Maximus
- * release this package depends on.
+ * release this package depends on, and what to run next.
  */
-import { basename, resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 /** What a new project is: where it goes, its name and what it serves. */
@@ -78,4 +78,43 @@ export async function chooseProject(args: readonly string[], ask?: Ask): Promise
 /** The arguments of `maximus init` for a project. */
 export function initArguments({ directory, name, mcp, web }: ProjectChoice): string[] {
   return ['init', directory, '--name', name, ...(web ? ['--web'] : []), ...(mcp ? [] : ['--no-mcp'])];
+}
+
+/** What creating a project needs from where it runs: the person, in a terminal, the Maximus CLI and output. */
+export interface CreateIo {
+  /** Asks the person running it; absent outside a terminal. */
+  ask?: Ask;
+  /** Runs `maximus` with these arguments, throwing when it fails. */
+  maximus: (args: readonly string[]) => void;
+  /** Shows text to the person. */
+  print: (text: string) => void;
+}
+
+/**
+ * Creates the project the arguments describe with `maximus init`, then says what to run next; for `--help`,
+ * shows the usage instead. `directory` is where the command runs.
+ */
+export async function create(
+  args: readonly string[],
+  io: CreateIo,
+  directory = process.cwd()
+): Promise<void> {
+  const choice = await chooseProject(args, io.ask);
+  if (!choice) {
+    io.print(USAGE);
+    return;
+  }
+  io.maximus(initArguments(choice));
+  const serves = choice.mcp ? 'an API and its MCP server' : 'an API';
+  io.print(
+    [
+      `Created ${choice.name}, ${serves}${choice.web ? ' with a web app' : ''}.`,
+      '',
+      `  cd ${relative(directory, resolve(directory, choice.directory)) || '.'}`,
+      '  bun install',
+      '  bun run dev',
+      '',
+      'Set origin and tokens.issuer in vite.config.ts before the first deployment.',
+    ].join('\n')
+  );
 }

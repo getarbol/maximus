@@ -131,7 +131,8 @@ it('writes nested mappings and sequences in block style, empty ones and scalars 
   expect(parse(document)).toEqual(JSON.parse(JSON.stringify(value)));
   expect(toYaml('alone')).toBe('alone\n');
   expect(toYaml([])).toBe('[]\n');
-  expect(toYaml([undefined, Number.NaN])).toBe('- null\n- null\n');
+  // What JSON cannot hold in a list, it writes as null: so does the YAML.
+  expect(toYaml([undefined, Number.NaN, () => 1, Symbol('s')])).toBe('- null\n- null\n- null\n- null\n');
 });
 
 it("serves an application's OpenAPI document as YAML that reads back as its JSON", () => {
