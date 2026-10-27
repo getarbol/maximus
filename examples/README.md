@@ -12,6 +12,7 @@ needs a Cloudflare account before it deploys: its browser runs on Cloudflare's n
 | [`queue-reminders`](queue-reminders) | A queue whose consumer delivers reminders once, a dead letter queue, and a cron that queues again what was never delivered. Workers KV.                                          |
 | [`browser-pages`](browser-pages)     | Browser Run: pages read as Markdown for agents or captured as a PNG attachment, with Chrome held to the allowed hosts.                                                           |
 | [`r2-documents`](r2-documents)       | Byte uploads checked against their type's signature, SHA-256 checksums, and streamed attachment downloads from R2.                                                               |
+| [`do-appointments`](do-appointments) | A Durable Object per organization and day that books slots one call at a time, in its own SQLite storage, typed by its class.                                                    |
 
 Inside this repository the examples depend on the workspace packages (`workspace:^`). Your own project
 depends on a release: `bun create maximus my-api` starts one.

@@ -44,6 +44,19 @@
         "vite-plus": "1.4.0",
       },
     },
+    "examples/do-appointments": {
+      "name": "@maximus-examples/do-appointments",
+      "dependencies": {
+        "@arbol-ai/maximus": "workspace:^",
+      },
+      "devDependencies": {
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
+        "cf": "^1.0.0-beta.23",
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+        "vite-plus": "1.4.0",
+      },
+    },
     "examples/queue-reminders": {
       "name": "@maximus-examples/queue-reminders",
       "dependencies": {
@@ -303,6 +316,8 @@
     "@maximus-examples/browser-pages": ["@maximus-examples/browser-pages@workspace:examples/browser-pages"],
 
     "@maximus-examples/d1-notes": ["@maximus-examples/d1-notes@workspace:examples/d1-notes"],
+
+    "@maximus-examples/do-appointments": ["@maximus-examples/do-appointments@workspace:examples/do-appointments"],
 
     "@maximus-examples/orders": ["@maximus-examples/orders@workspace:examples/worker-rpc/orders"],
 
