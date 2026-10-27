@@ -51,10 +51,9 @@ export default defineConfig({
           hookTimeout: 30_000,
         },
       },
-      {
-        // The examples call the built package in Node; their own Vite configuration builds Workers.
-        test: { name: 'examples', include: ['examples/*/tests/**/*.test.ts'] },
-      },
+      // Each example runs its tests under its own configuration, whose maximus() prepares it as vp dev does.
+      'examples/*/vite.config.ts',
+      'examples/*/*/vite.config.ts',
     ],
     coverage: {
       provider: 'v8',

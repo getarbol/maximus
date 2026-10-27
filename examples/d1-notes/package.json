@@ -1,0 +1,27 @@
+{
+  "name": "@maximus-examples/d1-notes",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#maximus/*": "./.maximus/*.ts"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "migrate:local": "cf d1 migrations apply 00000000-0000-4000-8000-00000000d1d1 --local --persist-to .cloudflare/state",
+    "migrate": "cf d1 migrations apply $NOTES_DB_ID",
+    "build": "vp build",
+    "test": "vp test run",
+    "typecheck": "maximus prepare && tsc --noEmit",
+    "verify": "bun run typecheck && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@arbol-ai/maximus": "workspace:^"
+  },
+  "devDependencies": {
+    "@arbol-ai/vite-plugin": "workspace:^",
+    "@cloudflare/workers-types": "5.20261027.1",
+    "cf": "^1.0.0-beta.23",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0"
+  }
+}

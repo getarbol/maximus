@@ -29,6 +29,8 @@ afterEach(() => {
 });
 
 const minimal: MaximusOptions = { origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' };
+/** A project without cron or queue modules. */
+const NONE = { crons: [], queues: [] };
 
 test('the service takes its name and version from package.json, and the rest from its name and origin', () => {
   expect(projectOptions(root(), minimal)).toEqual({
@@ -110,7 +112,7 @@ test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a
     env: { TASKS: bindings.kv() },
   };
   const crons = [{ file: 'crons/morning.ts', cron: '0 8 * * *' }];
-  expect(workerConfig(root(), 'production', options, crons)).toEqual({
+  expect(workerConfig(root(), 'production', options, { crons, queues: [] })).toEqual({
     name: 'tasks',
     compatibilityDate: '2026-10-26',
     compatibilityFlags: ['nodejs_compat', 'streams_enable_constructors'],
@@ -132,7 +134,7 @@ test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a
     root(),
     'development',
     { ...minimal, observability: { enabled: false } },
-    []
+    NONE
   );
   expect(development).toMatchObject({
     compatibilityFlags: ['nodejs_compat'],
@@ -144,7 +146,10 @@ test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a
 
 test('a cron module states its schedule as a literal, which becomes its trigger', () => {
   expect(() =>
-    workerConfig(root(), 'production', minimal, [{ file: 'crons/hourly.ts', cron: undefined }])
+    workerConfig(root(), 'production', minimal, {
+      crons: [{ file: 'crons/hourly.ts', cron: undefined }],
+      queues: [],
+    })
   ).toThrow("crons/hourly.ts: export the schedule as a string literal, export const cron = '0 8 * * *'.");
 });
 
@@ -166,19 +171,38 @@ test('a web app, index.html at the root, gets its assets binding in every mode a
       },
     },
   });
-  const worker = workerConfig(app, 'production', options, []);
+  const worker = workerConfig(app, 'production', options, NONE);
   expect(worker.assets).toEqual({ htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true });
   expect(worker.env).toEqual({ TASKS: { type: 'kv' }, ASSETS: { type: 'assets' } });
   // Without index.html, the Worker has no assets.
-  expect(workerConfig(root(), 'production', options, []).assets).toBeUndefined();
+  expect(workerConfig(root(), 'production', options, NONE).assets).toBeUndefined();
   expect(projectOptions(root(), options).worker).toEqual({
     http: { basePath: '/api', healthPath: '/health' },
   });
 });
 
+test('each queue module subscribes the Worker to its queue, unless the options subscribe it themselves', () => {
+  const own = triggers.queue({ name: 'reminders', maxBatchSize: 10, deadLetterQueue: 'reminders-dead' });
+  const { triggers: declared } = workerConfig(
+    root(),
+    'production',
+    { ...minimal, triggers: [own] },
+    {
+      crons: [],
+      queues: ['digests', 'reminders'],
+    }
+  );
+  expect(declared).toEqual([own, { type: 'queue', name: 'digests' }]);
+});
+
 test('a workers.dev origin is served there, and any other is the custom domain unless the options route the Worker', () => {
   const at = (origin: string, extra: Partial<MaximusOptions> = {}) => {
-    const { workersDev, domains } = workerConfig(root(), 'production', { ...minimal, origin, ...extra }, []);
+    const { workersDev, domains } = workerConfig(
+      root(),
+      'production',
+      { ...minimal, origin, ...extra },
+      NONE
+    );
     return { workersDev, domains };
   };
   expect(at('https://tasks.arbol.workers.dev')).toEqual({ workersDev: true, domains: undefined });
@@ -248,7 +272,7 @@ test('a web app refuses a binding of its own named ASSETS', () => {
 
 test('assets are maximus()’s own, even from a JavaScript configuration that sets them', () => {
   const options = { ...minimal, assets: { directory: './public' } } as MaximusOptions;
-  expect(() => workerConfig(root(), 'production', options, [])).toThrow(
+  expect(() => workerConfig(root(), 'production', options, NONE)).toThrow(
     'maximus() configures the assets: index.html at the root makes the project a web app.'
   );
 });

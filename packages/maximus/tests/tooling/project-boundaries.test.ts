@@ -185,6 +185,15 @@ test('two page files may not claim one path', () => {
   expect(() => prepare(root)).toThrow('Multiple page files claim /about.');
 });
 
+test('each queue module names the queue it consumes', () => {
+  const root = project({
+    'queues/reminders.ts': 'export default {};',
+    'queues/digests.prod.ts': 'export default {};',
+  });
+  expect(prepare(root).queues).toEqual(['digests', 'reminders']);
+  expect(prepare(root, 'development').queues).toEqual(['reminders']);
+});
+
 test('queue and email modules are top-level files with distinct names', () => {
   for (const [files, message] of [
     [{ 'queues/team/jobs.ts': '' }, 'queues modules require distinct top-level names: team/jobs'],

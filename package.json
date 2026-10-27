@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node scripts/prepare-package.mjs && vp run -r build",
     "typecheck": "vp run -r typecheck",
-    "test": "vp test run --project unit --project examples",
+    "test": "vp test run --project unit --project '@maximus-examples/*'",
     "check": "vp run typecheck && vp check",
     "fix": "vp check --fix",
     "verify": "bun run build && bun run check",

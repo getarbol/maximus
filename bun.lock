@@ -18,32 +18,21 @@
         "vitest": "5.0.5",
       },
     },
-    "examples/http-and-mcp": {
-      "name": "@maximus-examples/http-and-mcp",
+    "examples/d1-notes": {
+      "name": "@maximus-examples/d1-notes",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@cloudflare/vite-plugin": "^2.0.0-beta.v.5",
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
         "vite-plus": "1.4.0",
       },
     },
-    "examples/minimal-http": {
-      "name": "@maximus-examples/minimal-http",
-      "dependencies": {
-        "@arbol-ai/maximus": "workspace:^",
-      },
-      "devDependencies": {
-        "@cloudflare/vite-plugin": "^2.0.0-beta.v.5",
-        "cf": "^1.0.0-beta.23",
-        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
-        "vite-plus": "1.4.0",
-      },
-    },
-    "examples/project-tasks": {
-      "name": "@maximus-examples/project-tasks",
+    "examples/tasks": {
+      "name": "@maximus-examples/tasks",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
         "react": "19.3.1",
@@ -62,24 +51,27 @@
       },
     },
     "examples/worker-rpc/orders": {
-      "name": "@maximus-examples/worker-rpc-orders",
+      "name": "@maximus-examples/orders",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
+        "@maximus-examples/pricing": "workspace:*",
       },
       "devDependencies": {
-        "@cloudflare/vite-plugin": "^2.0.0-beta.v.5",
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
         "vite-plus": "1.4.0",
       },
     },
     "examples/worker-rpc/pricing": {
-      "name": "@maximus-examples/worker-rpc-pricing",
+      "name": "@maximus-examples/pricing",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@cloudflare/vite-plugin": "^2.0.0-beta.v.5",
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
         "vite-plus": "1.4.0",
@@ -269,15 +261,13 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@maximus-examples/http-and-mcp": ["@maximus-examples/http-and-mcp@workspace:examples/http-and-mcp"],
+    "@maximus-examples/d1-notes": ["@maximus-examples/d1-notes@workspace:examples/d1-notes"],
 
-    "@maximus-examples/minimal-http": ["@maximus-examples/minimal-http@workspace:examples/minimal-http"],
+    "@maximus-examples/orders": ["@maximus-examples/orders@workspace:examples/worker-rpc/orders"],
 
-    "@maximus-examples/project-tasks": ["@maximus-examples/project-tasks@workspace:examples/project-tasks"],
+    "@maximus-examples/pricing": ["@maximus-examples/pricing@workspace:examples/worker-rpc/pricing"],
 
-    "@maximus-examples/worker-rpc-orders": ["@maximus-examples/worker-rpc-orders@workspace:examples/worker-rpc/orders"],
-
-    "@maximus-examples/worker-rpc-pricing": ["@maximus-examples/worker-rpc-pricing@workspace:examples/worker-rpc/pricing"],
+    "@maximus-examples/tasks": ["@maximus-examples/tasks@workspace:examples/tasks"],
 
     "@modelcontextprotocol/core": ["@modelcontextprotocol/core@2.4.0", "", { "dependencies": { "zod": "^4.2.0" } }, "sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q=="],
 

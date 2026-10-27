@@ -317,19 +317,34 @@ function hosting(options: MaximusOptions, worker: Omit<WorkerConfig, 'name' | 'e
   };
 }
 
+/** What prepare found that the Worker's triggers follow: its cron modules and its queue modules. */
+export interface DiscoveredEvents {
+  /** Each cron module and the schedule it states as a literal. */
+  crons: readonly { file: string; cron: string | undefined }[];
+  /** The queues the queue modules consume, by their files' names. */
+  queues: readonly string[];
+}
+
 /**
  * The Worker Cloudflare's plugin builds: the options' settings, the generated entry, `nodejs_compat`, which
  * Maximus needs for its diagnostics, the bindings of the phase, where it is served, a cron trigger for each
- * cron module and, for a web app, its build as assets every request reaches through the Worker, which
- * decides what they answer.
+ * cron module, a consumer trigger for each queue module the options do not subscribe themselves and, for a
+ * web app, its build as assets every request reaches through the Worker, which decides what they answer.
  */
 export function workerConfig(
   root: string,
   phase: Phase,
   options: MaximusOptions,
-  crons: readonly { file: string; cron: string | undefined }[]
+  { crons, queues }: DiscoveredEvents
 ): WorkerConfig {
   const { worker } = split(options);
+  // The options' own consumer trigger for a queue (its batch size, its dead letter queue) is kept as it is.
+  const subscribed = new Set(
+    (worker.triggers ?? []).flatMap((trigger) => (trigger.type === 'queue' ? [trigger.name] : []))
+  );
+  const consumers = queues
+    .filter((queue) => !subscribed.has(queue))
+    .map((queue) => triggers.queue({ name: queue }));
   const scheduled = crons.map(({ file, cron }) => {
     if (cron === undefined) {
       throw new TypeError(
@@ -350,6 +365,6 @@ export function workerConfig(
       ? { assets: { htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true } }
       : {}),
     env: workerEnv(root, options, phase) as WorkerConfig['env'],
-    triggers: [...(worker.triggers ?? []), ...scheduled],
+    triggers: [...(worker.triggers ?? []), ...scheduled, ...consumers],
   };
 }

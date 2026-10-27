@@ -1,26 +1,24 @@
 # Examples
 
-Small, runnable Maximus services. Each one runs locally with `cf dev` and needs no Cloudflare account.
+Runnable Maximus services, each configured in its `vite.config.ts` alone and deployable to Cloudflare. Every
+one runs locally with `bun run dev`, and its tests run in Node with `bun run test`; none needs a Cloudflare
+account until it deploys.
 
-| Example                          | Shows                                                                                                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`minimal-http`](minimal-http)   | One application, three HTTP operations, OpenAPI, a domain failure, a test through the HTTP handler. The code from [Getting started](../docs/getting-started.md). |
-| [`http-and-mcp`](http-and-mcp)   | The same operations over HTTP and MCP, resource modules, `.derive()`, guides and an Agent Skill.                                                                 |
-| [`worker-rpc`](worker-rpc)       | Two Workers: one calls the other's operation over native RPC, forwarding its principal.                                                                          |
-| [`project-tasks`](project-tasks) | The project layout: one `defineHandler` file per route and method, typed failures, MCP tools from routes and from `mcp/tools/`.                                  |
+| Example                    | Shows                                                                                                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`tasks`](tasks)           | Routes as files, typed failures, MCP tools from routes and from `mcp/tools/`, a guide and an Agent Skill in Markdown, and a React web app served by the same Worker. Workers KV. |
+| [`d1-notes`](d1-notes)     | A D1 database with migrations, rows keyed by organization and read through their schema, keyset pages, and literal search as an MCP tool.                                        |
+| [`worker-rpc`](worker-rpc) | Two Workers: orders calls pricing over native RPC with the caller's principal, typed by the contract pricing publishes.                                                          |
 
-Inside this repository the examples use the workspace packages (`workspace:^`). In your own project,
-depend on a released version instead.
-
-Run an example from its directory:
+Inside this repository the examples depend on the workspace packages (`workspace:^`). Your own project
+depends on a release: `bun create maximus my-api` starts one.
 
 ```sh
-bun install          # once, at the repository root
-cd examples/minimal-http
-bun run dev          # cf dev, on http://localhost:5173
+bun install                        # once, at the repository root
+bun run test                       # the packages' tests and every example's
+cd examples/tasks && bun run dev   # one example, on http://localhost:5173
 ```
 
-`bun run build` runs `cf build`, which writes the build `cf deploy` uploads.
-
-The examples authenticate with a development token on `localhost`; see
-[Decide how callers authenticate](../docs/getting-started.md#decide-how-callers-authenticate).
+Locally the examples accept the development token in their `.dev.vars` from `localhost` alone; each README
+shows how to create it. A deployed Worker accepts the access tokens of the issuer `tokens.issuer` names:
+set it to your authorization server before deploying.

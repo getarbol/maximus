@@ -1,18 +1,24 @@
 {
-  "name": "@maximus-examples/worker-rpc-orders",
+  "name": "@maximus-examples/orders",
   "private": true,
   "type": "module",
+  "imports": {
+    "#maximus/*": "./.maximus/*.ts"
+  },
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
-    "typecheck": "tsc --noEmit",
-    "verify": "bun run typecheck && bun run build"
+    "test": "vp test run",
+    "typecheck": "maximus prepare && tsc --noEmit",
+    "verify": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
-    "@arbol-ai/maximus": "workspace:^"
+    "@arbol-ai/maximus": "workspace:^",
+    "@maximus-examples/pricing": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^2.0.0-beta.v.5",
+    "@arbol-ai/vite-plugin": "workspace:^",
+    "@cloudflare/workers-types": "5.20261027.1",
     "cf": "^1.0.0-beta.23",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plus": "1.4.0"

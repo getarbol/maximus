@@ -53,6 +53,8 @@ export interface PreparedProject {
   durableObjects: string[];
   /** Each cron module and the schedule it states as a literal, which becomes the Worker's trigger. */
   crons: { file: string; cron: string | undefined }[];
+  /** The queues the queue modules consume, by their files' names: the Worker's consumer triggers. */
+  queues: string[];
   /** Whether the project is a web app, whose Worker serves its build through the assets binding. */
   webApp: boolean;
   /** Every module and page discovery read, which the plugin watches. */
@@ -571,6 +573,7 @@ export function prepareProject(directory: string, mode: string, project: Project
     changed,
     durableObjects: files['durable-objects'].map(({ file }) => file),
     crons: schedules,
+    queues: files.queues.map(({ name }) => name),
     webApp: web !== undefined,
     files: [
       ...Object.values(files)

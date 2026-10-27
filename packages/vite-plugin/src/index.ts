@@ -63,7 +63,7 @@ export function maximus(options: MaximusOptions): Plugin[] {
         );
       }
       checkWebAppBuild(root, config);
-      worker = workerConfig(root, phase, options, project.api.prepare(root, phase).crons);
+      worker = workerConfig(root, phase, options, project.api.prepare(root, phase));
       return await presets(config);
     },
     // The Worker's build is minified unless the configuration says otherwise: a smaller upload, and less code
