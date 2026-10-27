@@ -1,6 +1,6 @@
 /**
  * `@arbol-ai/maximus/internals`: the adapter SPI, for code that builds transports or adapters. Applications
- * use the fluent builder instead.
+ * declare their operations with `defineHandler` and `defineTool`, or with the fluent builder, instead.
  */
 export { executeOperation } from './execution.ts';
 export { defineApp } from './define-app.ts';

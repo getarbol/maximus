@@ -69,8 +69,8 @@ type AllowedCode<X> =
   | StandardCode;
 
 /**
- * A failure a handler answers with, `return fail('TASK_NOT_FOUND')`: an expected outcome, never thrown. Only
- * `fail` creates one.
+ * A failure a handler answers with, `return fail('TASK_NOT_FOUND')`: an expected outcome, never thrown.
+ * `fail` creates one, and so does a byte body's `read()` that cannot read the body.
  */
 export class Failed<Code extends string = string> {
   /** Keeps the class nominal: an object of the same shape is not a failure. */
@@ -157,7 +157,7 @@ type OutputValue<O> = [O] extends [never] ? Nothing : Static<SchemaOf<O>>;
 export type HandlerHttp = Omit<NonNullable<Exposure['http']>, 'method' | 'path'>;
 /** A route's MCP tool: its name and, when they differ from its method's, its hints. */
 export interface HandlerMcp {
-  /** The tool's name, unique in the application: a letter, then letters, digits and underscores. */
+  /** The tool's unique name: a lowercase letter, then up to 63 letters, digits or underscores. */
   name: string;
   /** Whether repeating a call is safe; by default, as its HTTP method is (GET, PUT and DELETE are). */
   idempotent?: boolean;
@@ -174,7 +174,10 @@ export interface HandlerOptions {
   input?: SchemaOrFields;
   /** The output schema, or its fields; none when the route answers the empty object. */
   output?: SchemaOrFields;
-  /** A short human name: the OpenAPI `summary` and the MCP tool's title. By default, the method and path. */
+  /**
+   * A short human name: the OpenAPI `summary` and the MCP tool's title. By default, the tool's name in words
+   * (`Get note` for `get_note`) when the route is a tool, else the method and path.
+   */
   title?: string;
   /** What the route does, for people and agents. A route that is also an MCP tool requires it. */
   description?: string;
@@ -184,30 +187,43 @@ export interface HandlerOptions {
   operationId?: string;
   /**
    * The scope a caller needs: by default, `<namespace>:<resource>:read` for a read and
-   * `<namespace>:<resource>:write` otherwise, the resource being the first fixed segment after the version.
+   * `<namespace>:<resource>:write` otherwise, the resource being the first fixed segment after the version,
+   * in kebab-case.
    */
   scope?: OperationShape['scope'];
   /** Whether several scopes are alternatives (`any`, the default) or all required. */
   scopeMatch?: OperationShape['scopeMatch'];
-  /** Scopes the handler checks for particular resources or fields, besides the one that admits the call. */
+  /**
+   * Scopes the handler checks against `authority.scopes` for particular resources or fields, besides the one
+   * that admits the call. A call without `authority` is refused with `FORBIDDEN`.
+   */
   conditionalScopes?: OperationShape['conditionalScopes'];
   /** Whether it reads, writes or deletes: by default, GET reads, DELETE deletes and the rest write. */
   effect?: OperationShape['effect'];
   /** The domain failure codes it may answer, besides the standard ones; every one when omitted. */
   failures?: readonly DomainCode[];
-  /** The principal kinds it admits. */
+  /**
+   * The principal kinds it admits: every kind when omitted. Every operation declares them under the
+   * `oauth+bearer` token scheme.
+   */
   actorKinds?: Exposure['actorKinds'];
   /** `internal` keeps it out of the public OpenAPI document and the discovery metadata. */
   visibility?: Exposure['visibility'];
-  /** The HTTP options besides the path and method: a byte body, header-sourced fields, an attachment. */
+  /**
+   * The HTTP options besides the path and method: a byte body, header-sourced fields, an attachment, the
+   * success status.
+   */
   http?: HandlerHttp;
   /** Also serve the route as an MCP tool with this name. */
   mcp?: HandlerMcp;
   /** Also serve it as a native RPC method, to every allowed caller or to the listed ones. */
   rpc?: Exposure['rpc'];
-  /** The largest JSON request body it accepts, in bytes. */
+  /**
+   * The largest request body it accepts, in bytes: its JSON body, or its byte body. By default, the
+   * application's limit.
+   */
   maxBodyBytes?: number;
-  /** The largest output it answers, in bytes. */
+  /** The largest output it answers, in bytes. By default, the application's limit. */
   maxOutputBytes?: number;
 }
 
@@ -273,10 +289,10 @@ function declare(handler: (args: never) => unknown, contract: HandlerOptions) {
 
 /**
  * Declares a route as its file's default export: its handler, then its contract. The filename gives its path
- * and method: `routes/v1/tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`. The handler receives
- * one object, `{ input, principal, env, fail, …context }`, and returns its output or `fail(code)`. The
- * contract's `input` and `output` are schemas or the fields of strict objects; without a contract, the route
- * takes no input and answers the empty object.
+ * and method: `routes/v1/tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}` below the API's base
+ * path, `/api` by default. The handler receives one object, `{ input, principal, env, fail, …context }`, and
+ * returns its output or `fail(code)`. The contract's `input` and `output` are schemas or the fields of strict
+ * objects; without a contract, the route takes no input and answers the empty object.
  */
 export function defineHandler<
   O extends SchemaOrFields = never,
@@ -306,7 +322,11 @@ export function defineHandler<
   return declaration;
 }
 
-/** A tool's contract, what `defineTool` takes after the handler: its schemas, description, effect and the rest. */
+/**
+ * A tool's contract, what `defineTool` takes after the handler: its schemas, description, effect and the
+ * rest. Its scope defaults to `<namespace>:<file>:read` for a read and `<namespace>:<file>:write` otherwise,
+ * the file being the tool's file name without its extension.
+ */
 export interface ToolOptions extends Omit<
   HandlerOptions,
   'description' | 'effect' | 'operationId' | 'http' | 'mcp' | 'visibility'
@@ -335,8 +355,9 @@ export interface ToolDeclaration<I extends TSchema, O extends TSchema, X, C = Re
 
 /**
  * Declares a tool only MCP serves, as its file's default export: its handler, then its contract.
- * `mcp/tools/summarize-tasks.ts` is the tool `summarize_tasks`. The contract states its description and
- * effect; its handler works as a route's.
+ * `mcp/tools/summarize-tasks.ts` is the tool `summarize_tasks`, the operation `summarizeTasks` and, by
+ * default, the title `Summarize tasks`. The contract states its description and effect; its handler works as
+ * a route's.
  */
 export function defineTool<
   const E extends OperationShape['effect'] = never,
@@ -425,10 +446,12 @@ export type AuthOptions<E = RegisteredEnv> = Pick<
 /** The fields `auth.ts` states: code. The issuer, audience, scheme and every other field are configuration. */
 const AUTH_FIELDS: ReadonlySet<string> = new Set(['resolve', 'resourceMetadataUrl', 'resources']);
 /**
- * Declares, as `auth.ts`'s default export, how the application verifies tokens itself: `resolve`, for a
- * token its configuration's issuer does not issue, and its OAuth resources. Verify every token
- * cryptographically and parse its principal strictly; the issuer, audience and scheme stay in configuration,
- * and any of them here is refused rather than allowed to override it.
+ * Declares, as `auth.ts`'s default export, how the application verifies tokens itself: `resolve`, which
+ * replaces the default OAuth verification for every token but the development token (for credentials the
+ * configured issuer does not issue, such as an application session or a workload key), and its OAuth
+ * resources and their metadata URL. Verify every token cryptographically and parse its principal strictly.
+ * The issuer, audience, scheme and every other field stay in configuration: any of them here throws a
+ * TypeError rather than overriding it.
  */
 export function defineAuth<const A extends AuthOptions>(
   auth: A & Record<Exclude<keyof A, keyof AuthOptions>, never>

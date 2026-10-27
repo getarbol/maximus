@@ -1,7 +1,9 @@
 /**
- * `@arbol-ai/maximus`: the core. Define an application once with `maximus()` and serve it with
- * `createHttpHandler` (or `createWorker` from `@arbol-ai/maximus/workers`). Every optional capability
- * is its own entry and depends on this one, never the other way round.
+ * `@arbol-ai/maximus`: the core. A project declares its routes with `defineHandler` and its tools with
+ * `defineTool`, and `maximus()` from `@arbol-ai/vite-plugin` binds them to an application. Code that composes
+ * a Worker by hand builds the application with the builder `maximus()` and serves it with
+ * `createHttpHandler` (or `createWorker` from `@arbol-ai/maximus/workers`). Every optional capability is its
+ * own entry and depends on this one, never the other way round.
  */
 
 // The fluent builder and what it builds.

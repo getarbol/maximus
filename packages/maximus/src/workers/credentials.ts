@@ -5,7 +5,13 @@
 import { err, ok, parseInput, standardErrors } from '../index.ts';
 import type { Failure, Principal, Result, Static, TSchema } from '../index.ts';
 
-/** Typed organization credential preparation for one derived operation group. */
+/**
+ * Reads the caller's organization credential, for a `.derive()` that prepares it: `accounts.getByName`
+ * addresses the organization's own store by its id (a Durable Object namespace, for example), whose
+ * `readCredential` answers the credential. A failure it answers is returned as it is; a credential that does
+ * not match `schema` or names another `organizationId` answers `INTERNAL_ERROR`. Otherwise it answers
+ * `{ credential }`.
+ */
 export async function credentials<Schema extends TSchema>(options: {
   principal: Principal;
   accounts: {

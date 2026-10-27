@@ -68,10 +68,15 @@ export interface TransportContext {
   authenticated: TokenPrincipal;
   /** The application the transport serves: its name, title, version, public origin and MCP configuration. */
   application: {
+    /** The service's identifier, which names the MCP server. */
     name: string;
+    /** The service's human name. */
     title: string;
+    /** The service's version. */
     version: string;
+    /** The service's public HTTPS base URL. */
     origin: string;
+    /** The MCP server's instructions, guides and skills, when the application configures them. */
     mcp?: McpConfiguration;
   };
   /**
@@ -86,8 +91,9 @@ export interface TransportContext {
   /** The public URL of one of the application's own paths, such as `/openapi.json`, below its base path. */
   url: (path: string) => string;
   /**
-   * Runs one of `operations` as the verified caller and answers its Result; another operation fails with
-   * `NOT_FOUND`.
+   * Runs one of `operations` through the shared execution path as the verified caller and answers its Result:
+   * an operation not among them fails with `NOT_FOUND`, and one whose scopes the caller lacks with
+   * `FORBIDDEN`.
    */
   invoke: (name: string, operation: OperationShape, input: unknown) => Promise<Result<unknown, Failure>>;
   /**
@@ -112,7 +118,10 @@ export interface TransportContext {
  * admits and its handler.
  */
 export interface HttpTransport {
-  /** Identifies protocol independently of its URL mount. */
+  /**
+   * The protocol the transport speaks, whatever its path: `mcp` marks the MCP transport, of which a handler
+   * mounts at most one. A transport at `/mcp` counts as the MCP transport either way.
+   */
   protocol?: 'mcp';
   /**
    * The exact path the transport answers, such as `/mcp`; it stays absolute when the application has a base
@@ -137,24 +146,31 @@ export interface HttpTransport {
 export interface RouteContext {
   /** The request id echoed in `x-request-id`; use it to correlate diagnostics. */
   requestId: string;
-  /** Use the application's declared error catalog and this request's correlation for a raw protocol refusal. */
+  /**
+   * Answers a failure of the application's catalog as the failure envelope, with its status, this request's
+   * id and the given headers: for a refusal the route makes itself. A failure outside the catalog throws a
+   * TypeError, which the handler answers as `INTERNAL_ERROR`.
+   */
   fail: (failure: Failure, headers?: ResponseInit['headers']) => Response;
-  /** Keep work running after the response (Workers `ctx.waitUntil`). Best effort: never durable. */
+  /**
+   * Keeps work running after the response, through the runtime's `waitUntil` when the handler has one. Best
+   * effort, never durable.
+   */
   waitUntil: (promise: Promise<unknown>) => void;
 }
 /**
- * A plain HTTP route outside token admission, for callers that cannot present a
- * bearer token: provider webhooks (signed bodies), signed links, OAuth
- * callbacks. The handler owns authentication completely: it must verify a
- * signature or token before it treats the request as data. Plain routes share
- * the handler's diagnostics, request id and security headers; they never
- * receive a principal and are absent from OpenAPI.
+ * A plain HTTP route outside token admission, for callers that cannot present a bearer token: provider
+ * webhooks (signed bodies), signed links, OAuth callbacks. The handler owns authentication completely: it
+ * must verify a signature or token before it treats the request as data. Plain routes share the handler's
+ * diagnostics, request id and response headers (`x-request-id`, `x-content-type-options: nosniff`,
+ * `server-timing`, and `cache-control: private, no-store` unless the route sets its own); they never receive
+ * a principal and are absent from OpenAPI.
  */
 export type HttpRoute<E> = (request: Request, env: E, context: RouteContext) => Promise<Response>;
 /**
- * Wraps HTTP before token admission. The request is a bodyless metadata copy, so a wrapper cannot
- * consume unbounded input or mutate the headers native admission reads. No principal is available;
- * `next` keeps the existing pipeline and may run only once before the wrapper settles.
+ * Wraps every request before token admission, once the origin is admitted. It receives a copy of the request
+ * without its body, so it can neither read the body nor change the headers admission reads, and it sees no
+ * principal. `next` runs the rest of the handling, at most once and before the wrapper settles.
  */
 export type HttpMiddleware<E> = (
   request: Request,
@@ -167,9 +183,16 @@ export type HttpMiddleware<E> = (
  * routes and mounts, a base path, a fallback and request hooks.
  */
 export interface HttpOptions<E = unknown> {
-  /** Ordered request wrappers, after origin admission and inside native error/security handling. */
+  /**
+   * Request wrappers, run in order around everything after the origin check; an error one throws answers
+   * `INTERNAL_ERROR`. Each entry must be a function.
+   */
   middleware?: readonly HttpMiddleware<E>[];
-  /** Exact deployment origins; refusal precedes metadata, hooks and token admission. */
+  /**
+   * The exact HTTPS origins the handler answers, such as `https://notes.example.com`. A request to another
+   * origin answers `NOT_FOUND` before any middleware, hook, route or token check runs. An empty list, or an
+   * origin that is not an exact HTTPS origin, throws at construction.
+   */
   origins?: readonly string[];
   /**
    * Test seam for the default OAuth verification: returns a token's claims in place of the JWT check; claim
@@ -183,27 +206,49 @@ export interface HttpOptions<E = unknown> {
   annotate?: (operation: string, requestId: string) => void;
   /**
    * Protocol transports served beside the operations, such as `mcp()`; one per path, and at most one MCP
-   * transport.
+   * transport, which an application with `mcp` configuration requires.
    */
   transports?: readonly HttpTransport[];
   /**
-   * Plain routes by exact path. Paths under `/v<n>/` and every discovery,
-   * operation or transport path are reserved. A route may sit beneath a
-   * transport's path (a second MCP server at `/mcp/agent-runtime`): the
-   * transport answers only its exact path.
+   * Plain routes by exact path: absolute paths of unreserved characters. The native paths, paths of the form
+   * `/v<n>/…` below the base path, and every operation or transport path are reserved. A route may sit
+   * beneath a transport's path (a second MCP server at `/mcp/agent-runtime`): the transport answers only its
+   * exact path.
    */
   routes?: Readonly<Record<string, HttpRoute<E>>>;
-  /** Mount native operations and discovery below this path; transports and plain routes remain absolute. */
+  /**
+   * The path the operations and the native documents (the index, `/openapi.json`, OAuth discovery and, by
+   * default, `/health`) are served below, such as `/api`; transports, plain routes and mounts keep their
+   * absolute paths.
+   */
   basePath?: string;
-  /** Absolute public liveness path; defaults to the mounted `/health`. No dependency probes run here. */
+  /**
+   * The absolute path of the liveness check, which answers a GET without a token with
+   * `{ status: 'ok', service, version }` and probes no dependency; `/health` below the base path by default.
+   */
   healthPath?: string;
-  /** Prefix protocols own the prefix itself and every slash-delimited descendant. Nested mounts use the longest prefix. */
+  /**
+   * Handlers by path prefix: each answers its prefix and every path below it (`/files` and `/files/a`, never
+   * `/filesystem`), and where mounts nest, the longest prefix answers. A mount may neither contain a native,
+   * operation, transport or plain route path nor sit below a transport or plain route.
+   */
   mounts?: Readonly<Record<string, HttpRoute<E>>>;
-  /** Request-local product admission, before any route or native token admission. */
+  /**
+   * Runs for every request after the middleware and before routing: a response it returns answers the
+   * request, and `null` lets it continue. It sees no principal.
+   */
   before?: (request: Request, env: E, context: RouteContext) => Response | null | Promise<Response | null>;
-  /** Handles only paths outside all native, transport and mounted protocol namespaces. */
+  /**
+   * Answers a request nothing else claims, in place of `NOT_FOUND`. It never receives a native path or a
+   * path the handler reserves: one below the base path, under `/.well-known` or `/v<n>`, or below a
+   * transport's path.
+   */
   fallback?: HttpRoute<E>;
-  /** Scope a matched HTTP operation's environment. The continuation may run only once. */
+  /**
+   * Wraps each matched HTTP operation before its token is checked: it receives the request, the env and the
+   * operation's name and effect, and calls `run` once with the env the call then uses, for its token
+   * resolution and as its handler's `env`. A second call to `run` throws. MCP requests do not reach it.
+   */
   aroundOperation?: (
     request: Request,
     env: E,
@@ -230,7 +275,10 @@ interface ServedRoute {
 /**
  * Serves an application over HTTP as one function, `(request, env, background?) => Promise<Response>`: its
  * operations at their routes, the OpenAPI document as JSON and YAML, OAuth discovery, `/health`, transports
- * such as MCP, plain routes and mounts. Construction refuses a path two of them would claim.
+ * such as MCP, plain routes and mounts. Every response but a protocol upgrade (101) carries `x-request-id`,
+ * `x-content-type-options: nosniff`, `server-timing` and `cache-control: private, no-store`, unless a plain
+ * route, mount, fallback or `before` hook sets its own `cache-control`. Construction throws a TypeError for a
+ * path two of them would claim, and for an option or token scheme it cannot serve.
  */
 export function createHttpHandler<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,

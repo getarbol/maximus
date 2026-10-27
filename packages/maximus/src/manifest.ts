@@ -14,9 +14,12 @@ import { STANDARD_FAILURES } from './standard-failures.ts';
 import type { TelemetryConfig, BackgroundContext } from './telemetry.ts';
 import type { Principal, TokenPolicy, TokenClient } from './tokens.ts';
 
-/** Transport-verified authority, separate from the unchanged ordinary RPC principal. */
+/**
+ * What the transport verified about a call's token, kept apart from the principal: the surface, the granted
+ * scopes, the OAuth client and the token itself. Context preparation and handlers receive a frozen copy.
+ */
 export interface InvocationAuthority {
-  /** The transport whose admission verified the token, such as `http` or `mcp`. */
+  /** The transport whose admission verified the token: `http` or `mcp`. */
   readonly surface: 'http' | 'mcp';
   /** The scopes the verified token grants, which a handler checks its `conditionalScopes` against. */
   readonly scopes: readonly string[];
@@ -26,8 +29,8 @@ export interface InvocationAuthority {
    * The bearer token the call was admitted with, verified: on an HTTP or MCP call to the service's origin,
    * including one a gateway forwards. It is the caller's OAuth access token, unless
    * `tokens.resolve` admitted another credential (a workload key under `oauth+bearer`) or it is the
-   * development token; absent under the application's own `bearer` scheme. For an owner that calls another
-   * service as the same caller, which verifies it again. Never log, store or return it.
+   * development token; absent under the application's own `bearer` scheme. An operation passes it on to call
+   * another service as the same caller, and that service verifies it again. Never log, store or return it.
    */
   readonly token?: string;
 }
@@ -39,7 +42,7 @@ export interface InvocationAuthority {
 export interface Invocation<Env> {
   /** The Worker's bindings; inside `http.aroundOperation`, the environment that hook passed to `run`. */
   env: Env;
-  /** Available only to explicitly declared HTTP byte-body operations. */
+  /** The request body's reader, present only on an HTTP operation that declares `http.body: 'bytes'`. */
   readonly body?: BinaryBody;
   /**
    * The verified caller: its actor, actor kind, organization and request id. Scope every tenant query by its
@@ -47,18 +50,21 @@ export interface Invocation<Env> {
    */
   principal: Principal;
   /**
-   * The verified token's surface, scopes and client, on HTTP and MCP calls whose token names a client; absent
-   * over ordinary RPC.
+   * The verified token's surface, scopes, client and token, on HTTP and MCP calls whose token names a client;
+   * absent over RPC and for a token that names no client.
    */
   readonly authority?: InvocationAuthority;
-  /** Already decoded operation input; preparation must not re-validate or log it. */
+  /** The operation's input, decoded and checked once; preparation must neither check it again nor log it. */
   readonly input?: unknown;
-  /** Builder-owned operation identifier, never taken from caller input. */
+  /** The name of the operation being called, which the builder sets; never taken from caller input. */
   readonly operation?: string;
-  /** Bounded best-effort work attached to the invoking runtime. */
+  /**
+   * Where the call keeps best-effort work running after its answer, the runtime's `waitUntil`; absent when
+   * the runtime gives none.
+   */
   readonly background?: BackgroundContext;
 }
-/** One scope, or several of which any one admits the caller. */
+/** One scope, or several: any one of them admits the caller, or every one under `scopeMatch: 'all'`. */
 export type OperationScope = string | readonly [string, ...string[]];
 
 /** Whether an operation belongs in public contracts: the OpenAPI document and the discovery metadata. */
@@ -66,12 +72,15 @@ export function isPublicOperation(declaration: { visibility?: 'public' | 'intern
   return declaration.visibility !== 'internal';
 }
 
-/** The scopes of an operation as a list; a caller needs any one of them. */
+/** The scopes of an operation as a list. */
 export function operationScopes(declaration: { scope: OperationScope }): readonly string[] {
   return typeof declaration.scope === 'string' ? [declaration.scope] : declaration.scope;
 }
 
-/** Shared by HTTP admission, MCP discovery and calls, and execution. */
+/**
+ * Whether granted scopes admit an operation: any one of its scopes, or every one under `scopeMatch: 'all'`.
+ * HTTP admission, MCP listing and calls, and execution share it.
+ */
 export function operationMatchesScopes(
   declaration: { scope: OperationScope; scopeMatch?: ScopeMatch },
   granted: readonly string[]
@@ -86,29 +95,51 @@ export function operationMatchesScopes(
 export interface Exposure {
   /** The principal kinds the operation admits: every kind when omitted. */
   actorKinds?: readonly Principal['actorKind'][];
-  /** Versioned route; required string input fields may occupy complete {parameter} segments. */
+  /** The HTTP route: its method, its versioned path and how its body and answer travel. */
   http?: {
+    /** The route's method; only a read may use `GET`. */
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    /**
+     * The versioned path template, such as `/v1/notes/{noteId}`, served below the HTTP handler's `basePath`.
+     * A `{parameter}` fills a whole segment and names a required string input field.
+     */
     path: string;
+    /**
+     * `bytes`: the body is raw bytes the handler reads on demand, and the input comes from the path, the
+     * query string and `headers`. Not allowed on `GET`, nor on an operation that is also an MCP tool or RPC
+     * method.
+     */
     body?: 'bytes';
-    /** Input metadata fields sourced from explicit HTTP headers, decoded by the input schema. */
+    /**
+     * Input fields of a byte operation read from request headers, by field name:
+     * `{ checksum: 'x-checksum' }`. The input schema decodes them; `authorization`, `cookie`, `host`,
+     * `content-length` and `content-encoding` are never input.
+     */
     headers?: Readonly<Record<string, string>>;
+    /** `attachment`: the operation answers a file, its output `AttachmentOutputSchema`. HTTP-only. */
     response?: 'attachment';
+    /** The status of a successful answer; 200 by default. */
     successStatus?: 200 | 201 | 202;
   };
   /**
-   * `internal`: an operation for the service's own staff. It stays routed and
-   * scope-checked like any other, but it is absent from the public OpenAPI
-   * document and from the protected-resource `scopes_supported`; MCP lists it
-   * only to tokens that carry its scope. Hiding is not authorization: the
-   * scope is what admits the caller.
+   * `public` (the default) or `internal`, an operation for the service's own staff. An internal operation
+   * stays routed and scope-checked like any other, but it is absent from the public OpenAPI document and from
+   * the protected-resource `scopes_supported`; MCP lists it, as every tool, only to tokens that carry its
+   * scope. Hiding is not authorization: the scope is what admits the caller.
    */
   visibility?: 'public' | 'internal';
   /**
    * The MCP tool: its unique name, whether repeating a call is safe (`idempotentHint`) and whether it reaches
    * outside the service (`openWorldHint`, default `true`).
    */
-  mcp?: { name: string; idempotent: boolean; openWorld?: boolean };
+  mcp?: {
+    /** The tool's unique name: a lowercase letter, then up to 63 letters, digits or underscores. */
+    name: string;
+    /** Whether repeating a call is safe, published as the tool's `idempotentHint`. */
+    idempotent: boolean;
+    /** Whether the tool reaches outside the service, published as its `openWorldHint`; `true` when absent. */
+    openWorld?: boolean;
+  };
   /**
    * The native RPC method: `true` admits every caller in the application's `rpc.callers`, `{ callers }` only
    * the listed ones among them.
@@ -120,14 +151,18 @@ export interface Exposure {
  */
 export interface OperationShape extends Exposure {
   /**
-   * The scope a caller needs. Several scopes mean any one of them admits the
-   * caller (`['notes:notes:read', 'notes:notes:write']`: a write grant
-   * also reads). Published as alternative OpenAPI security requirements.
+   * The scope a caller needs, `<namespace>:<resource>:<action>`. Several scopes mean any one of them admits
+   * the caller (`['notes:notes:read', 'notes:notes:write']`: a write grant also reads), unless `scopeMatch`
+   * is `all`. Published as OpenAPI security requirements: one per scope, or one with every scope under `all`.
    */
   scope: OperationScope;
-  /** Arrays retain any-of semantics unless the owner explicitly declares all-of. */
+  /** How several scopes admit a caller: `any` (the default) needs one of them, `all` needs every one. */
   scopeMatch?: ScopeMatch;
-  /** Owner handlers select conditional scopes for the actual resource/fields. Absence of authority fails closed. */
+  /**
+   * Scopes the handler checks itself, against `authority.scopes`, for particular resources or fields:
+   * namespaced, listed once and distinct from the scopes that admit the call. A call without `authority`,
+   * such as one over RPC or with a token that names no client, is refused with `FORBIDDEN` before it runs.
+   */
   conditionalScopes?: readonly string[];
   /**
    * The domain failure codes the operation may answer, besides the standard ones every operation may.
@@ -160,24 +195,36 @@ export interface OperationShape extends Exposure {
    */
   output: TSchema;
   /**
-   * Largest JSON request body this operation accepts, in bytes. Defaults to
-   * the application's `maxBodyBytes` (32 KiB). Raise it only for operations
-   * whose input is legitimately large (a CSV import, a document), never
-   * application-wide; the ceiling is 16 MiB. Not allowed on GET operations,
-   * whose input is the query string.
+   * The largest request body this operation accepts, in bytes: its JSON body, or its byte body under
+   * `http.body: 'bytes'`. A larger one answers `REQUEST_TOO_LARGE`. Defaults to the application's
+   * `maxBodyBytes` (32 KiB by default). Raise it only for operations whose input is legitimately large (a CSV
+   * import, a document), never application-wide; the ceiling is 16 MiB. Not allowed on GET operations, whose
+   * input is the query string.
    */
   maxBodyBytes?: number;
-  /** Exact attachment/JSON output byte bound, up to 16 MiB; otherwise inherits the application bound. */
+  /**
+   * The largest output this operation answers, in bytes: its value's JSON, or an attachment's `byteLength`.
+   * Defaults to the application's `maxOutputBytes` (256 KiB by default), up to 16 MiB. A larger output is the
+   * server's error, `INTERNAL_ERROR`.
+   */
   maxOutputBytes?: number;
   /** The handler: it receives the prepared context and the decoded input and returns a `Result`. */
   execute: (context: never, input: never) => unknown;
-  /** Captured by the fluent builder; each mounted group owns its inferred preparation and middleware. */
+  /**
+   * The context preparation and middleware the builder captured when the operation was declared, so each
+   * mounted module keeps its own; without it, execution uses the application's `context` and `middleware`.
+   */
   pipeline?: {
+    /** Prepares the call's context from its invocation; a failure it returns answers the call. */
     context: (invocation: never) => Promise<Result<unknown, Failure>>;
+    /** The middleware that wraps the handler, in the order it runs. */
     middleware: readonly OperationMiddleware<never>[];
   };
 }
-/** An operation's definition as `.operation()` takes it: its scope, exposure, words, schemas and limits. */
+/**
+ * The fields of an operation's definition besides its exposure, as `.operation()` takes them: its scope,
+ * words, effect, failures, schemas and limits.
+ */
 export type OperationFields<I extends TSchema, O extends TSchema> = Omit<
   OperationShape,
   keyof Exposure | 'input' | 'output' | 'execute' | 'pipeline'
@@ -208,7 +255,10 @@ export function operation<C, I extends TSchema, O extends TSchema, const X exten
 type Intersection<U> = (U extends unknown ? (value: U) => void : never) extends (value: infer I) => void
   ? I
   : never;
-/** Compose resource modules without silently overwriting a capability. */
+/**
+ * Merges groups of operations into one, never overwriting: a name two groups declare throws a TypeError,
+ * `Duplicate operation: <name>`.
+ */
 export function composeOperations<const G extends readonly Record<string, OperationShape>[]>(
   ...groups: G
 ): Intersection<G[number]> {
@@ -224,8 +274,9 @@ export function composeOperations<const G extends readonly Record<string, Operat
   return result as Intersection<G[number]>;
 }
 /**
- * Code that wraps an operation after admission and preparation: it receives the context and `next`, which it
- * may call once, and returns a Result.
+ * Code that wraps an operation after admission and preparation: it receives the context and `next`, which
+ * runs the rest of the chain and the handler, and returns a Result. It calls `next` at most once: a second
+ * call rejects.
  */
 export type OperationMiddleware<C> = (
   context: C,
@@ -278,7 +329,10 @@ export interface McpConfiguration {
  * transport reads.
  */
 export interface AppManifest<Env, C, Ops extends Record<string, OperationShape>> {
-  /** The service's identifier: the MCP server name and the `service` that `/health` and telemetry report. */
+  /**
+   * The service's identifier, a lowercase kebab-case word of 2 to 64 characters: the MCP server name and the
+   * `service` that `/health` and telemetry report.
+   */
   name: string;
   /** The prefix of every scope, `<namespace>:<resource>:<action>`; it matches `^[a-z][a-z0-9-]{1,63}$`. */
   namespace: string;
@@ -323,10 +377,15 @@ export interface AppManifest<Env, C, Ops extends Record<string, OperationShape>>
    */
   telemetry?: TelemetryConfig<Env>;
   /**
-   * A Workers rate limiting binding each HTTP and MCP call must pass, per organization and actor;
-   * `retryAfter` sets a refusal's `Retry-After` seconds, 60 by default.
+   * A Workers rate limiting binding each HTTP and MCP call must pass, per organization and actor; each
+   * message of an MCP batch counts as a call. A refusal answers `RATE_LIMITED`.
    */
-  rateLimit?: { binding: keyof Env; retryAfter?: number };
+  rateLimit?: {
+    /** The name of the rate limiting binding in the env. */
+    binding: keyof Env;
+    /** The `Retry-After` seconds a refusal sends; 60 by default. */
+    retryAfter?: number;
+  };
   /**
    * The request body limit, in bytes, of every operation that sets none: 32 KiB by default, at most 16 MiB.
    */

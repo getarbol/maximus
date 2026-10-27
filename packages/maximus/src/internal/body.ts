@@ -5,7 +5,7 @@
 import type { Failure } from '../errors.ts';
 import type { Result } from '../result.ts';
 
-/** Closed decoding vocabulary used by bounded transport readers. */
+/** Every reason a bounded read can fail with: the values of a body failure's `data.reason`. */
 export const HTTP_BODY_FAILURES = [
   'too_large',
   'invalid_length',
@@ -23,7 +23,10 @@ export interface HttpBodyFailure extends Failure<{ reason: HttpBodyFailureReason
   code: 'HTTP_BODY_INVALID';
 }
 
-/** Construct only closed decoder metadata. No exception, input bytes or telemetry. */
+/**
+ * The body failure for a reason: `HTTP_BODY_INVALID`, with the reason as its only data and nothing of the
+ * body. A reason outside `HTTP_BODY_FAILURES` throws a TypeError.
+ */
 export function httpBodyFailure(reason: HttpBodyFailureReason): HttpBodyFailure {
   if (!HTTP_BODY_FAILURES.includes(reason)) {
     throw new TypeError('Invalid HTTP body reason');
@@ -38,18 +41,26 @@ export function httpBodyFailure(reason: HttpBodyFailureReason): HttpBodyFailure 
 
 /** How much of a body to read, and until when. */
 export interface BodyReadOptions {
-  /** The most body bytes to read, a positive safe integer; a longer body fails as `too_large`. */
+  /**
+   * The most body bytes to read, a positive safe integer; a longer body fails as `too_large`, and any other
+   * value throws a RangeError.
+   */
   maxBytes: number;
-  /** Pass the same deadline to fetch and the reader for outbound requests. */
+  /**
+   * Aborts the read, which then fails as `aborted`. For a response, pass the signal its `fetch` used, so one
+   * deadline covers the request and its body.
+   */
   signal?: AbortSignal;
 }
 /** What a body is read from: a request or a response. */
 type BodySource = Pick<Request, 'body' | 'headers'>;
 
 /**
- * Read at most the owner's byte limit, including chunked bodies. Returns original
- * bytes for signature verification. Expected decoding failures are plain results.
- * Rejected streams are cancelled without awaiting a remote acknowledgement.
+ * Reads a request's or a response's body as bytes, at most `maxBytes` of them, chunked bodies included, and
+ * answers them unchanged, as a signature check needs them; an absent body is no bytes. A `content-length`
+ * that is malformed or above the limit is refused before reading. Every expected failure is a result
+ * (`too_large`, `invalid_length`, `aborted` or `read_failed`), and a refused body is cancelled without
+ * waiting for the other side.
  */
 export async function readBodyBytes(
   source: BodySource,
@@ -120,7 +131,10 @@ export async function readBodyBytes(
   }
 }
 
-/** Decode bounded UTF-8; signed text adapters can retain vendor replacement semantics. */
+/**
+ * Reads a body as `readBodyBytes` does and decodes it as UTF-8. Invalid UTF-8 fails as `invalid_utf8`,
+ * unless `fatalUtf8: false` replaces it with U+FFFD, as a provider that signs its decoded text may require.
+ */
 export async function readBodyText(
   source: BodySource,
   options: BodyReadOptions & { fatalUtf8?: boolean }

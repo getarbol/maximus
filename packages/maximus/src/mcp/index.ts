@@ -9,7 +9,8 @@ import type { HttpTransport } from '../index.ts';
  * The MCP transport, for `createWorker(app, { transports: [mcp()] })`: serves the operations that declare
  * `mcp` as tools over Streamable HTTP at `/mcp` (or `path`), with the OpenAPI document and guides as
  * resources, guides as prompts and skills through the Skills extension. A caller needs `<namespace>:mcp:use`
- * and sees only the tools its scopes admit.
+ * and sees only the tools its scopes and actor kind admit. Each message of a JSON-RPC batch passes the rate
+ * limit as a request of its own, and each call is held to its operation's body limit.
  */
 export function mcp(options: { path?: string } = {}): HttpTransport {
   return {

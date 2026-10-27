@@ -39,7 +39,11 @@ type DistinctOperations<Ops, M> = [Extract<keyof M, keyof Ops>] extends [never]
   : { readonly 'Operations declared twice': Extract<keyof M, keyof Ops> };
 /** Refuses a definition field no operation has, such as a misspelled one, which would otherwise do nothing. */
 export type KnownOperationFields<X> = Readonly<Record<Exclude<keyof X, keyof OperationShape>, never>>;
-/** Immutable builders let independent resource modules share inferred context without overwriting routes. */
+/**
+ * An application under construction, as `maximus()` starts it. Every method returns a new builder and leaves
+ * this one unchanged, so resource modules built from one base share its inferred context without overwriting
+ * each other's operations.
+ */
 export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>> {
   /**
    * The application declared so far: its configuration, context preparation, middleware and operations, which
@@ -47,6 +51,10 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
    */
   readonly definition: AppManifest<E, C, Ops>;
   private readonly root: object;
+  /**
+   * Wraps `definition`. `root` identifies the application the builder descends from, and `.mount()` admits
+   * only modules of the same one. Start an application with `maximus()` instead.
+   */
   constructor(definition: AppManifest<E, C, Ops>, root: object = definition) {
     this.definition = definition;
     this.root = root;
@@ -54,7 +62,7 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
   /**
    * Declares an operation: a camelCase name no other operation uses, its definition (scope, words, effect,
    * schemas and exposure) and its handler, which receives the prepared context and the decoded input and
-   * returns a Result.
+   * returns a Result. A name declared twice throws a TypeError, `Duplicate operation: <name>`.
    */
   operation<const N extends string, I extends TSchema, O extends TSchema, const X extends Exposure>(
     name: N extends keyof Ops ? never : N,
@@ -83,7 +91,8 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
   }
   /**
    * Adds what `resolve` returns to the context of every operation declared after it. It runs after admission
-   * and before the middleware; a failure it returns answers the call. Derive before declaring operations.
+   * and before the middleware; a failure it returns answers the call. Derive before declaring operations: on
+   * a builder that already has one, it throws a TypeError.
    */
   derive<D extends object>(
     resolve: (context: C) => Promise<Result<D, Failure>>
@@ -122,7 +131,8 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
   }
   /**
    * Adds the operations of a resource module built from the same application; each keeps the context and
-   * middleware it was declared with.
+   * middleware it was declared with. A module of another application, or one that declares an operation this
+   * builder has, throws a TypeError.
    */
   mount<MC, M extends Record<string, OperationShape>>(
     module: ApplicationBuilder<E, MC, M> & DistinctOperations<Ops, M>
@@ -139,17 +149,18 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
     );
   }
   /**
-   * Checks every rule the application must keep and returns it. A refusal is a TypeError that names the rule
-   * and the operation that breaks it.
+   * Checks every rule the application must keep and returns it. A refusal is a TypeError whose message names
+   * the rule; most of the rules about one operation also name that operation.
    */
   build(): AppManifest<E, C, Ops> {
     return defineApp<E, C>()(this.definition);
   }
 }
 /**
- * Starts an application: its name, scope namespace, origin, token policy, error catalog and RPC callers.
- * Chain `.derive()` and `.use()` to prepare each call, `.operation()` to declare operations, `.mount()` to
- * compose resource modules that share this base, then `.build()`.
+ * Starts an application: its name, scope namespace, title, version, origin, token policy, error catalog and
+ * RPC callers, and its optional limits, rate limit, telemetry and MCP configuration. Chain `.derive()` and
+ * `.use()` to prepare each call, `.operation()` to declare operations, `.mount()` to compose resource modules
+ * that share this base, then `.build()`.
  */
 export function maximus<E>(
   configuration: ApplicationConfiguration<E>

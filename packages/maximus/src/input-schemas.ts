@@ -151,7 +151,12 @@ export const extendObject = <P extends TProperties, Q extends TProperties>(
   [STRIP]: (schema as OwnerSchema)[STRIP],
 });
 
-/** Owner normalization keeps persisted/document input behavior separate from wire validation. */
+/**
+ * Reads a field through `normalize`. For a string, or a string that may be null, the pattern, format and
+ * lengths apply to the normalized value, so the wire may send a raw spelling (another case, surrounding
+ * spaces); any other schema checks the raw value first. The wire type stays the schema's own. Runs inside
+ * `inputSchema()`.
+ */
 export const normalizeSchema = <S extends TSchema, O>(schema: S, normalize: (value: Static<S>) => O) =>
   t.Unsafe<O>({
     ...schema,
@@ -161,7 +166,10 @@ export const normalizeSchema = <S extends TSchema, O>(schema: S, normalize: (val
     WireType<SchemaInput<S>> &
     (S extends TOptional<TSchema> ? { [OptionalKind]: 'Optional' } : Record<never, never>) &
     (S extends { default: infer D } ? { default: D } : Record<never, never>);
-/** Apply a domain transform only after validating its source value. */
+/**
+ * Decodes a field with `transform` once its value passes `schema`: the wire sends what `schema` checks, and
+ * the handler receives what `transform` returns. Runs inside `inputSchema()`.
+ */
 export const transformSchema = <S extends TSchema, O>(schema: S, transform: (value: Static<S>) => O) =>
   t.Unsafe<O>({
     ...schema,
@@ -196,8 +204,8 @@ export const inspectSchema = <S extends TSchema>(
   [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'inspect', apply: inspect }],
 });
 /**
- * Refuses a value the schema admits when `predicate` rejects it, with `detail` as the issue's message and
- * path. Runs inside `inputSchema()`.
+ * Refuses a value the schema admits when `predicate` rejects it, with a `custom` issue whose message and path
+ * `detail` gives (`Invalid value` at the field by default). Runs inside `inputSchema()`.
  */
 export const refineSchema = <S extends TSchema>(
   schema: S,
@@ -213,7 +221,10 @@ export const refineSchema = <S extends TSchema>(
       });
     }
   });
-/** A URL whose protocol, and optionally hostname, match the given patterns. Runs inside `inputSchema()`. */
+/**
+ * A URL, of at most `maxLength` characters when given, whose protocol (without its colon, such as `https`)
+ * and, optionally, hostname match the given patterns. Runs inside `inputSchema()`.
+ */
 export const urlSchema = (options: { protocol: RegExp; hostname?: RegExp; maxLength?: number }) =>
   refineSchema(
     t.String({ format: 'uri', ...(options.maxLength ? { maxLength: options.maxLength } : {}) }),

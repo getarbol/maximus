@@ -11,13 +11,21 @@ export function mediaType(contentType: string | null): string | undefined {
   return contentType?.split(';', 1)[0]?.trim().toLowerCase();
 }
 
-/** `application/json`, or a structured `+json` type such as `application/problem+json`. */
+/**
+ * Whether a Content-Type value is `application/json` or a structured `+json` type such as
+ * `application/problem+json`, whatever its parameters and case.
+ */
 export function isJsonMediaType(value: string | null): boolean {
   const type = mediaType(value);
   return type === 'application/json' || /^application\/[a-z0-9!#$&^_.+-]+\+json$/.test(type ?? '');
 }
 
-/** Decode bounded JSON into unknown for the owner's input/output validator. */
+/**
+ * Reads a JSON body within `maxBytes` and parses it, as `unknown` for a schema to check. A Content-Type other
+ * than `application/json` (or any `+json` type, with `allowJsonSuffix`) fails as `unexpected_content_type`
+ * before anything is read, and text that does not parse as `invalid_json`; the other failures are
+ * `readBodyText`'s.
+ */
 export async function readJsonBody(
   source: Pick<Request, 'body' | 'headers'>,
   options: {
@@ -45,7 +53,11 @@ export async function readJsonBody(
   }
 }
 
-/** Pass the same deadline to fetch; empty 204/205 responses have no JSON body. */
+/**
+ * Reads a response's JSON body as `readJsonBody` does, accepting any `+json` type: a 204 or 205 reads as
+ * `null`, and a signal already aborted fails as `aborted` without reading. Pass the signal the `fetch` used,
+ * so one deadline covers the request and its body.
+ */
 export async function readJsonResponse(
   response: Response,
   options: { maxBytes: number; signal: AbortSignal }
@@ -60,7 +72,11 @@ export async function readJsonResponse(
   return await readJsonBody(response, { ...options, allowJsonSuffix: true });
 }
 
-/** Bounded Retry-After hint only. A hint never makes repeating a mutation safe. */
+/**
+ * The seconds a `Retry-After` value asks a client to wait, as delta seconds or as an HTTP date relative to
+ * `nowMs`, rounded up and held between 0 and `maximum` (an hour by default); undefined when the value is
+ * absent or unreadable. It is a hint: it never makes repeating a write safe.
+ */
 export function retryAfterSeconds(value: string | null, nowMs: number, maximum = 3600): number | undefined {
   if (!value || !Number.isFinite(nowMs) || !Number.isSafeInteger(maximum) || maximum < 0) {
     return;

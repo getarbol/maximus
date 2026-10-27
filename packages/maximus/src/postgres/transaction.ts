@@ -39,7 +39,12 @@ export interface TransactionOptions {
   idleTimeoutMs: number;
   /** The transaction's isolation level; `read committed` when absent. */
   isolation?: 'read committed' | 'repeatable read' | 'serializable';
-  /** Opt in only when the callback performs database work exclusively. Defaults to one attempt. */
+  /**
+   * Retries a transaction the database aborted (`DATABASE_RETRY`), checking out a client again, up to
+   * `maxAttempts` attempts in all (1 to 5), waiting `baseDelayMs` (1 to 1000) times the attempt number, plus
+   * jitter, between them. Set it only when the callback does nothing but database work; without it, a
+   * transaction runs once.
+   */
   databaseOnlyRetry?: { maxAttempts: number; baseDelayMs: number };
 }
 /** The work's value, or a classified failure. */
@@ -80,11 +85,15 @@ function validateOptions(tenant: TenantContext, options: TransactionOptions) {
 }
 
 /**
- * Run short owner SQL on one checked-out client, passing trusted tenant context explicitly.
- * Owners enforce organization predicates and composite keys; this helper does not install RLS
- * or pretend a session setting enforces isolation. The pool must use a restricted runtime role.
- * Never perform provider/model/stream I/O in the callback. Unexpected callback errors retain their
- * identity after rollback. Uncertain COMMIT never retries; reconcile by the owner's logical key.
+ * Runs `work` in one short transaction on a client checked out of `pool`: it begins at the isolation level,
+ * sets the time budgets for this transaction alone, passes the tenant explicitly and commits. It answers the
+ * work's value, or a classified failure, rolling back while the client can still be trusted; an error without
+ * a SQLSTATE that the work throws is thrown on, as it was, after the rollback. A client whose state is
+ * unknown is discarded rather than returned to the pool. It installs no row-level security, and no session
+ * setting stands for isolation: every query must filter by `tenant.organizationId` and use composite keys
+ * itself, and the pool must connect as a restricted role. Keep the callback to database work, without
+ * provider, model or stream I/O. An uncertain commit is never retried; reconcile it by the work's own key
+ * before repeating anything. An invalid organization id or option throws a TypeError.
  */
 export async function withTenantTransaction<T>(
   pool: Pick<Pool, 'connect'>,

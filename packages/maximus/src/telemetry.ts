@@ -80,8 +80,9 @@ export interface AdmissionObservation {
   errorCode: string;
 }
 /**
- * Receives observations as background work: operation calls, refused admissions and unexpected errors. An
- * observer that fails affects neither the response nor another observer.
+ * Receives observations of operation calls and refused admissions as background work, while telemetry is on
+ * and the runtime gives the call a `waitUntil`, and unexpected errors as they happen. An observer that fails
+ * affects neither the response nor another observer.
  */
 export interface Observer<E> {
   /**
@@ -115,7 +116,10 @@ export interface TelemetryConfig<E> {
    * the others.
    */
   observers?: readonly Observer<E>[];
-  /** Read an actual active exporter trace, never a client-supplied header or generated correlation ID. */
+  /**
+   * Returns the trace id of the span the tracing exporter has active, which observations carry when it is a
+   * valid W3C trace id. Read it from the active span, never from a request header, and never generate one.
+   */
   traceId?: () => string | null;
 }
 /** Microseconds since `started`, a `performance.now()` reading. */
@@ -149,7 +153,10 @@ function activeTraceId<E>(config?: TelemetryConfig<E>): string | null {
     return null;
   }
 }
-/** Logs a refused admission (`maximus.admission.rejected`) and hands it to the observers. */
+/**
+ * Logs a refused admission (`maximus.admission.rejected`) and hands it to the observers as background work.
+ * Nothing is recorded while telemetry is off or without a background context.
+ */
 export function recordAdmission<E>(
   manifest: { name: string; telemetry?: TelemetryConfig<E> },
   env: E,
@@ -269,7 +276,8 @@ export function diagnosticsEnabled(): boolean {
 }
 /**
  * Logs an unexpected error by its safe description only (`maximus.unexpected`: error and cause names, issue
- * count, stack locations; never a message) and tells the observers.
+ * count, stack locations; never a message) and tells the observers of the current `withDiagnostics` scope.
+ * It does nothing while diagnostics are off.
  */
 export function reportUnexpected(error: unknown, surface = 'application', requestId?: string): void {
   if (!diagnosticsEnabled()) {
@@ -290,7 +298,10 @@ export function reportUnexpected(error: unknown, surface = 'application', reques
     }
   }
 }
-/** Hands the observation of one operation call to the observers, as background work. */
+/**
+ * Hands the observation of one operation call to the observers, as background work. Nothing is recorded
+ * while telemetry is off or without a background context.
+ */
 export function recordExecution<E>(
   manifest: { name: string; telemetry?: TelemetryConfig<E> },
   env: E,

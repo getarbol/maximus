@@ -8,21 +8,27 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 /** A Cloudflare ray id, with its optional data center suffix. */
 const RAY_PATTERN = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/;
 
-/** Only technical support identifiers. Never use these values as authority or dedupe keys. */
+/**
+ * Whether a value is a request id: a UUID or a Cloudflare ray id. A request id correlates diagnostics; never
+ * use one as authority or as a deduplication key.
+ */
 export function isRequestId(value: unknown): value is string {
   return typeof value === 'string' && (UUID_PATTERN.test(value) || RAY_PATTERN.test(value));
 }
 
 /**
- * Public ingress mints an id by default. Only pass trustedEdgeRay from the
- * Cloudflare edge or a separately authenticated internal caller; arbitrary
- * X-Request-Id/CF-Ray supplied by an untrusted caller must not be adopted.
+ * A request id: `trustedEdgeRay` when it is a valid request id, otherwise a random UUID. Pass a ray id only
+ * from the Cloudflare edge or from a caller authenticated separately, never an `x-request-id` or `cf-ray`
+ * value an untrusted caller sent.
  */
 export function createRequestId(trustedEdgeRay?: string | null): string {
   return isRequestId(trustedEdgeRay) ? trustedEdgeRay : crypto.randomUUID();
 }
 
-/** W3C v00 only. Parsing is not SDK span activation, sampling approval or authentication. */
+/**
+ * A parsed W3C `traceparent` header of version 00. Parsing one starts no span, decides no sampling and
+ * authenticates nothing.
+ */
 export interface TraceParent {
   /** The trace id: 32 lowercase hexadecimal characters, never all zeros. */
   traceId: string;
@@ -45,9 +51,9 @@ export function parseTraceParent(value: string | null | undefined): TraceParent 
 }
 
 /**
- * Durable correlation is persisted with domain work; it does not keep a request
- * span open for hours. The owner starts a new attempt span and links it to origin.
- * No principal, bearer, baggage, arguments or customer ids belong in this object.
+ * The correlation durable work persists with its domain data, so each later attempt can be tied to the
+ * request that started it: the owner starts a span for each attempt and links it to the origin, rather than
+ * keeping the request's span open. No principal, token, baggage, arguments or customer ids belong in it.
  */
 export interface DurableCorrelation {
   /** The id of the request that started the work: a UUID or a Cloudflare ray id. */
@@ -60,7 +66,7 @@ export interface DurableCorrelation {
 }
 /**
  * The correlation to persist with durable work: a valid request id and, when it parses, the originating
- * `traceparent`.
+ * `traceparent`. A request id that is not one throws a TypeError.
  */
 export function durableCorrelation(requestId: string, originTraceParent?: string): DurableCorrelation {
   if (!isRequestId(requestId)) {

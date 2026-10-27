@@ -1,3 +1,7 @@
+/**
+ * The type a schema decodes to: TypeBox's `StaticDecode` where a native transform needs it, `Static`
+ * everywhere else.
+ */
 import type {
   Kind,
   TransformKind,

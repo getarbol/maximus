@@ -3,7 +3,7 @@
  * its stack locations, never a message.
  */
 
-/** Built-in identities only; each consumer supplies its domain error names. */
+/** The built-in error names a description keeps; `createDiagnostics` adds the names a consumer supplies. */
 export const BUILTIN_ERROR_NAMES = [
   'AbortError',
   'AggregateError',
@@ -18,7 +18,10 @@ export const BUILTIN_ERROR_NAMES = [
   'URIError',
 ] as const;
 
-/** Read a diagnostic property without letting a getter or Proxy break recovery. */
+/**
+ * A property of a thrown value, or undefined when it has none or reading it throws, so a getter or a Proxy
+ * cannot break the handling of an error.
+ */
 export function errorProperty(value: unknown, key: string): unknown {
   try {
     return typeof value === 'object' && value !== null && key in value ? Reflect.get(value, key) : undefined;
@@ -54,9 +57,11 @@ export interface ErrorDescription {
 }
 
 /**
- * Create a pure projection for SDK events and owner-written log lines. Names are
- * developer constants, never values taken from an upstream response. Messages,
- * record keys, URLs and query parameters are never returned. No logging occurs.
+ * The error describer for diagnostics, for an SDK's events or a log line its owner writes: `describeError`
+ * answers an `ErrorDescription`, and `safeErrorName` an error's name when it is built in or among
+ * `errorNames`, else `UnknownError`. Pass constant names of your own errors, never a value taken from an
+ * upstream response. No message, record key, URL or query parameter reaches a description, and nothing is
+ * logged.
  */
 export function createDiagnostics(errorNames: readonly string[] = []) {
   const names = new Set<string>([...BUILTIN_ERROR_NAMES, ...errorNames]);

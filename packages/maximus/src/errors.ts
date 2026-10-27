@@ -39,7 +39,7 @@ export interface ErrorDefinition {
   retryable?: boolean;
   /** The seconds a client waits before retrying, sent as `Retry-After`. */
   retryAfter?: number;
-  /** Explicit, strict domain diagnostics; omitted definitions retain empty data. */
+  /** The strict object schema of the failure's `data`; without one, its data is the empty object. */
   dataSchema?: TObject<TProperties>;
 }
 /**
@@ -207,7 +207,9 @@ const CATALOG_MEMBERS = {
 /**
  * An error catalog: the standard failures and the application's own, each with a fixed code, status, message
  * and retry semantics. `catalog.name.create(data?)` builds a failure; the application validates every failure
- * an operation returns against the catalog.
+ * an operation returns against the catalog. It throws a TypeError for a name the standard failures or the
+ * catalog's members use, a code that is not uppercase words joined by underscores, a repeated code, a status
+ * outside 400 to 599, or a `dataSchema` that is not a strict object.
  */
 export function defineErrors<const D extends Record<string, ErrorDefinition>>(
   domain: WithoutReservedNames<D>
@@ -272,5 +274,8 @@ export function resultSchema<O extends TSchema, F extends TSchema>(value: O, err
   ]);
 }
 
-/** Failure presentation may carry only canonical technical correlation identifiers. */
+/**
+ * Whether a value is a request id, a UUID or a Cloudflare ray id: the one identifier that may accompany a
+ * failure, as its envelope's `metadata.requestId`.
+ */
 export { isRequestId } from './internal/correlation.ts';

@@ -1,7 +1,7 @@
 /**
  * What `.build()` refuses. Every rule an application must keep is checked once, at construction, so a
- * service that breaks one never starts: each refusal is a TypeError that names the rule and, when one
- * operation breaks it, that operation.
+ * service that breaks one never starts: each refusal is a TypeError whose message names the rule, and most
+ * of the rules about one operation also name that operation.
  */
 import type { TSchema } from '@sinclair/typebox';
 
@@ -30,9 +30,9 @@ const RESERVED_NAMES = new Set([
   '__proto__',
   'prototype',
 ]);
-/** An MCP tool name: a letter, then up to 63 letters, digits and underscores. */
+/** An MCP tool name: a lowercase letter, then up to 63 letters, digits and underscores. */
 const TOOL_NAME = /^[a-z][A-Za-z0-9_]{0,63}$/;
-/** Every field an operation has: any other, such as a misspelled or retired one, would do nothing. */
+/** Every field an operation has: any other, such as a misspelled one, would do nothing. */
 const OPERATION_FIELDS: ReadonlySet<string> = new Set(
   Object.keys({
     actorKinds: true,
@@ -57,7 +57,11 @@ const OPERATION_FIELDS: ReadonlySet<string> = new Set(
   } satisfies Record<keyof OperationShape, true>)
 );
 
-/** Checks the application, then hands it back unchanged. */
+/**
+ * Checks an application against every rule `.build()` enforces, then hands it back unchanged; a refusal is a
+ * TypeError. Curried, so `Env` and `C` can be given explicitly while the operations' types are inferred from
+ * the argument.
+ */
 export function defineApp<Env, C>() {
   return <const Ops extends Record<string, OperationShape>>(manifest: AppManifest<Env, C, Ops>) => {
     checkApplication(manifest);
@@ -66,8 +70,7 @@ export function defineApp<Env, C>() {
 }
 
 /**
- * Every rule, in the order they always ran, so an application that breaks several meets the same refusal
- * first.
+ * Every rule, in a fixed order, so an application that breaks several always meets the same refusal first.
  */
 function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
   manifest: AppManifest<Env, C, Ops>
@@ -284,9 +287,9 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
 
 /**
  * A schema reference (TypeBox `Ref` or `Recursive`) resolves when the OpenAPI document bundles the schemas,
- * to the one definition its name has. An application whose schemas refer to a name is bundled now, so a
- * reference that names no single definition is refused before the service starts rather than when the
- * document is first requested; schemas without references have nothing to resolve.
+ * to the one definition its name has. An application whose schemas refer to a name is bundled at
+ * construction, so a reference that names no single definition is refused before the service starts rather
+ * than when the document is first requested; schemas without references have nothing to resolve.
  */
 function checkSchemaReferences<Env, C, Ops extends Record<string, OperationShape>>(
   manifest: AppManifest<Env, C, Ops>

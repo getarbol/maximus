@@ -143,8 +143,8 @@ export function bundleSchemas(
 
   const rewritten = sources.map((source) => rewrite(source, new Map()));
   /**
-   * A pending reference as the one component its name now has; refused when the name has several shapes or
-   * none.
+   * A pending reference as the one component its name has once every variant is known; refused when the name
+   * has several shapes or none.
    */
   const resolve = (reference: string) => {
     if (!reference.startsWith(PLACEHOLDER)) {

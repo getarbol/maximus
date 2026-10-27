@@ -72,6 +72,7 @@ function failureResponse(status: number, failures: readonly ErrorDefinition[]) {
 
 /** An OpenAPI document as Maximus writes it: JSON, with its paths, component schemas and extensions. */
 export interface OpenApiDocument {
+  /** The document's other fields: `openapi`, `info` and `servers`. */
   [key: string]: unknown;
   /** The OpenAPI `paths` object: each route template, with its operation under the lowercase HTTP method. */
   paths: unknown;
@@ -94,7 +95,11 @@ export interface OpenApiDocument {
 export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
   options?: {
-    /** Adapter-owned operation metadata; schemas in extensions share the document's components. */
+    /**
+     * Adds an adapter's `x-` extensions to each documented operation, from its name and declaration; a key
+     * without the `x-` prefix throws a TypeError. Schemas in the extensions are bundled into the document's
+     * components with the rest.
+     */
     operationExtensions?: (name: string, operation: OperationShape) => Record<`x-${string}`, unknown>;
   }
 ): Record<string, unknown> {

@@ -35,8 +35,8 @@ export interface WorkerRuntime<E, O extends Record<string, OperationShape>> {
   /** The Worker's default export: `fetch` for HTTP, plus the other `handlers` given to `createWorker`. */
   handler: ExportedHandler<E>;
   /**
-   * A `WorkerEntrypoint` class with one method per operation that declares `rpc`; export it by name for
-   * Service Bindings to call.
+   * A `WorkerEntrypoint` class with one method per operation that declares `rpc`, each taking the caller's
+   * principal and the input and answering a Result; export it by name for Service Bindings to call.
    */
   entrypoint: new (ctx: ExecutionContext, env: E) => WorkerEntrypoint<E> & RpcMethods<O>;
   /**
@@ -65,13 +65,22 @@ type WorkerEventHandler<E> = (
  * handler's options, its static assets and its plain routes.
  */
 export interface WorkerOptions<E> {
-  /** The Worker's other handlers (`scheduled`, `queue`, …), merged into the default export. */
+  /**
+   * The Worker's other handlers (`scheduled`, `queue`, …), merged into the default export. Each runs inside
+   * the application's diagnostics: an error it throws is reported by its safe description, then thrown on.
+   */
   handlers?: Omit<ExportedHandler<E>, 'fetch'>;
   /** Protocol transports served beside the operations, such as `mcp()`. */
   transports?: HttpOptions<E>['transports'];
-  /** Native HTTP mounting, product admission and static/protocol composition. */
+  /**
+   * The HTTP handler's other options: origins, middleware, `before`, `basePath`, `healthPath`, mounts,
+   * `fallback`, `aroundOperation` and the test `verify`.
+   */
   http?: Omit<HttpOptions<E>, 'transports' | 'routes' | 'annotate'>;
-  /** Explicit build files and SPA page admission, served through the native HTTP fallback. */
+  /**
+   * A web app's build, served from a static-assets binding as the HTTP fallback; it cannot be combined with
+   * `http.fallback`.
+   */
   assets?: WorkerAssetsOptions<E>;
   /**
    * Plain routes outside token admission (provider webhooks, signed links,
@@ -84,7 +93,9 @@ export interface WorkerOptions<E> {
 /**
  * Turns an application into a Cloudflare Worker: `handler` (export it as default) serves HTTP and the other
  * handlers you pass; `entrypoint` (export it by name) serves every operation that declares `rpc` to the
- * Workers whose Service Binding names an allowed `caller`.
+ * Workers whose Service Binding names an allowed `caller`. An RPC call whose binding's props are anything but
+ * `{ caller }` with an allowed caller, or whose principal does not match `PrincipalSchema`, answers
+ * `UNAUTHORIZED`; an admitted one runs through the shared execution path without `authority`.
  */
 export function createWorker<E, C, O extends Record<string, OperationShape>>(
   application: AppManifest<E, C, O>,

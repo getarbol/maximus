@@ -43,7 +43,12 @@ export function permissionDescription(scope: string): string {
   return `${action.charAt(0).toUpperCase()}${action.slice(1)} ${subject}`;
 }
 
-/** Portable across MCP clients and model providers (`^[a-z][a-z0-9_]{0,63}$`). */
+/**
+ * The MCP tool name a gateway gives an operation, `<namespace>_<resource>_<verb>` in snake_case: the
+ * namespace `scheduling` with `{ resource: 'appointments', verb: 'findNearest' }` is
+ * `scheduling_appointments_find_nearest`. A name that is not portable across MCP clients and model providers
+ * (`^[a-z][a-z0-9_]{0,63}$`) throws a TypeError.
+ */
 export function mcpToolName(namespace: string, name: ProjectedName): string {
   const tool = `${snake(namespace)}_${snake(name.resource)}_${snake(name.verb)}`;
   if (!/^[a-z][a-z0-9_]{0,63}$/.test(tool)) {
@@ -64,8 +69,9 @@ function resolved(schema: unknown, resolve: SchemaResolver | undefined): unknown
 }
 
 /**
- * How one input field travels in a query string, or null when it cannot: objects and nested lists
- * do not. Lists are comma separated; a `null` alternative is not expressible and is ignored.
+ * How one input field travels in a query string, its `$ref`s followed through `resolve`, or null when it
+ * cannot: objects, nested lists and references `resolve` cannot follow do not. Lists are comma separated; a
+ * `null` alternative is not expressible and is ignored.
  */
 export function queryKind(schema: unknown, resolve?: SchemaResolver): QueryKind | null {
   const value = resolved(schema, resolve);

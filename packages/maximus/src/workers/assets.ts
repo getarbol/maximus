@@ -16,22 +16,42 @@ type AssetBindingName<E> = {
 }[keyof E] &
   string;
 
-/** Explicit assets policy. Unknown paths never receive the SPA shell. */
+/**
+ * Which paths of a web app's build the Worker serves, and how: a page answers the app's shell, a listed file
+ * revalidates on every use, a file under an immutable prefix is cached for a year, and any other path answers
+ * `NOT_FOUND`, never the shell (under `development`, the dev server answers it). A method other than GET or
+ * HEAD answers `HTTP_METHOD_NOT_ALLOWED`.
+ */
 export interface WorkerAssetsOptions<E> {
-  /** Environment binding whose fetch method serves the uploaded build files. */
+  /** The name of the static-assets binding that serves the build's files. */
   binding: AssetBindingName<E>;
-  /** Known SPA routes. Stateless expressions may admit product-owned detail routes. */
+  /** The app's pages, which answer its shell with `cache-control: no-store`. */
   pages?: {
+    /** The pages' exact paths, such as `/` and `/settings`. */
     paths: readonly string[];
+    /**
+     * Patterns for pages whose paths carry a parameter, such as `/^\/notes\/[\w-]+$/`: regular expressions
+     * without the global or sticky flag.
+     */
     patterns?: readonly RegExp[];
-    /** Build shell fetched for admitted pages; defaults to /index.html. */
+    /** The build file a page answers with; `/index.html` by default. */
     shell?: string;
   };
-  /** Named build files that must revalidate, such as manifests and service workers. */
+  /**
+   * Build files served by exact path that clients revalidate on every use (`cache-control: no-cache`), such
+   * as a manifest or a service worker.
+   */
   files?: readonly string[];
-  /** Slash-delimited namespaces containing content-hashed, immutable build files. */
+  /**
+   * Path prefixes whose files are content-hashed, served with `cache-control: public, max-age=31536000,
+   * immutable`; a prefix may not be `/`.
+   */
   immutablePrefixes?: readonly string[];
-  /** Product browser policy, including CSP. Native content type and cache policy remain authoritative. */
+  /**
+   * Response headers for every page and file, such as a Content Security Policy, or a function of the request
+   * and env that answers them. They never set `content-type` or `cache-control`, which the build file and
+   * the path decide.
+   */
   headers?: HeadersInit | ((request: Request, env: E) => HeadersInit);
   /**
    * Development under Vite (the Cloudflare Vite plugin), whose dev server stands behind the binding:
@@ -59,7 +79,11 @@ function requireAssetPath(path: string): string {
 function isAssetBinding(value: unknown): value is AssetBinding {
   return typeof value === 'object' && value !== null && 'fetch' in value && typeof value.fetch === 'function';
 }
-/** Compile the explicit build policy once; core HTTP retains ownership of API and transport misses. */
+/**
+ * The route that serves a web app's build by `options`, which `createWorker` installs as the HTTP fallback,
+ * so it answers only paths no operation, transport or other route claims. Construction throws a TypeError
+ * for a path that is not an absolute asset path, a global or sticky pattern, or an immutable prefix of `/`.
+ */
 export function createAssetHandler<E>(options: WorkerAssetsOptions<E>): HttpRoute<E> {
   const bindingName = options.binding;
   const pages = new Set(options.pages?.paths.map(requireAssetPath));

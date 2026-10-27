@@ -62,7 +62,7 @@ async function skillEntry(skill: McpSkill) {
 }
 
 /**
- * Serve skills through the Skills extension: `skills/list`, `skills/get`, and `resources/read` of each
+ * Serves skills through the Skills extension: `skills/list`, `skills/get`, and `resources/read` of each
  * `SKILL.md`, each request answered through `answer`, which reports an unexpected failure without its text.
  * Clients without the extension still find the files among the server's resources.
  */
@@ -139,7 +139,7 @@ export function skillTool(name: string, skills: readonly McpSkill[]): Tool {
   };
 }
 
-/** Answer a skill tool call. An unknown name is a tool error, which the model can correct. */
+/** Answers a skill tool call. An unknown name is a tool error, which the model can correct. */
 export function readSkill(skills: readonly McpSkill[], input: Record<string, unknown>): CallToolResult {
   const skill = skills.find((candidate) => candidate.name === input.name);
   if (!skill) {

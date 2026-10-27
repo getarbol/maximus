@@ -154,7 +154,11 @@ function carriedMessages(body: string): number {
   }
 }
 
-/** Answers one MCP request of an admitted caller. */
+/**
+ * Answers one MCP request of an admitted caller: admits the rest of a batch against the rate limit, then
+ * lets a stateless server list the caller's tools, run them through `invoke` and serve the resources,
+ * prompts and skills. A 5xx answer is reported as an unexpected error.
+ */
 export async function handleMcp({
   request,
   requestId,

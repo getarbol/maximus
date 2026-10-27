@@ -32,7 +32,10 @@ export const ExecutionEventSchema = Type.Object(
 );
 /** An analytics event. */
 export type ExecutionEvent = Static<typeof ExecutionEventSchema>;
-/** A store that records analytics events and answers whether it kept each one. */
+/**
+ * A store that records analytics events and answers whether it kept each one; `analytics({ record })` can
+ * hand it each event, `record: (env, event) => sink.record(event)`.
+ */
 export interface ExecutionSink {
   /**
    * Keeps one event; an `ok: false` result means the event was not kept, which counts as a delivery failure.
@@ -41,7 +44,10 @@ export interface ExecutionSink {
 }
 /** What `analytics()` takes: where events go, whether it records, and how events name the actor. */
 export interface AnalyticsOptions<E> {
-  /** Whether events are recorded, for every environment or for this one; on by default. */
+  /**
+   * Whether events are recorded: a boolean, or a function that decides for each env; on by default. A
+   * function that throws turns recording off for that call.
+   */
   enabled?: boolean | ((env: E) => boolean);
   /** Keeps one event in the application's store; an `ok: false` result counts as a delivery failure. */
   record: (env: E, event: ExecutionEvent) => Promise<unknown>;

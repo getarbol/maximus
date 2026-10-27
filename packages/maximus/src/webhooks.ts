@@ -1,5 +1,5 @@
 /**
- * `@arbol-ai/maximus/webhooks`: webhook signature verification for the three schemes providers actually use.
+ * `@arbol-ai/maximus/webhooks`: webhook signature verification for the three schemes providers use.
  *
  * - {@link verifyHmacSignature}: an HMAC-SHA256 of the raw body, hex or base64,
  *   in one header (the common `X-…-Signature` / `X-Hub-Signature-256` scheme).
@@ -132,8 +132,9 @@ const failure = (reason: WebhookSignatureFailureReason): Result<never, WebhookSi
 });
 
 /**
- * Verify an HMAC-SHA256 of the raw body. `signature` is the header value,
- * optionally with a scheme prefix such as `sha256=` (removed with `prefix`).
+ * Verifies an HMAC-SHA256 of the raw body. `signature` is the header value, hex or base64 as `encoding`
+ * says, optionally with a scheme prefix such as `sha256=` (removed with `prefix`). An absent signature fails
+ * as `missing`, one that does not decode as `malformed`, and one that does not match as `mismatch`.
  */
 export async function verifyHmacSignature(options: {
   body: string | Uint8Array;
@@ -164,9 +165,10 @@ export async function verifyHmacSignature(options: {
 }
 
 /**
- * Verify a `t=<unix seconds>,v0=<hex>` header (several `v0`/`v1` values may be
- * present during secret rotation, up to {@link MAX_SIGNATURES}; one match is
- * enough) signing `<t>.<body>`.
+ * Verifies a `t=<unix seconds>,<label>=<hex>` header, an HMAC-SHA256 of `<t>.<body>`. Every hex signature
+ * under one of `labels` is tried, up to {@link MAX_SIGNATURES} (a provider rotating its secret sends several;
+ * one match is enough), and the timestamp must be within `toleranceSeconds` (300 by default) of `now`, in
+ * milliseconds, in either direction. Answers the signed timestamp.
  */
 export async function verifyTimestampedSignature(options: {
   body: string | Uint8Array;
@@ -217,10 +219,10 @@ export async function verifyTimestampedSignature(options: {
 }
 
 /**
- * Verify a Standard Webhooks delivery. The secret is the provider's
- * `whsec_<base64>` value (the prefix is optional), and the signature header may
- * list up to {@link MAX_SIGNATURES} signatures. Returns the message id, the
- * idempotency key of the delivery, and its timestamp.
+ * Verifies a Standard Webhooks delivery. The secret is the provider's `whsec_<base64>` value (the prefix is
+ * optional), the signature header may list up to {@link MAX_SIGNATURES} `v1` signatures, and the timestamp
+ * must be within `toleranceSeconds` (300 by default) of `now`, in either direction. Answers the message id,
+ * which is the delivery's idempotency key, and its timestamp.
  */
 export async function verifyStandardWebhook(options: {
   body: string | Uint8Array;

@@ -17,7 +17,11 @@ export function isInputHeaderName(header: string): boolean {
   return /^[A-Za-z0-9-]+$/u.test(header) && !RESERVED_HEADERS.has(header.toLowerCase());
 }
 
-/** Parse declared templates, never caller paths. Parameters occupy one complete path segment. */
+/**
+ * The parameter names of a declared route template, in order. A template is versioned (`/v1/…`) with at least
+ * one segment after the version, each fixed or a complete `{parameter}` with a unique, safe name; anything
+ * else throws a TypeError. It reads declared templates, never a request's path.
+ */
 export function operationPathParameters(path: string): string[] {
   const segments = path.split('/');
   if (segments[0] !== '' || !/^v[1-9][0-9]*$/.test(segments[1] ?? '') || segments.length < 3) {
@@ -40,7 +44,10 @@ export function operationPathParameters(path: string): string[] {
   return parameters;
 }
 
-/** A decoded item key stays in one segment; dot segments and controls cannot alter URL ownership. */
+/**
+ * One path segment, percent-decoded, or null when it does not decode or decodes to a value
+ * `isPathParameterValue` refuses, so decoding cannot change which route a path reaches.
+ */
 export function decodePathParameter(segment: string): string | null {
   try {
     const value = decodeURIComponent(segment);
@@ -50,7 +57,10 @@ export function decodePathParameter(segment: string): string | null {
   }
 }
 
-/** Item keys are nonempty strings, encodable as UTF-8, that cannot change URL path ownership when encoded. */
+/**
+ * Whether a value can be a path parameter: a nonempty string other than `.` and `..`, without a slash, a
+ * backslash, a control character or a lone surrogate, so it stays one segment when encoded.
+ */
 export function isPathParameterValue(value: unknown): value is string {
   if (
     typeof value !== 'string' ||
@@ -71,7 +81,10 @@ export function isPathParameterValue(value: unknown): value is string {
   return true;
 }
 
-/** Owner metadata is retained unchanged; schema admission remains the manifest's responsibility. */
+/**
+ * What the router reads of a definition: its method and path template. Its other fields come back unchanged
+ * in a match; checking a request's input is not the router's work.
+ */
 export interface HttpRouteDefinition {
   /**
    * The method and versioned path template to route, such as `GET /v1/notes/{noteId}`; a definition without
@@ -127,8 +140,11 @@ export interface HttpRouteMatch<D> {
 }
 
 /**
- * Exact routes use a Map. Template branches compile into deterministic states at construction:
- * one transition per segment, including overlapping fixed prefixes, with no per-request route scan.
+ * The router for a set of definitions: `match(method, path)` finds the one route a request reaches, with its
+ * decoded parameters, and `ownsPath(path)` says whether any route answers a path. A definition without `http`
+ * is skipped. Construction throws a TypeError for an unsupported method, a malformed template, a duplicate
+ * route, or two templates that could match the same path. A fixed route is one map lookup; templates compile
+ * into states with one transition per segment, so matching never scans the routes.
  */
 export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitions: readonly D[]) {
   const exact = new Map<string, Route<D>>();

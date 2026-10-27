@@ -18,9 +18,12 @@ import type { Principal } from './tokens.ts';
 import { decodeInput } from './validation.ts';
 
 /**
- * The execution path every transport shares: checks that the caller may run the operation, decodes the input,
- * prepares the context, runs the middleware and the handler, then checks the result against the declared
- * output and failures. An unexpected error becomes `INTERNAL_ERROR` and is reported, never thrown.
+ * The execution path every transport shares: checks that the caller may run the operation (its scopes when
+ * `authority` is given, its actor kind, and `authority` itself when the operation has conditional scopes),
+ * decodes the input, prepares the context, runs the middleware and the handler, then checks the result
+ * against the catalog, the declared failures, the output schema and the output limit. A refused caller
+ * answers `FORBIDDEN` and a refused input `INVALID_INPUT`. An unexpected error becomes `INTERNAL_ERROR`,
+ * reported while telemetry is on, and is never thrown.
  */
 export async function executeOperation<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
@@ -62,8 +65,8 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       ...(trustedAuthority ? { authority: trustedAuthority } : {}),
     };
     /**
-     * A failure the call answers, from its context or its handler: one of the catalog and, when the operation
-     * declares its failures, a declared or standard one. Any other is the server's error.
+     * A failure the call answers, from its context, middleware or handler: one of the catalog and, when the
+     * operation declares its failures, a declared or standard one. Any other is the server's error.
      */
     const declared = (answered: Failure): Failure => {
       const failure = manifest.errors.validate(answered);

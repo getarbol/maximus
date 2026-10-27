@@ -3,7 +3,10 @@
  */
 import type { TSchema } from '@sinclair/typebox';
 
-/** Every body variant must declare its path authority as a required string field. */
+/**
+ * The parameter's schema in an object input, or in each member of a union. Every one must declare the
+ * parameter as a required string field, or this throws a TypeError.
+ */
 export function pathParameterSchemas(input: TSchema, parameter: string): TSchema[] {
   if (input.type === 'object') {
     const schema = input.properties?.[parameter] as TSchema | undefined;

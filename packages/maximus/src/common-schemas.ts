@@ -35,7 +35,7 @@ export const HexColorSchema = Type.String({
   description: 'A color, as #rrggbb.',
 });
 
-/** What every `delete` answers. */
+/** What a delete answers: the deleted resource's id and `deleted: true`, named `DeletedObject`. */
 export const DeletedObjectSchema = Type.Object(
   {
     id: Type.String({ description: 'The id of the deleted resource.' }),
@@ -51,7 +51,10 @@ const SignedUrlFieldSchema: TString = {
   ...HttpsUrlSchema,
   description: 'The signed URL. Anyone holding it has access until it expires.',
 };
-/** A link that grants access by itself until it expires, such as a file download. */
+/**
+ * A link that grants access by itself until it expires, such as a file download: its HTTPS `url` and its
+ * `expiresAt` date-time, named `SignedUrl`.
+ */
 export const SignedUrlSchema = Type.Object(
   {
     url: SignedUrlFieldSchema,
@@ -62,7 +65,7 @@ export const SignedUrlSchema = Type.Object(
 /** A URL that grants access by itself, and when it expires. */
 export type SignedUrl = Static<typeof SignedUrlSchema>;
 
-/** Another resource, by its id and the name people know it by. */
+/** Another resource, by its id and the name people know it by, named `NamedReference`. */
 export const NamedReferenceSchema = Type.Object(
   {
     id: Type.String({ description: 'The id of the referenced resource.' }),
@@ -73,7 +76,10 @@ export const NamedReferenceSchema = Type.Object(
 /** Another resource, by id and name. */
 export type NamedReference = Static<typeof NamedReferenceSchema>;
 
-/** A postal address, shaped as FHIR `Address`. */
+/**
+ * A postal address, shaped as FHIR `Address` (its lines, city, state, postal code, ISO 3166-1 alpha-2 country
+ * code and use), every field optional, named `PostalAddress`.
+ */
 export const PostalAddressSchema = Type.Object(
   {
     city: Type.Optional(Type.String({ maxLength: 120 })),

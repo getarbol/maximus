@@ -4,7 +4,7 @@
 import type { Failure } from './errors.ts';
 import { isRecord } from './internal/record.ts';
 
-/** Explicit operation outcome. Transports keep their own status and protocol envelope. */
+/** A successful outcome and its value. Each transport presents it in its own envelope. */
 export interface Success<T> {
   /** Always `true`, which marks a success. */
   ok: true;

@@ -74,14 +74,22 @@ export type TokenPrincipal = Static<typeof TokenPrincipalSchema>;
  *   plain HTTP bearer scheme with `description` saying how to obtain one, no
  *   OAuth discovery is served, and a 401 does not point at any. It requires
  *   `resolve` and cannot serve the MCP transport, whose clients discover
- *   authorization through OAuth.
+ *   authorization through OAuth, nor publish `resources`.
+ * - `oauth+bearer`: people present OAuth access tokens and machines bearer
+ *   tokens the application verifies, such as workload keys; `resolve`, which
+ *   it requires, verifies both. OpenAPI publishes the authorization-code flow
+ *   and a bearer scheme with `description`, each operation offering the ones
+ *   its `actorKinds` name, which every operation must then declare.
  */
 export type TokenScheme =
   | { type: 'oauth' }
   | { type: 'bearer'; description: string }
   | { type: 'oauth+bearer'; description: string };
 
-/** Request-local authority resolution; callbacks must never retain this context between requests. */
+/**
+ * What `tokens.resolve` and a `tokens.resourceMetadataUrl` function receive about the request being admitted.
+ * It belongs to that request: never keep it beyond it.
+ */
 export interface TokenResolutionContext<E = unknown> {
   /** The request's environment bindings, as scoped by `aroundOperation` when it wraps the operation. */
   readonly env: E;
@@ -89,7 +97,11 @@ export interface TokenResolutionContext<E = unknown> {
   readonly request: Request;
   /** Where the request arrived: `mcp` at a transport's path, such as `/mcp`, else `http`. */
   readonly surface: 'http' | 'mcp';
-  /** Declared application scopes, compiled once; these are capabilities to map, never caller grants. */
+  /**
+   * Every scope the application declares (its operations' scopes and conditional scopes, and each transport's
+   * scope), for a resolver that maps its own grants onto them. They are what the application can grant, never
+   * what the caller holds.
+   */
   readonly applicationScopes: readonly string[];
   /**
    * Keeps work running after the response, such as the Worker's `ExecutionContext`; absent when the handler
@@ -212,14 +224,31 @@ export interface TokenPolicy<E = unknown> {
    * token on a deployed Worker.
    */
   development?: TokenDevelopment;
-  /** Native Results express expected credential refusals; a raw verified identity remains supported. */
+  /**
+   * Verifies every bearer token itself, in place of the default OAuth verification; only the development
+   * token is checked before it. It answers the token's principal, or a failure Result: `FORBIDDEN` answers
+   * 403 and any other failure 401. Verify the token cryptographically. A principal that does not match
+   * `TokenPrincipalSchema`, a client whose class disagrees with the actor kind (a `machine` client is a
+   * `service`), a machine whose actor id is not its client id or `<client id>@clients` (except under
+   * `oauth+bearer`), and a thrown error answer `UNAUTHORIZED`. The operation's scopes are then checked
+   * against the principal's.
+   */
   resolve?: (
     token: string,
     context?: TokenResolutionContext<E>
   ) => Promise<TokenPrincipal | Result<TokenPrincipal, Failure>>;
-  /** Absolute discovery URL when a mounted API and its OAuth resource have different origins or paths. */
+  /**
+   * The protected-resource metadata URL a 401 challenge names, `WWW-Authenticate: Bearer
+   * resource_metadata="…"`, when it is not the default document below the base path: a URL, a function of the
+   * request that answers one, or `null` for a plain `Bearer` challenge. Set it when the API and its OAuth
+   * resource have different origins or paths, and whenever `resources` lists any.
+   */
   resourceMetadataUrl?: string | null | ((context: TokenResolutionContext<E>) => string | null);
-  /** Absolute RFC 9728 paths for distinct resources; replaces inferred discovery when configured. */
+  /**
+   * Protected-resource metadata documents (RFC 9728) to serve instead of the default one, by absolute path
+   * at or below `/.well-known/oauth-protected-resource`, one per resource. When set, the default document
+   * answers `NOT_FOUND`. A `bearer` scheme cannot set it.
+   */
   resources?: Readonly<Record<string, OAuthResource<E>>>;
   /**
    * How clients obtain tokens, as OpenAPI and discovery publish it: `oauth` (the default), `bearer` for
@@ -299,8 +328,8 @@ function tokenClient(claims: Record<string, unknown>, path: string | undefined):
 /**
  * The principal a verified access token grants, read where `mapping` says. A subject of the shape
  * `mapping.machineSubject` names, `<client id>@clients` by default, is a machine; anyone else is a person,
- * who holds only the granted scopes their permissions claim also lists. Malformed or inconsistent claims
- * are refused.
+ * who holds only the granted scopes their permissions claim also lists. Malformed or inconsistent claims,
+ * such as a missing `sub` or a subject shaped like another client's, are refused as `UNAUTHORIZED`.
  */
 export function projectToken(claims: unknown, mapping: TokenClaims = {}): Result<TokenPrincipal, Failure> {
   const refused = err(standardErrors.unauthorized.create());
@@ -338,7 +367,10 @@ export function projectToken(claims: unknown, mapping: TokenClaims = {}): Result
   });
   return principal.ok ? ok(principal.value) : refused;
 }
-/** The OAuth authorization server; there is no default, so a deployment always names its own. */
+/**
+ * The OAuth authorization server; there is no default, so a deployment always names its own, and a policy
+ * without one throws a TypeError.
+ */
 export function tokenIssuer(policy: Pick<TokenPolicy, 'issuer'>): string {
   if (!policy.issuer) {
     throw new TypeError('tokens.issuer is required to verify or document OAuth access tokens.');
@@ -373,10 +405,12 @@ function httpsUrl(value: string, base?: string): boolean {
 }
 
 /**
- * Refuse, at construction, an OAuth policy that could never verify or document a token. Verification
- * is built lazily, so without this check a missing issuer surfaced only at run time, as a 401 for
- * every token and a 500 for the OpenAPI document. An application that issues its own bearer tokens
- * names no authorization server.
+ * Refuses, at construction, a token policy that could never verify or document a token: a malformed
+ * `development` and, unless the application issues its own bearer tokens, an empty or unknown algorithm, a
+ * malformed claim mapping, a missing issuer, or an issuer or endpoint that is not an HTTPS URL. Verification
+ * is built on first use, so without this check such a policy would fail only at run time, as a 401 for every
+ * token and a 500 for the OpenAPI document. An application that issues its own bearer tokens names no
+ * authorization server.
  */
 export function checkTokenAuthority<E>(
   policy: Pick<
@@ -452,7 +486,13 @@ export function tokenEndpoints(
   };
 }
 
-/** A token is accepted when its `aud` names any one of the policy's audiences. */
+/**
+ * Verifies OAuth access tokens against the issuer's JWKS and answers their claims, or throws for a token it
+ * refuses: the signature by one of the policy's algorithms (`RS256` by default), `iss`, an `aud` that names
+ * any one of the policy's audiences, and `exp` and `sub`, with five seconds of clock tolerance. The JWKS is
+ * fetched within ten seconds and cached for ten minutes. An issuer or JWKS URL that is not HTTPS throws a
+ * TypeError at construction.
+ */
 export function createTokenVerifier<E>(policy: TokenPolicy<E>) {
   const issuer = tokenIssuer(policy);
   const audience = tokenAudiences(policy);
@@ -477,8 +517,12 @@ export function createTokenVerifier<E>(policy: TokenPolicy<E>) {
   };
 }
 /**
- * Admits a request by its bearer token: verifies it (OAuth by JWKS, or the policy's own `resolve`) and checks
- * that it carries the required scope. Refusals are `UNAUTHORIZED` or `FORBIDDEN` failures, never exceptions.
+ * Admits a request by its bearer token: verifies it (the development token from a local host, else the
+ * policy's own `resolve` when it has one, else OAuth against the issuer's JWKS) and checks that its scopes
+ * admit the request. A request without a bearer token, with a token longer than 16384 characters, or with an
+ * `x-api-key` header is refused; without `resolve` or a development token, the token must be a compact JWS.
+ * Refusals are `UNAUTHORIZED` or `FORBIDDEN` failures, never exceptions. `given` stands in for the JWKS check
+ * in tests, answering a token's claims.
  */
 export function createTokenAuthorization<E>(
   policy: TokenPolicy<E>,
@@ -491,7 +535,10 @@ export function createTokenAuthorization<E>(
     verifier ??= createTokenVerifier(policy);
     return verifier(token);
   };
-  /** Admit the request when its token carries `scope`, or any one of `scope` when it is a list. */
+  /**
+   * Admits the request when its token carries `scope` or, for a list, any one of them (every one with
+   * `scopeMatch` `all`).
+   */
   return async (
     request: Request,
     scope: string | readonly string[],

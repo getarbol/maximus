@@ -19,11 +19,19 @@ export type BodyFailure = Failure & {
 
 /** The raw body of an operation declared with `http.body: 'bytes'`, read on demand. */
 export interface BinaryBody {
-  /** Read once within this operation's byte limit, after the owner admits the target resource. */
+  /**
+   * Reads the body within the operation's byte limit, once: every call answers the first read's result.
+   * `UNSUPPORTED_MEDIA_TYPE` for a compressed body, `REQUEST_TOO_LARGE` beyond the limit and `INVALID_INPUT`
+   * for a malformed length or a body that broke off or was aborted. Call it once the handler has admitted the
+   * resource the body is for.
+   */
   read: () => Promise<Result<Uint8Array<ArrayBuffer>, BodyFailure>>;
 }
 
-/** A request-local reader; constructing it never pulls bytes or records headers/content. */
+/**
+ * The on-demand reader of a request's byte body, held to `maxBytes`. Creating it reads nothing and records
+ * nothing of the request.
+ */
 export function binaryBody(request: Request, maxBytes: number): BinaryBody {
   let reading: Promise<Result<Uint8Array<ArrayBuffer>, BodyFailure>> | undefined;
   return {
@@ -54,7 +62,12 @@ export function isAttachmentSchema(schema: TSchema): boolean {
   return schema[Kind] === 'HttpAttachment';
 }
 
-/** Reject malformed output before exposing a body, filename or media type to HTTP. */
+/**
+ * Whether an output is a well-formed `Attachment` within `maxBytes`: exactly its four fields, bytes of
+ * exactly `byteLength` or an unlocked stream, a `type/subtype` media type of at most 255 characters, and a
+ * filename of 1 to 512 characters without control characters, slashes or backslashes. Execution checks it
+ * before anything is sent.
+ */
 export function validAttachment(value: unknown, maxBytes: number): value is Attachment {
   if (!value || typeof value !== 'object') {
     return false;
@@ -102,7 +115,12 @@ export function validAttachment(value: unknown, maxBytes: number): value is Atta
   }
 }
 
-/** An exact-length stream prevents a handler from sending bytes beyond its validated attachment metadata. */
+/**
+ * The response that serves an attachment: its bytes with `content-type`, `content-length`, an RFC 8187
+ * `content-disposition`, `cache-control: private, no-store`, a sandboxing `content-security-policy` and
+ * `x-content-type-options: nosniff`. A stream is held to exactly `byteLength` bytes, so a handler can send
+ * neither more nor fewer than it declared.
+ */
 export function attachmentResponse(file: Attachment, status = 200): Response {
   // RFC 8187 excludes these characters even though encodeURIComponent leaves them unchanged.
   const encodedFilename = encodeURIComponent(file.filename).replaceAll(

@@ -3,13 +3,22 @@
  * that describes each one.
  */
 
-/** One OAuth resource published by an application, independent of its deployment hostname. */
+/**
+ * One OAuth protected resource an application publishes (`tokens.resources`), described by its
+ * configuration and never by the request's host.
+ */
 export interface OAuthResource<E = unknown> {
-  /** Exact audience clients request from the authorization server. */
+  /**
+   * The resource identifier clients request tokens for, an HTTPS URL, or a function of the env that answers
+   * it.
+   */
   audience: string | ((env: E) => string);
-  /** Verified issuer identifiers; this declaration does not change token verification. */
+  /**
+   * The authorization servers that issue tokens for the resource, HTTPS URLs without a query, or a function
+   * of the env that answers them. Publishing them changes nothing about how tokens are verified.
+   */
   authorizationServers: readonly string[] | ((env: E) => readonly string[]);
-  /** OAuth grants supported by the owner, which may differ from internal operation scopes. */
+  /** The scopes the document lists as `scopes_supported`, which may differ from the operations' scopes. */
   scopes: readonly string[];
 }
 
@@ -28,7 +37,12 @@ function httpsIdentifier(value: string, issuer: boolean): boolean {
   }
 }
 
-/** Serialize RFC 9728 metadata without publishing credentials or accepting request-derived authority. */
+/**
+ * The RFC 9728 document of one resource: its `resource`, `authorization_servers`, `bearer_methods_supported`
+ * (`header`) and `scopes_supported`, read from configuration and the env, never from the request. It throws a
+ * TypeError when the audience or an issuer is not an HTTPS URL without credentials or a fragment (an issuer
+ * also without a query), when no issuer is named, or when a scope is malformed.
+ */
 export function protectedResourceMetadata<E>(resource: OAuthResource<E>, env: E) {
   const audience = typeof resource.audience === 'function' ? resource.audience(env) : resource.audience;
   const servers =

@@ -34,8 +34,10 @@ export const PageInfoSchema = Type.Object(
 export type PageInfo = Static<typeof PageInfoSchema>;
 
 /**
- * A list's `limit`: an integer from 1 to `maximum` (100), `default` (25) when the caller sends none.
- * A list whose items are costly lowers the maximum: `{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }`.
+ * A list's `limit`: an integer from 1 to `maximum` (100), `default` (25, or the maximum when it is lower)
+ * when the caller sends none. A list whose items are costly lowers the maximum:
+ * `{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }`. A default outside 1 to the maximum, or a
+ * value that is not an integer, throws a TypeError.
  */
 export function pageLimit(options: { maximum?: number; default?: number } = {}) {
   const { maximum = 100, default: fallback = Math.min(25, maximum) } = options;
@@ -52,7 +54,10 @@ export function pageLimit(options: { maximum?: number; default?: number } = {}) 
   );
 }
 
-/** The query fields of a list, spread into its input beside its own filters. */
+/**
+ * The query fields of a list, spread into its input beside its own filters: an optional opaque `cursor`, a
+ * `direction` (`forward` by default, or `backward`) and a `limit` (`pageLimit()`).
+ */
 export const PageQueryFields = {
   cursor: Type.Optional(
     Type.String({ description: 'Opaque cursor returned by pageInfo; omit it to request the first page.' })
@@ -85,9 +90,9 @@ export interface Page<Item> {
 }
 
 /**
- * The output of a list of `item`, named by `$id` (`AppointmentPage`). Give each list its own name and
- * use it for that list only: two different shapes under one `$id` become two components, the second
- * one suffixed `_2`.
+ * The output of a list of `item`, named by `$id` (`AppointmentPage`), a PascalCase name of up to 128
+ * characters; any other throws a TypeError. Give each list its own name and use it for that list only: two
+ * different shapes under one `$id` become two components, the second one suffixed `_2`.
  */
 export function Page<Item extends TSchema>(item: Item, options: { $id: string }): TPage<Item> {
   if (!PAGE_ID.test(options.$id)) {

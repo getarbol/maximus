@@ -23,7 +23,10 @@ export interface TransactionFailure {
     | 'DATABASE_FAILURE';
   /** A fixed description of the failure, never the server's own message or the query text. */
   message: string;
-  /** A database retry never authorizes replaying an external effect. */
+  /**
+   * Whether repeating the transaction may succeed: true for a serialization or deadlock abort and an
+   * unavailable database. It never makes replaying an effect outside the database safe.
+   */
   retryable: boolean;
   /** Where the transaction was when it failed, such as `work` while the callback ran, or `commit`. */
   stage: TransactionStage;
@@ -34,7 +37,12 @@ export interface TransactionFailure {
   sqlState?: string;
 }
 
-/** Only server ErrorResponse instances establish a SQLSTATE; arbitrary error messages are never classified. */
+/**
+ * Classifies a failure by its stage and by the SQLSTATE of a `pg` `DatabaseError`, the server's own error
+ * response, never by a message: a commit whose outcome is unknown is `COMMIT_UNCERTAIN`, a serialization
+ * failure or deadlock `DATABASE_RETRY`, a constraint violation `DATABASE_CONFLICT`, a failed connection or an
+ * unavailable server `DATABASE_UNAVAILABLE`, and anything else `DATABASE_FAILURE`.
+ */
 export function classifyTransactionFailure(error: unknown, stage: TransactionStage): TransactionFailure {
   const sqlState =
     error instanceof DatabaseError && /^[0-9A-Z]{5}$/.test(error.code ?? '') ? error.code : undefined;
