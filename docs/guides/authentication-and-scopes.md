@@ -1,311 +1,479 @@
 # Authentication and scopes
 
-Every HTTP and MCP call carries a bearer token. Maximus turns it into a verified principal, checks the
-operation's scopes, and only then reads the input. This guide covers the default OAuth verification,
-custom verification, scopes, token schemes and OAuth discovery.
+Every call to the API and to the MCP server carries a bearer token. This guide covers how Maximus verifies
+it and turns it into the caller, how scopes decide which routes a caller may run, the development token,
+tokens your application verifies itself, OAuth discovery and rate limits. Read it before your first
+deployment, and whenever you connect an authorization server.
 
-## How a call is authenticated
+## Configure the token issuer
 
-1. The request must carry `Authorization: Bearer <token>`, at most 16 384 characters. A request with
-   an `x-api-key` header is refused. Without a custom resolver, the token must look like a compact
-   JWT.
-2. The token is verified, by default as an OAuth access token, or by your `tokens.resolve`.
-3. The resulting principal must match the principal schema exactly, and its client must be
-   consistent with its actor kind.
-4. The token's scopes must satisfy the operation (or `<namespace>:mcp:use`, for the MCP endpoint).
-
-Steps 1–3 failing answers `401 UNAUTHORIZED`; step 4 answers `403 FORBIDDEN`. This happens after
-routing (so an unknown path is still `404`) and before the rate limit, the body and the handler.
-
-## OAuth access tokens
+By default, the API accepts OAuth access tokens from one authorization server. Name it in `tokens`, in
+`maximus()` in `vite.config.ts`:
 
 ```ts
-maximus<Env>({
-  // ...
-  tokens: { issuer: 'https://auth.example.com/', audience: 'https://notes.example.com' },
+import { maximus } from '@arbol-ai/vite-plugin';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: { issuer: 'https://auth.example.com/' },
+      compatibilityDate: '2026-10-27',
+    }),
+  ],
 });
 ```
 
-| Check            | Rule                                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Keys             | The issuer's JWKS at `tokens.jwksUri`, or `.well-known/jwks.json` resolved against the issuer. HTTPS only; cached for ten minutes. |
-| Algorithm        | `RS256`                                                                                                                            |
-| Issuer, audience | Exactly `tokens.issuer`, and `tokens.audience` or any one audience of its list                                                     |
-| Time             | `exp` required, five seconds of clock tolerance                                                                                    |
+A token is accepted when one of the issuer's keys signed it with an algorithm `tokens.algorithms` allows,
+its `iss` is `tokens.issuer`, its `aud` names one of the audiences, and it carries `exp` and `sub`. An
+expired token is refused, with five seconds of tolerance for clocks that disagree. The options of
+`tokens`:
 
-A service that also accepts tokens issued for a gateway in front of it lists both audiences, its own
-first: `audience: ['https://notes.example.com', 'https://api.example.com']`. A token for either
-is verified the same way; one for any other audience answers `401`. The first audience stays the
-resource OAuth discovery names.
+| Option                  | Default                            | Meaning                                                                                                                                                      |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `issuer`                | None                               | The authorization server, an HTTPS URL. Required, except under the `bearer` [scheme](#token-schemes).                                                        |
+| `audience`              | `origin`                           | The audience a token must carry, or a list of audiences, any one of which it may carry. The first is the resource [OAuth discovery](#oauth-discovery) names. |
+| `jwksUri`               | `.well-known/jwks.json`            | Where the issuer publishes its signing keys, resolved against `issuer`. HTTPS only.                                                                          |
+| `algorithms`            | `['RS256']`                        | The algorithms the issuer signs with: `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`, `ES256`, `ES384`, `ES512` or `EdDSA`.                            |
+| `authorizationEndpoint` | `authorize`                        | The authorization endpoint the OpenAPI document publishes for the authorization code flow, resolved against `issuer`.                                        |
+| `tokenEndpoint`         | `oauth/token`                      | The token endpoint the OpenAPI document publishes, resolved against `issuer`.                                                                                |
+| `claims`                | The standard claims                | Where the token carries the organization, the scopes, the client and a person's permissions. See [From token to caller](#from-token-to-caller).              |
+| `development`           | `{ binding: 'DEVELOPMENT_TOKEN' }` | The token `vp dev` accepts from localhost, or `false` for none. See [The development token](#the-development-token).                                         |
+| `scheme`                | `{ type: 'oauth' }`                | How callers obtain tokens. See [Token schemes](#token-schemes).                                                                                              |
 
-The verified claims become the principal. The defaults are the standard OAuth claims (RFC 9068) and
-Auth0's conventions:
+The defaults of `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` are Auth0's paths. For another
+authorization server, copy them from its metadata (`jwks_uri`, `authorization_endpoint` and
+`token_endpoint`). Maximus verifies tokens with the first; the OpenAPI document publishes the other two as
+the URLs of the OAuth flows.
 
-| Claim                | Becomes                                                                                                                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sub`                | `actorId`. A subject `<client id>@clients` is a machine (`actorKind: 'service'`); anyone else is a person (`'user'`). A subject ending in `@clients` that names another client is refused. |
-| `org_id`             | `organizationId`. Required; 1 to 128 letters, digits, `_` and `-`, starting with a letter or digit.                                                                                        |
-| `azp` or `client_id` | The client id, optional. If both are present they must be equal. Without one, the call has no `authority`.                                                                                 |
-| `scope`              | The granted scopes: a space-separated string or a list. Absent, the token grants none.                                                                                                     |
-| `permissions`        | What a person may do: a person holds only the granted scopes it also lists, and none when their token lacks it. A machine's scopes are never limited.                                      |
+A service behind a gateway that also accepts the tokens issued for the gateway lists both audiences, its
+own first:
 
-A person's scopes must appear in both because the client chooses which scopes it requests. Auth0
-without RBAC, for one, grants whatever scopes an application asks for, so `scope` alone would let any
-member of an organization give themselves an administrator's scope. With RBAC and **Add Permissions
-in the Access Token** enabled on the API, Auth0 lists each person's permissions and its tokens work
-as they are.
+```ts
+tokens: {
+  issuer: 'https://auth.example.com/',
+  audience: ['https://notes.example.com', 'https://api.example.com'],
+},
+```
 
-When your authorization server names them differently, say where with `tokens.claims`: each entry is a
-claim name, or a dotted path into an object claim. A claim whose own name has dots, such as
-`https://example.com/org_id`, is read as it is named.
+A token for any other audience is refused. A configuration that could never verify a token is refused
+when the Worker starts, and in every test that loads it: a missing `issuer` with
+`tokens.issuer is required to verify or document OAuth access tokens.`, and likewise an empty or repeated
+audience, an algorithm outside the list, and an issuer or endpoint that is not HTTPS.
+
+## From token to caller
+
+A verified token becomes the call's principal: the `actorId`, `actorKind` and `organizationId` every
+handler receives (see [Callers](../concepts.md#callers)), with the scopes the token grants. Maximus reads
+the standard claims of an OAuth access token (RFC 9068) and Auth0's conventions:
+
+| Claim                   | Option in `claims` | Becomes                                                                                                    |
+| ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `sub`                   |                    | `actorId`, 1 to 255 characters.                                                                            |
+| `org_id`                | `organization`     | `organizationId`. Required: 1 to 128 letters, digits, `_` and `-`, starting with a letter or a digit.      |
+| `azp`, else `client_id` | `client`           | The OAuth client the token was issued to. Optional; when a token carries both claims, they must be equal.  |
+| `scope`                 | `scopes`           | The granted scopes, as a space-separated string or a list. A token without the claim grants none.          |
+| `permissions`           | `permissions`      | What a person may do, as a string or a list. A person holds only the granted scopes this claim also lists. |
+
+The subject decides who acts. A token whose subject is `<client>@clients`, where `<client>` is the
+token's own client, is a machine: its `actorKind` is `service`, and it holds every scope it is granted. Any
+other subject is a person, `actorKind: 'user'`, who holds only the granted scopes their `permissions` also
+list, and none when the token lists no permissions. A subject that ends in `@clients` but names another
+client is refused.
+
+A person's scopes must appear in both claims because the client chooses which scopes it requests. An
+authorization server that grants whatever scope a client asks for would otherwise let any member of an
+organization give themselves an administrator's scope. Auth0 lists each person's permissions in the
+token when RBAC and **Add Permissions in the Access Token** are enabled on the API.
+
+When your authorization server names the claims differently, map them with `tokens.claims`. Each entry is
+a claim's name, or a dotted path into an object claim; a claim whose own name has dots, such as
+`https://example.com/org_id`, is read as it is named:
 
 ```ts
 tokens: {
   issuer: 'https://idp.example.com/',
-  audience: 'https://notes.example.com',
-  claims: { organization: 'tenant_id', permissions: 'roles' },
+  claims: { organization: 'tenant.id', permissions: 'roles' },
 },
 ```
 
 Two entries change a rule rather than a name:
 
-- `permissions: false` trusts the granted scopes alone. Set it only for an authorization server that
-  grants each person no more than they may hold, as Okta does when each scope's access policy rule
-  admits only the groups that may hold it; never for one that grants whatever a client requests.
-- `machineSubject: '{client}'` makes a subject equal to the client id a machine, as RFC 9068
-  recommends for client-credentials tokens and as Okta and WorkOS issue them. Set it only when the
-  authorization server assigns every client id, so that no client can take a person's subject
-  (RFC 9068, section 5).
+- `permissions: false` trusts the granted scopes alone. Set it only for an authorization server that grants
+  each person no more than they may hold, as Okta does when each scope's access policy admits only the
+  groups that may hold it; never for one that grants whatever a client requests.
+- `machineSubject: '{client}'` makes a token whose subject equals its client id a machine, as RFC 9068
+  recommends and as Okta and WorkOS issue client-credentials tokens. Set it only when the authorization
+  server assigns every client id, so that no client id can equal a person's subject.
 
-| Provider  | Settings                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth0     | None. Enable RBAC and **Add Permissions in the Access Token** on the API.                                                                                                                                                                                                                                                                                                                                                           |
-| Okta      | `claims: { scopes: 'scp', client: 'cid', permissions: false, machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/v1/keys`, `/v1/authorize` and `/v1/token`. Add an `org_id` claim in the authorization server, and give each scope an access policy rule that admits only the groups that may hold it.                                                                          |
-| WorkOS    | Session tokens: `claims: { scopes: 'permissions' }`, `jwksUri: 'https://api.workos.com/sso/jwks/<client id>'`, and an `aud` claim added by the JWT template. OAuth tokens: `claims: { machineSubject: '{client}' }`, with `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` at `<issuer>/oauth2/jwks`, `/oauth2/authorize` and `/oauth2/token`; they list no permissions, so they grant scopes to machines and none to people. |
-| Any other | The claims above, `algorithms` (`ES256`, `EdDSA`, …) and the endpoints; or [custom verification](#custom-verification) for anything else.                                                                                                                                                                                                                                                                                           |
+| Authorization server  | `claims`                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Auth0                 | None.                                                                              |
+| Okta                  | `{ scopes: 'scp', client: 'cid', permissions: false, machineSubject: '{client}' }` |
+| WorkOS session tokens | `{ scopes: 'permissions' }`                                                        |
 
-`jwksUri`, `authorizationEndpoint` and `tokenEndpoint` default to Auth0's paths, `.well-known/jwks.json`,
-`authorize` and `oauth/token`, each resolved against the issuer. Copy the others from your
-server's `/.well-known/oauth-authorization-server` metadata (`jwks_uri`, `authorization_endpoint`,
-`token_endpoint`). Maximus verifies tokens with the first; OpenAPI publishes the other two as the
-OAuth flows' URLs.
+An authorization server that issues no organization claim needs one added, under `org_id` or the name
+`claims.organization` gives it. A claim Maximus cannot read, such as a `scope` that is neither a string
+nor a list of strings, refuses the token.
 
-Malformed claims, such as a `scope` that is neither a string nor a list of strings, refuse the token.
+A token that names its client gives each call an `authority`: the surface that admitted it (`http` or
+`mcp`), the granted scopes, the client, of class `human` for a person's token and `machine` for a
+machine's, and the verified token itself. A token that names no client still runs the routes its scopes
+admit, but its calls carry no `authority`, and routes with
+[conditional scopes](#scopes-the-handler-checks) refuse them.
+[Context and middleware](middleware-and-context.md#what-a-handler-receives) shows what a handler receives.
 
-Always set `tokens.issuer`. There is no default authorization server: without one the application
-builds, but every OAuth token is refused and `/openapi.json` answers `500`.
+## Refused calls
+
+Admission happens after the route is matched, so a path no route answers is `404` before any token is
+read. Then every call is refused, before its body is read and before any of your code runs, when:
+
+- it has no `authorization: Bearer <token>` header;
+- it carries an `x-api-key` header, whatever its bearer token;
+- its token is longer than 16 384 characters;
+- its token is not shaped like a JWT, three base64url segments separated by dots, unless `auth.ts`
+  [resolves tokens](#tokens-your-application-verifies) itself;
+- its signature, issuer, audience, expiry or claims fail the checks above.
+
+Each of these answers `401` with the failure `UNAUTHORIZED` and a `www-authenticate` challenge (see
+[OAuth discovery](#oauth-discovery)). A valid token that lacks the route's scope answers `403` with
+`FORBIDDEN`. [Standard failures](../reference/standard-failures.md) lists both.
 
 ## Scopes
 
-A scope is `<namespace>:<resource>:<action>`, lowercase, where `namespace` is the application's
-`namespace`: `notes:notes:read`, `billing:invoices:write`. Construction refuses an operation whose
-scope belongs to another namespace or is malformed.
+A scope is a permission a token must hold for the call to run: `<namespace>:<resource>:<action>`, where
+the namespace is the service's (its `name`, unless `namespace` in `maximus()` says otherwise). A route that
+declares no scope takes one from its path and effect:
+
+| File                                 | Effect   | Scope                        |
+| ------------------------------------ | -------- | ---------------------------- |
+| `routes/v1/notes.post.ts`            | `write`  | `notes:notes:write`          |
+| `routes/v1/notes/[noteId].get.ts`    | `read`   | `notes:notes:read`           |
+| `routes/v1/notes/[noteId].delete.ts` | `delete` | `notes:notes:write`          |
+| `mcp/tools/summarize-notes.ts`       | `read`   | `notes:summarize-notes:read` |
+
+The resource is the first fixed segment after the version, in kebab-case, and the action is `read` for a
+read and `write` for anything else. A tool of `mcp/tools/` takes its file's name as the resource. A route
+whose path has no fixed segment after the version must declare its scope.
+
+Declare `scope` when the derived one is not the permission you mean, or when several scopes admit the
+call:
 
 ```ts
-scope: 'notes:notes:write',                        // one scope
+scope: 'notes:notes:manage',                       // one scope
 scope: ['notes:notes:read', 'notes:notes:write'],  // any one of them: a write grant also reads
-scope: ['notes:notes:read', 'notes:sites:read'],
+scope: ['notes:notes:read', 'notes:audit:read'],
 scopeMatch: 'all',                                 // every one of them
 ```
 
-OpenAPI publishes a list as alternative security requirements, and `scopeMatch: 'all'` as one
-requirement with every scope. HTTP admission, MCP tool discovery and execution all use the same
-matcher, `operationMatchesScopes(operation, granted)`; use `operationScopes(operation)` rather than
-reading `operation.scope` when you need the list.
+Every scope is lowercase, starts with the service's namespace and has at least three segments. A route
+whose scope breaks the rule is refused when the Worker starts. The OpenAPI document gives each scope of a
+list as an alternative requirement of the operation's `security`, and a `scopeMatch: 'all'` list as one
+requirement.
 
-Three more controls narrow who may execute an operation:
+The MCP server has a scope of its own, `<namespace>:mcp:use`: a token needs it for every MCP request,
+besides the scope of each tool it calls. See [MCP](mcp.md#who-may-call-a-tool).
 
-- **`actorKinds: ['user']`** or **`['service']`** refuses the other kind with `FORBIDDEN`,
-  independently of scopes.
-- **`conditionalScopes`** declares scopes the handler checks itself for part of the operation, such
-  as managing someone else's record. They must be namespaced and distinct from `scope`. An operation
-  that declares them fails closed when the call has no token authority (ordinary RPC):
+### Scopes the handler checks
 
-  ```ts
-  async ({ authority }, input) => {
-    if (input.owner !== 'self' && !authority?.scopes.includes('notes:notes:manage')) {
-      return err(errors.forbidden.create());
-    }
-    // ...
-  };
-  ```
-
-- **`visibility: 'internal'`** keeps a staff operation routed and scope-checked but removes it from
-  OpenAPI and from `scopes_supported`; MCP lists it only to tokens that carry
-  its scope. Give it a scope only a staff role holds. Hiding an operation never authorizes it.
-
-Effects, MCP annotations, descriptions and obscure paths are never access control.
-
-## Custom verification
-
-`tokens.resolve` replaces the OAuth verification. Use it for credentials Maximus does not know: an
-application-issued session, a workload key checked against your own store, a different issuer.
+Some permissions depend on what a call touches rather than on the route. Say notes carry an `archived`
+flag: anyone in the organization may read a note, but only an administrator may read an archived one.
+Declare such scopes in `conditionalScopes`, and check them in the handler against `authority.scopes`:
 
 ```ts
-tokens: {
-  issuer: 'https://auth.example.com/',
-  audience: 'https://notes.example.com',
-  async resolve(token, context) {
-    const session = await verifySession(token, context?.env); // your cryptographic verification
-    if (!session) {
-      return err(errors.unauthorized.create());
+// routes/v1/notes/[noteId].get.ts
+import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
+
+import { NoteSchema } from '../../../src/notes.ts';
+
+export default defineHandler(
+  async ({ input, notes, authority, fail }) => {
+    const note = await notes.get(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
     }
-    return {
-      actorId: session.userId,
-      actorKind: 'user',
-      organizationId: session.organizationId,
-      scopes: session.scopes,
-      client: { id: 'notes-web', class: 'human' },
-    };
+    if (note.archived && !authority?.scopes.includes('notes:archive:read')) {
+      return fail('FORBIDDEN');
+    }
+    return note;
   },
-},
+  {
+    description: 'Read one note of the organization by its id.',
+    input: { noteId: UuidSchema },
+    output: NoteSchema,
+    failures: ['NOTE_NOT_FOUND'],
+    conditionalScopes: ['notes:archive:read'],
+  }
+);
 ```
 
-- Return the principal, or a `Result`. A failure with code `FORBIDDEN` answers `403`; any other
-  failure, and any thrown error, answers `401`.
-- The principal is validated strictly: `actorId` (1–255 characters), `actorKind`, `organizationId`,
-  `scopes` (at most 1000) and an optional `client` of class `human`, `machine` or `dcr`. A `machine`
-  client must go with `actorKind: 'service'` and, outside `oauth+bearer`, an `actorId` equal to its
-  client id or to `<client id>@clients`.
-- Maximus still checks the operation's scopes against `scopes`.
-- `context` is request-local: `env`, `request`, `surface` (`'http'` or `'mcp'`), `applicationScopes`
-  and `background`. `applicationScopes` lists the scopes your operations and transports declare; map
-  verified grants onto it, never treat it as a grant. Do not keep the context between requests, and
-  never take authority from request headers or bodies.
-- A resolver must verify the credential cryptographically before returning a principal. It owns
-  every decision about which credential is valid right now.
+Conditional scopes are namespaced like any other, listed once and distinct from the route's own; a route
+that breaks the rule is refused when the Worker starts:
+`Operation "<name>": conditional scopes require unique namespaced declarations distinct from the admission scope.`
+The OpenAPI document publishes them in `x-conditional-scopes`. A route that declares them fails closed
+without an `authority` to check: a call over [Worker RPC](worker-rpc.md), and a call whose token names no
+client, answer `FORBIDDEN` before the context is prepared.
 
-Return a `client` when you have one: without it, calls have no `authority`, and operations with
-`conditionalScopes` refuse them.
+### Who may call: actorKinds
 
-## Local development
+`actorKinds: ['user']` admits people only, and `actorKinds: ['service']` machines only, whatever their
+scopes. A caller of another kind is refused with `FORBIDDEN` on every transport, and MCP does not list
+the tool to it.
 
-To run a service with `cf dev` without an authorization server, accept one development token:
+### Internal routes
+
+`visibility: 'internal'` keeps a route for the service's own staff out of the public OpenAPI document and
+out of the `scopes_supported` of OAuth discovery. The route is still served and still requires its scope:
+give it one that only a staff role holds. Hiding a route never authorizes it, and neither does its
+effect, its description, its MCP annotations or an obscure path.
+
+## The development token
+
+Locally, a development token stands in for an access token, so a project runs without an authorization
+server. `bun create maximus` writes a random one into `.dev.vars`, which Git ignores:
+
+```text
+DEVELOPMENT_TOKEN=3f6c…
+```
+
+Under `vp dev`, `maximus()` declares the secret binding `DEVELOPMENT_TOKEN` and accepts its value as a
+bearer token when the request's host is `localhost`, `127.0.0.1` or `[::1]` and the value has at least
+32 characters. `vp test` prepares the project as `vp dev` does, so tests call the API with a token of
+their own the same way (see [Testing](testing.md)). Maximus compares digests of the two values, so the
+comparison takes the same time however much of the token matches.
+
+The token signs you in as the person `local-developer` of the organization `local-development`, who holds
+every scope the service declares: each route's and tool's scopes, their conditional scopes and, when the
+Worker serves MCP, `<namespace>:mcp:use`. Its client is `local-development`, so handlers receive an
+`authority` with all of those scopes. Every other token is verified as usual.
+
+No build or preview declares the binding or accepts the token: they are production, whatever their mode.
+That is what keeps it off a deployed Worker; the host check alone would not, since a Worker that calls
+this one through a Service Binding chooses the request's URL. A project that declares the binding in
+`env` itself is refused:
+`DEVELOPMENT_TOKEN is the development token: Maximus declares it under vp dev alone, so no deployed Worker carries it.`
+
+`tokens.development` renames the binding or moves the developer to another organization, and `false`
+accepts no development token at all:
 
 ```ts
 tokens: {
   issuer: 'https://auth.example.com/',
-  audience: 'https://notes.example.com',
-  development: { binding: 'DEVELOPMENT_TOKEN' },
+  development: { binding: 'LOCAL_TOKEN', organizationId: 'org_1234567890abcdef' },
 },
 ```
-
-Put a long random `DEVELOPMENT_TOKEN` in `.dev.vars`, which only `cf dev` reads, declare its binding in
-`cloudflare.config.ts` for the development mode alone, and send it as the bearer token:
-
-```ts
-env: {
-  DEVELOPMENT_TOKEN: mode === 'development' && bindings.secret(),
-},
-```
-
-From `localhost`, `127.0.0.1` or `[::1]` it is a developer (`local-developer`) holding every scope the
-application declares, in the organization `development.organizationId` (default `local-development`).
-Every other token is verified as usual. It never matches a request to any other host, which is how
-the internet reaches a deployed Worker, nor a token shorter than 32 characters, and the comparison
-takes the same time however much of the token matches. The host comes from the request's URL, which
-a Worker calling through a Service Binding chooses, so what keeps the token off a deployment is the
-binding: declared for `cf dev` alone, no build that `cf deploy` uploads has it. Never set
-`DEVELOPMENT_TOKEN` on a deployed Worker.
-
-## Token schemes
-
-`tokens.scheme` tells clients how to obtain a token. It changes discovery and documentation, not the
-checks above.
-
-| `scheme`                                | Use when                                                                 | Effect                                                                                                                                                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{ type: 'oauth' }` (default)           | Callers get OAuth access tokens from `issuer`.                           | OpenAPI publishes OAuth authorization-code and client-credentials flows; OAuth discovery is served.                                                                                                |
-| `{ type: 'bearer', description }`       | The application issues its own tokens, such as a signed visitor session. | Requires `resolve`. OpenAPI publishes an HTTP bearer scheme with your description; no OAuth discovery; a `401` carries a plain `Bearer` challenge. Cannot mount MCP or declare `tokens.resources`. |
-| `{ type: 'oauth+bearer', description }` | People use OAuth and machines use workload keys your resolver verifies.  | Requires `resolve`. OpenAPI publishes OAuth authorization code and the bearer scheme as alternatives per operation, from its `actorKinds` (which every published operation must then declare).     |
 
 ## OAuth discovery
 
-MCP clients and OAuth-aware HTTP clients find out how to authenticate from the service itself:
+MCP clients and other OAuth clients find out how to obtain a token from the service itself. Without a
+token, they read the challenge of the `401`:
 
-- `GET /.well-known/oauth-protected-resource` (and `/mcp` after it) answers
-  [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html) metadata: `resource` is
-  `tokens.audience` (the first one, when it lists several), `authorization_servers` is
-  `[tokens.issuer]`, `scopes_supported` lists the scopes of public operations and transports, and
-  `resource_documentation` points at `/openapi.json`.
-- A `401` carries `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource"`,
-  including the `basePath` when there is one.
+```text
+www-authenticate: Bearer resource_metadata="https://notes.example.com/api/.well-known/oauth-protected-resource"
+```
 
-Two options adjust this:
+The URL always names the configured `origin`, whatever host the request named. It answers, without a
+token and with `access-control-allow-origin: *`, the protected resource metadata of
+[RFC 9728](https://www.rfc-editor.org/rfc/rfc9728.html):
 
-- `tokens.resourceMetadataUrl` overrides the challenge URL: a string, `null` for a plain `Bearer`
-  challenge, or `(context) => string | null` to choose per request (for example, one URL for MCP and
-  another for REST).
-- `tokens.resources` publishes your own resources instead of the inferred one. Each key is an
-  absolute path below `/.well-known/oauth-protected-resource`; each value names an `audience`,
-  `authorizationServers` and the OAuth `scopes` clients should request, the first two optionally as
-  functions of `env`:
-
-  ```ts
-  tokens: {
-    issuer: 'https://auth.example.com/',
-    audience: 'https://api.example.com',
-    resources: {
-      '/.well-known/oauth-protected-resource/api': {
-        audience: (env) => env.API_AUDIENCE,
-        authorizationServers: ['https://auth.example.com/'],
-        scopes: ['openid', 'offline_access', 'notes:notes:read'],
-      },
-    },
-  },
-  ```
-
-  Configured resources answer `GET` only, with `access-control-allow-origin: *`, and replace the
-  inferred endpoints. The `401` challenge still names `/.well-known/oauth-protected-resource` unless
-  you set `resourceMetadataUrl`, so set it to one of your resources (or key a resource at that exact
-  path). `tokens.resources: {}` with `resourceMetadataUrl: null` serves no discovery at all and
-  challenges with a plain `Bearer`.
-
-None of these options changes how tokens are verified.
-
-## Machine clients
-
-For service-to-service calls with OAuth, create a dedicated machine client:
-
-- grant it exactly the audience and scopes it needs, bound to one organization (with Auth0, a client
-  grant that requires an organization and allows only the intended one);
-- remember the grant, not the requested scope string, decides the effective scopes;
-- use a separate audience when management authority must stay apart from business reads;
-- never replace a person's consent with a machine token.
-
-Between Workers in one account, prefer [native RPC](worker-rpc.md) to tokens.
-
-## Verifying tokens in your own routes
-
-A plain route that must accept the same tokens can use the same verifier:
-
-```ts
-import { createTokenAuthorization } from '@arbol-ai/maximus';
-
-const authorize = createTokenAuthorization(app.tokens);
-
-async function exportRoute(request: Request, env: Env, context: RouteContext) {
-  const caller = await authorize(request, 'notes:notes:read');
-  if (!caller.ok) {
-    return context.fail(caller.error);
-  }
-  // caller.value: { actorId, actorKind, organizationId, scopes, client? }
-  // ...
+```json
+{
+  "resource": "https://notes.example.com",
+  "resource_name": "notes",
+  "authorization_servers": ["https://auth.example.com/"],
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["notes:notes:write", "notes:notes:read", "notes:mcp:use"],
+  "resource_documentation": "https://notes.example.com/api/openapi.json"
 }
 ```
 
-With a resolver that reads `env`, pass the resolution context as the third argument:
-`authorize(request, scope, { env, request, surface: 'http', applicationScopes: [], background })`.
-A fourth argument, `'all'`, requires every scope of a list.
+`resource` is the first audience and `resource_name` the service's `title`. `scopes_supported` lists the
+scopes of the routes and tools a client can reach, leaving out internal ones, and `<namespace>:mcp:use`
+when the Worker serves MCP. `/api/.well-known/oauth-protected-resource/mcp` answers the same document.
 
-`createTokenVerifier({ issuer, audience })` and `projectToken(claims)` expose the two halves of the
-default verification for resolvers that extend it.
+`auth.ts` changes what discovery publishes, never how tokens are verified:
+
+- `resourceMetadataUrl` sets the URL the challenge names: a URL, `null` for a plain `Bearer` challenge,
+  or a function of the request that chooses one of them per call. Its argument holds `env`, `request`
+  and `surface`, `http` or `mcp`.
+- `resources` publishes resources of your own instead of the inferred one. Each key is an absolute path
+  below `/.well-known/oauth-protected-resource`, outside the API's base path; each value names the
+  `audience` and `authorizationServers` a client should use, each a value or a function of `env`, and the
+  `scopes` it should request.
+
+```ts
+// auth.ts
+import { defineAuth } from '@arbol-ai/maximus';
+
+export default defineAuth({
+  resources: {
+    '/.well-known/oauth-protected-resource/notes': {
+      audience: 'https://notes.example.com',
+      authorizationServers: ['https://auth.example.com/'],
+      scopes: ['openid', 'offline_access', 'notes:notes:read', 'notes:mcp:use'],
+    },
+  },
+  resourceMetadataUrl: 'https://notes.example.com/.well-known/oauth-protected-resource/notes',
+});
+```
+
+Configured resources replace the inferred documents, which then answer `404`. Each answers `GET` alone,
+with `access-control-allow-origin: *`, and a value that is not an HTTPS identifier, an issuer with a query
+or a malformed scope answers `500` instead of a partial document. Since the inferred document is gone, a
+`401` would point at nothing: `resources` without `resourceMetadataUrl` is refused with
+`tokens.resources requires tokens.resourceMetadataUrl: name the metadata a 401 challenge points at.`
+`resources: {}` publishes no discovery at all, and challenges with a plain `Bearer`.
+
+## Tokens your application verifies
+
+Some callers present credentials no OAuth issuer signs: keys your service issues to machines, sessions
+your application signs. Verify them in `auth.ts`, at the project's root, whose default export is
+`defineAuth({ resolve })`. `resolve` receives the bearer token and returns the caller, or a failure:
+
+```ts
+// auth.ts
+import { defineAuth, err, OrganizationIdSchema, standardErrors, t } from '@arbol-ai/maximus';
+import { checkSchema } from '@arbol-ai/maximus/schemas';
+
+/** A service key as the console stores it, under the SHA-256 digest of the key. */
+const ServiceKeySchema = t.Object(
+  {
+    clientId: t.String({ minLength: 1, maxLength: 255 }),
+    organizationId: OrganizationIdSchema,
+    scopes: t.Array(t.String(), { maxItems: 100 }),
+  },
+  { additionalProperties: false }
+);
+
+/** The hex SHA-256 digest of a key: what the store is keyed by, never the key itself. */
+async function digest(key: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export default defineAuth({
+  async resolve(token, context) {
+    const stored = await context?.env.SERVICE_KEYS.get(await digest(token), 'json');
+    const key = checkSchema(ServiceKeySchema, stored);
+    if (!key.success) {
+      return err(standardErrors.unauthorized.create());
+    }
+    return {
+      actorId: key.data.clientId,
+      actorKind: 'service',
+      organizationId: key.data.organizationId,
+      scopes: key.data.scopes,
+      client: { id: key.data.clientId, class: 'machine' },
+    };
+  },
+});
+```
+
+with the token scheme and the store in `vite.config.ts`:
+
+```ts
+maximus({
+  origin: 'https://reports.example.com',
+  tokens: { scheme: { type: 'bearer', description: 'A service key issued in the reports console.' } },
+  env: { SERVICE_KEYS: bindings.kv() },
+  compatibilityDate: '2026-10-27',
+}),
+```
+
+Proving the credential genuine is the resolver's job, and so is reading what it stored strictly: look a
+random key up by its digest, check a signature with `crypto.subtle`, read a stored record through its
+schema. Never take a caller's identity from a request header or body. Then Maximus:
+
+- answers `403` when the resolver's failure is `FORBIDDEN`, and `401` for any other failure and when it
+  throws. The resolver's own failure and its error never reach the caller;
+- checks the principal strictly: `actorId` (1 to 255 characters), `actorKind`, `organizationId`,
+  `scopes` (at most 1000) and an optional `client` whose class is `human`, `machine` or `dcr`, and nothing
+  else. A `machine` client goes with `actorKind: 'service'` and, except under `oauth+bearer`, with an
+  `actorId` that is its client id or `<client id>@clients`. Anything else answers `401`;
+- checks the route's scopes against `scopes`, as for any token.
+
+`resolve` receives every bearer token but the development token, and the issuer's OAuth tokens are not
+verified unless it verifies them. Its second argument holds the request's `env`, the `request`, its
+`surface` and `applicationScopes`, the scopes the service declares, which a resolver may map verified
+grants onto but never treats as a grant. Keep nothing of it between requests.
+
+A principal without a `client` makes calls without an `authority`, which routes with conditional scopes
+refuse. `defineAuth` takes `resolve`, `resources` and `resourceMetadataUrl` alone; every other token
+setting stays in `vite.config.ts`, and `defineAuth` refuses one rather than let it override the
+configuration, naming it:
+`auth.ts states how tokens are verified in code; configure issuer, audience in vite.config.ts.`
+
+## Token schemes
+
+`tokens.scheme` says how callers obtain their tokens, which the OpenAPI document and discovery publish:
+
+| `scheme`                                | Callers present                                                     | Requires                                             | Publishes                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `{ type: 'oauth' }`, the default        | OAuth access tokens from `issuer`.                                  | `issuer`                                             | The authorization code and client credentials flows, and OAuth discovery.                                    |
+| `{ type: 'bearer', description }`       | Tokens the application issues and verifies.                         | `resolve`                                            | An HTTP bearer scheme with `description`. No discovery: a `401` challenges with a plain `Bearer`.            |
+| `{ type: 'oauth+bearer', description }` | OAuth access tokens for people, the application's own for machines. | `issuer`, `resolve`, and `actorKinds` on every route | The authorization code flow on routes people call, the bearer scheme on routes machines call, and discovery. |
+
+A Worker whose scheme it cannot serve does not start: `bearer` or `oauth+bearer` without `resolve` is
+refused with `An application bearer token scheme requires tokens.resolve to verify the token.`, and
+`bearer` with an MCP server with
+`The MCP transport needs OAuth discovery; it cannot serve a bearer token scheme.` Under `bearer`, a call's
+`authority` carries no token.
+
+Under `oauth+bearer`, `resolve` receives the people's OAuth access tokens too. Verify them with
+`createTokenVerifier({ issuer, audience })`, which checks the signature and the claims and throws on any
+mismatch, and `projectToken(claims)`, which maps the claims to a principal as described above: they are
+the two halves of what Maximus applies without `auth.ts`. Every route must name its `actorKinds`, which
+decide the scheme the OpenAPI document publishes for it; a route that names none is refused with
+`Operation "<name>": dual authentication requires explicit actor eligibility.`
+
+## Rate limits
+
+A [Workers rate limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+limits how often each caller calls the API and the MCP server. Declare the binding in `env` and name it
+in `rateLimit`:
+
+```ts
+import { maximus } from '@arbol-ai/vite-plugin';
+import { bindings } from 'cf/config';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: { issuer: 'https://auth.example.com/' },
+      env: {
+        NOTES: bindings.kv(),
+        API_LIMIT: bindings.rateLimit({ namespace: '1001', simple: { limit: 100, period: 60 } }),
+      },
+      rateLimit: { binding: 'API_LIMIT' },
+      compatibilityDate: '2026-10-27',
+    }),
+  ],
+});
+```
+
+A `binding` that names no binding of `env` is a type error. Each call is checked after its token is
+admitted and before its body is read, under a key that is the SHA-256 digest of its organization and its
+actor, so the limit applies per caller and the key carries neither identifier. A call over the limit
+answers `429` with `RATE_LIMITED`, which is retryable, and `Retry-After: 60`, or the seconds
+`rateLimit.retryAfter` sets. A binding missing from the Worker's `env`, or one that fails, answers `500`
+with `INTERNAL_ERROR`, and the route does not run.
+
+Each MCP request is one call, and so is each message of a JSON-RPC batch (see [MCP](mcp.md#limits)).
+Requests that need no token, such as discovery, the health check and pages, are not limited, and neither
+are calls over [Worker RPC](worker-rpc.md), which carry no token.
 
 ## Rules
 
-- The organization comes from the principal. Never from input, a header or a subdomain.
-- An operation is authorized by its scopes, actor kinds and your handler's checks. Not by its
-  effect, its visibility, its description or its path.
-- Middleware runs after authentication and cannot replace it.
-- A resolver verifies cryptographically and returns a strict principal; it never trusts a claim it
-  did not verify.
+- The organization comes from the verified token. Never from input, a header or a subdomain.
+- A route is authorized by its scopes, its actor kinds and your handler's checks of conditional scopes.
+  Never by its effect, its visibility, its description, its MCP annotations or its path.
+- Request middleware runs before admission and cannot admit a caller; see
+  [Context and middleware](middleware-and-context.md).
+- A resolver verifies every credential cryptographically and returns a strict principal; it never trusts
+  a claim it did not verify.
+- Between Workers of one account, prefer [Worker RPC](worker-rpc.md) to tokens. Between services that
+  must verify the original caller, pass the caller's own token, `authority.token`, and let the other
+  service verify it again.

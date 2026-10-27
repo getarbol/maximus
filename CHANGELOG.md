@@ -108,8 +108,8 @@ Everything else:
   route. A transport refuses an operation whose scope the caller lacks with `FORBIDDEN`, also when the token
   names no client. `createWorker` runs every handler besides `fetch` (queue, email, scheduled, tail) inside
   the application's diagnostics. The MCP listing of a union input includes a record member's key patterns.
-- `createAssetHandler` answers an immutable asset only for a plain path: an encoded slash, an encoded
-  character or a dot segment there is a 404.
+- Static assets, a web app's build or `createWorker`'s `assets`, answer an immutable asset only for a plain
+  path: an encoded slash, an encoded character or a dot segment there is a 404.
 - The OpenAPI document gives a list query parameter `style: form` and `explode: false`, so a generated
   client sends `tags=a,b`, the one form the API reads, rather than repeating the key, which it refuses.
 - Every refusal of `.build()` that concerns one operation names it, and a refusal of a route template names
@@ -370,7 +370,7 @@ everywhere. No response, request or validation changes.
   named item; `delete` answers `DeletedObject`. `apiContractProblems(operations)` lists the
   operations that break them, and `maximus check` prints them as `warnings`, which fail neither the
   check nor a deploy. `apiContracts: 'strict'` makes `.build()` refuse them. **7.0.0 will make
-  `strict` the default.** See [the verbs' contracts](docs/guides/service-definition-and-cli.md#the-verbs-contracts).
+  `strict` the default.**
 - MCP tool schemas are self-contained: no `$id`, each named schema written where it is used and a
   recursive one once under `$defs`. MCP clients that validate with Ajv (the MCP TypeScript SDK)
   refused a tool schema that repeated an `$id`, such as two `Uuid` fields or a recursive schema used
@@ -395,8 +395,7 @@ Breaking:
 
 The platform Gateway is now a plain proxy: it forwards `/v1/<service>/<path>` to each service's own
 origin with the caller's token and merges the services' `/openapi.json`, and services call each other
-over native RPC. 5.0 removes the pieces of the earlier designs that nothing calls anymore. See
-[migrating to 5.0](docs/guides/migrating-to-v5.md).
+over native RPC. 5.0 removes the pieces of the earlier designs that nothing calls anymore.
 
 Breaking:
 
@@ -451,8 +450,7 @@ Breaking:
   `@getarbol/maximus/workers`, `/mcp`, `/client`, `/analytics`, `/captcha`, `/composio`, `/postgres`
   (one entry for transactions and their failures), `/testing` (`verifyContract`), `/oxlint` and
   `/oxfmt`. It installs the `maximus` and `maximus-composio` commands and ships the Agent Skill.
-  `pg` and the lint toolchain are optional peer dependencies. See
-  [migrating to 4.0](docs/guides/migrating-to-v4.md).
+  `pg` and the lint toolchain are optional peer dependencies.
 - `createWorker`'s `adapters` option and the `RuntimeAdapter` and `RuntimeApplication` types are
   removed (deprecated in 3.17.0).
 - The `maximus token` command is removed, with its `--url`, `--issuer`, `--organization`, `--output`
@@ -731,8 +729,7 @@ Breaking:
   verified or documented; the verifier is built on first use.
 - `maximus token` requires `--issuer` and reads `MAXIMUS_CLIENT_ID` and `MAXIMUS_CLIENT_SECRET`.
 
-Signers and verifiers of admission proofs must upgrade together. See
-[Migrating from 2.x](docs/guides/migrating-from-v2.md).
+Signers and verifiers of admission proofs must upgrade together.
 
 ## 2.18.1 (2026-10-11)
 

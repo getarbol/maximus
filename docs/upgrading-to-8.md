@@ -41,6 +41,7 @@ place in it, or in a root module when it is code rather than configuration:
 | `tokens.development`                                                        | `tokens.development`, `DEVELOPMENT_TOKEN` by default         |
 | `tokens.resolve`, `resources`, `resourceMetadataUrl`                        | `auth.ts`: `export default defineAuth({ resolve, … })`       |
 | `errors: defineErrors({ … })`                                               | `errors.ts`: `export default defineErrors({ … })`            |
+| `telemetry: { enabled, observers, traceId }`                                | `telemetry.ts`: `export default defineTelemetry({ … })`      |
 | `rpc.callers`, `maxBodyBytes`, `maxOutputBytes`, `rateLimit`                | The same options                                             |
 | `worker.http.basePath`, `healthPath` (`maximus.config.ts`)                  | `http: { basePath, healthPath }`, `/api` and `/health`       |
 | `mcp: { instructions, guides, skills }`                                     | Markdown files in `mcp/`; see [MCP](#mcp)                    |
@@ -168,6 +169,23 @@ field.
 See [Context and middleware](guides/middleware-and-context.md) and
 [Authentication and scopes](guides/authentication-and-scopes.md).
 
+## Pages, webhooks and events
+
+What a 7.x Worker received besides its operations becomes files of the project:
+
+| 7.x                                                          | 8.0                                                                               |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| A plain route, `routes: { '/webhooks/payments': receive }`   | `pages/webhooks/payments.post.ts`, a page named for the method it answers         |
+| A public page at a fixed path                                | `pages/<path>.ts`, which answers `GET` and `HEAD`                                 |
+| `handlers.scheduled`, `queue` and `email`                    | `crons/<name>.ts`, `queues/<queue>.ts` and `email/<recipient>.ts`                 |
+| A Durable Object class the Worker exports                    | `durable-objects/<name>.ts`                                                       |
+| `http`'s `mounts`, `origins`, `before` and `aroundOperation` | A Worker composed by hand; see [Worker composition](guides/worker-composition.md) |
+
+A page answers only the methods its files name and refuses any other with `405` before it runs, so a
+webhook moved to `pages/` drops its own method check; it still verifies the delivery's signature on its
+exact bytes. See [Project structure](guides/project-structure.md#receive-a-webhook) and
+[Background work](guides/background-work.md).
+
 ## MCP
 
 The MCP server is described in Markdown files the Worker serves:
@@ -208,7 +226,10 @@ A service fails when it starts, with a `TypeError` that names the rule, when it 
 - an application `name` that is not a lowercase kebab-case word of 2 to 64 characters, or an operation
   name over 100 characters;
 - an error code that is not uppercase words joined by underscores, such as `RECORD_NOT_FOUND`;
-- a `DELETE` route that declares `effect: 'read'`.
+- a `DELETE` route that declares `effect: 'read'`;
+- a record whose keys follow a pattern (`t.Record(t.String({ pattern }), …)`) without
+  `additionalProperties: false`, which let a key outside the pattern through with any value;
+- MCP guide or skill names that collide with each other or with the OpenAPI document's resources.
 
 Each of these used to pass and fail later: the first request for the OpenAPI document answered 500, or
 analytics dropped every event of the service without a word.
@@ -224,6 +245,8 @@ Calls:
   `INTERNAL_ERROR` instead of `INVALID_INPUT`.
 - The router decodes every path segment before it matches one, so an encoded fixed segment reaches its
   own route.
+- An operation's JSON body sent with another `content-type` is refused with `415` and
+  `UNSUPPORTED_MEDIA_TYPE` before any of it is read.
 - A telemetry switch (`telemetry.enabled`) that throws turns telemetry off for the call, and the call
   still answers.
 - `analytics()` records a pseudonym of each actor unless `actor: 'id'` asks for the id.
@@ -234,11 +257,19 @@ Libraries and entries:
   removed: read the raw body with `readBodyText` or `readBodyBytes` and a byte limit, then verify it.
 - `withTenantTransaction` refuses an empty isolation level and an organization id that is not a string,
   before it checks a connection out.
-- `createAssetHandler` answers an immutable asset only for a plain path: an encoded slash, an encoded
-  character or a dot segment there is a 404.
+- Static assets, a web app's build or `createWorker`'s `assets`, answer an immutable asset only for a plain
+  path: an encoded slash, an encoded character or a dot segment there is a 404.
 - `sameSchema` is removed, and so is the `ExecutionSink` type of `@arbol-ai/maximus/analytics`.
 - A custom HTTP transport receives `admitCarried`, `refused` and `body` in its `TransportContext`, where it
   received `admitRequest` and `bodyBytes`.
+
+The contract:
+
+- The OpenAPI document and the MCP tool listing publish an input field that has a default as optional,
+  since decoding fills it in. A `DELETE`'s request body is required only when its input requires a field.
+- A list query parameter is published with `style: form` and `explode: false`, the `tags=a,b` form the API
+  reads, so a generated client stops repeating the key.
+- The API's index names the MCP endpoint whenever the Worker serves MCP.
 
 The Worker:
 

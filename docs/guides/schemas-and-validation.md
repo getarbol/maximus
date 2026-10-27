@@ -1,89 +1,151 @@
 # Schemas and validation
 
-Maximus schemas are [TypeBox](https://github.com/sinclairzx81/typebox) schemas. This guide covers
-writing them, the codecs that normalize and refine input, query strings, reading untrusted data, and
-the rules about where validation happens.
+Contracts are [TypeBox](https://github.com/sinclairzx81/typebox) schemas. This guide covers writing them, the
+schemas Maximus exports for the values every service shares, lists, the codecs that normalize and refine
+input, query strings, named schemas, and reading data back from storage. Read it when you write a contract,
+or when a handler reads data it did not receive as input.
 
-## Writing schemas
+## Write a schema
 
 ```ts
+// src/tasks.ts
 import { t, UuidSchema } from '@arbol-ai/maximus';
 import type { Static } from '@arbol-ai/maximus';
 
+/** A task as it is stored and answered. */
 export const TaskSchema = t.Object(
   {
     taskId: UuidSchema,
     title: t.String({ minLength: 1, maxLength: 200 }),
-    status: t.Union([t.Literal('open'), t.Literal('done')]),
+    done: t.Boolean(),
     completedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   },
-  { additionalProperties: false }
+  { $id: 'Task', additionalProperties: false }
 );
 export type Task = Static<typeof TaskSchema>;
 ```
 
-- Operation inputs and outputs are strict objects, or unions whose every member is a strict object,
-  discriminated by a field. A GET input is one strict object. Construction refuses anything else.
-- Ids are strings. Name the organization `organizationId` and correlation ids `requestId`; do not
-  invent aliases such as `tenantId` or `orgId`.
-- Present every field explicitly; use `t.Null()` in a union for "no value" rather than leaving a
-  field out of an output.
-- Use the [shared schemas](#shared-schemas) for organization ids, UUIDs, emails, phone numbers and
-  the other values every service publishes, rather than a local copy.
+`t` is TypeBox's `Type`, exported by `@arbol-ai/maximus` and by `@arbol-ai/maximus/schemas`. A schema is the
+check a value passes at runtime, the value's TypeScript type through `Static`, and its description in the
+OpenAPI document and the MCP tool listing, as [Concepts](../concepts.md#schemas) explains.
+
+- A contract's `input` and `output` are strict objects (`additionalProperties: false`), or unions whose every
+  member is one, told apart by a field such as `kind`. A GET's input is one strict object, its query string.
+  `.build()` refuses anything else:
+  `Operation "postV1Notes": input and output are strict objects or unions of strict objects; a GET input is one strict object (its query). Use safe operation names, namespaced scopes and strict object schemas.`
+  The fields a route gives as `input` or `output`, `{ title: t.String() }`, make a strict object.
+- `.build()` checks the outermost object. Declare nested objects strict as well, or their unknown fields are
+  admitted.
+- The formats `date`, `time`, `date-time`, `email`, `uuid` and `uri` are checked by maintained RFC
+  validators, without generating code at runtime. `time` and `date-time` require a time zone. A value longer
+  than 8192 characters fails any format, and a format outside this list refuses every value.
+- Ids are strings. The organization is `organizationId`, and a request's id `requestId`.
+- An output states every field. Declare "no value" as a union with `t.Null()` rather than leaving the field
+  out.
 
 ## Shared schemas
 
-Values and objects that every service publishes alike carry an `$id`, so the OpenAPI document holds
-each once as a component of that name and every SDK generated from those documents has one type for
-it. Use them as they are; spread one to give a field its own description
-(`{ ...EmailAddressSchema, description: 'Where the receipt goes.' }`).
+Values and objects that every service publishes alike carry an `$id`, so the OpenAPI document holds each
+once as a component of that name, and every client generated from those documents has one type for it:
 
-| Export                                  | Component           | Shape                                                                                                                         |
-| --------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `OrganizationIdSchema`                  | `OrganizationId`    | string `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`: the ids identity providers issue (`org_…`, UUIDs, slugs)                          |
-| `UuidSchema`                            | `Uuid`              | an RFC 9562 UUID, lower case                                                                                                  |
-| `EmailAddressSchema`                    | `EmailAddress`      | string, format `email`, at most 254 characters                                                                                |
-| `PhoneNumberSchema`                     | `PhoneNumber`       | E.164, `^\+[1-9][0-9]{1,14}$`                                                                                                 |
-| `HttpsUrlSchema`                        | `HttpsUrl`          | string, format `uri`, `^https://`, at most 2048 characters                                                                    |
-| `HexColorSchema`                        | `HexColor`          | `#rrggbb`                                                                                                                     |
-| `DeletedObjectSchema`                   | `DeletedObject`     | `{ id: string, deleted: true }`: what a `delete` answers                                                                      |
-| `SignedUrlSchema`                       | `SignedUrl`         | `{ url: HttpsUrl, expiresAt: date-time }`: a link that grants access by itself until it expires                               |
-| `NamedReferenceSchema`                  | `NamedReference`    | `{ id: string, name: string }`                                                                                                |
-| `PostalAddressSchema`                   | `PostalAddress`     | FHIR-shaped `{ line?: string[] (≤ 4), city?, state?, postalCode?, countryCode?: ISO 3166-1 alpha-2, use?: 'home' \| 'work' }` |
-| `PageInfoSchema`, `Page(item, { $id })` | `PageInfo`, `<$id>` | See [Lists](#lists)                                                                                                           |
-| `FailureSchema` (`/errors`)             | `Failure`           | `{ code, message, retryable, data }`, the base every failure narrows                                                          |
+| Export                                  | Component                    | Shape                                                                                                                                           |
+| --------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UuidSchema`                            | `Uuid`                       | A lowercase RFC 9562 UUID of version 1 to 8                                                                                                     |
+| `OrganizationIdSchema`                  | `OrganizationId`             | 1 to 128 letters, digits, `_` and `-`, starting with a letter or a digit: the ids identity providers issue (`org_…`, UUIDs, slugs)              |
+| `EmailAddressSchema`                    | `EmailAddress`               | Format `email`, at most 254 characters                                                                                                          |
+| `PhoneNumberSchema`                     | `PhoneNumber`                | E.164: `+` and 2 to 15 digits, the first not `0`                                                                                                |
+| `HttpsUrlSchema`                        | `HttpsUrl`                   | Format `uri`, starting with `https://`, at most 2048 characters                                                                                 |
+| `HexColorSchema`                        | `HexColor`                   | `#rrggbb`                                                                                                                                       |
+| `DeletedObjectSchema`                   | `DeletedObject`              | `{ id: string, deleted: true }`: what a delete answers                                                                                          |
+| `SignedUrlSchema`                       | `SignedUrl`                  | `{ url: HttpsUrl, expiresAt: date-time }`: a link that grants access by itself until it expires                                                 |
+| `NamedReferenceSchema`                  | `NamedReference`             | `{ id: string, name: string }`                                                                                                                  |
+| `PostalAddressSchema`                   | `PostalAddress`              | Shaped as FHIR `Address`: `{ line?, city?, state?, postalCode?, countryCode?, use? }`, `countryCode` ISO 3166-1 alpha-2, `use` `home` or `work` |
+| `PageInfoSchema`, `Page(item, { $id })` | `PageInfo`, the page's `$id` | See [Lists](#lists)                                                                                                                             |
+| `FailureSchema`                         | `Failure`                    | `{ code, message, retryable, data }`: the base every failure narrows                                                                            |
+| `EmptyInputSchema`                      | None                         | `{}`, strict                                                                                                                                    |
+| `AttachmentOutputSchema`                | None                         | The output of a route that answers a file; see [Attachments](routes.md#attachments)                                                             |
 
-`EmptyInputSchema` (`{}`, strict) stays unnamed. Every object is strict. Dates and times stay plain
-`date-time` and `date` strings. Domain records (people, patients, identity documents, locations)
-belong to the service that owns them; name your own entities with an `$id` of their own.
+The package root and `@arbol-ai/maximus/schemas` export them all, except `FailureSchema`, which the root and
+`@arbol-ai/maximus/errors` export.
 
-A name is public, so it names exactly one shape: two different schemas under one `$id` become two
-components, the second suffixed `_2`. Only the OpenAPI document uses the names. MCP tool schemas write
-each named schema in place, as they did before it was named.
+Use them as they are. To give a field its own description, spread the schema:
+`{ ...EmailAddressSchema, description: 'Where the receipt goes.' }` keeps the reference to `EmailAddress` and
+adds the description beside it. Your own records are named by an `$id` of their own, as `TaskSchema` is.
 
-Formats `date`, `time`, `date-time`, `email`, `uuid` and `uri` use maintained RFC validators, without
-generating code at runtime. `date-time` requires a time zone. Values longer than 8192 characters fail
-any format.
+## Lists
 
-## Encoded and decoded types
+Every list has one contract: keyset pages with an opaque cursor, and no page number, offset or total. Its
+input takes `PageQueryFields`, beside the list's own filters, and its output is a `Page`:
 
-An input schema can change a value on its way in, for example by trimming text or turning a query
-string into a number. Two types follow:
+```ts
+// src/notes.ts
+import { Page, t, UuidSchema } from '@arbol-ai/maximus';
 
-- the **encoded** type, `Static<typeof Input>`, is what callers send. OpenAPI uses it;
-- the **decoded** type, `StaticDecode<typeof Input>`, is what your handler receives.
+/** A note as it is stored and answered. */
+export const NoteSchema = t.Object(
+  {
+    noteId: UuidSchema,
+    title: t.String({ minLength: 1, maxLength: 200 }),
+    body: t.String({ maxLength: 10_000 }),
+    createdAt: t.String({ format: 'date-time' }),
+    updatedAt: t.String({ format: 'date-time' }),
+  },
+  { $id: 'Note', additionalProperties: false }
+);
 
-For a schema without codecs they are the same. A field declared with `transformSchema`,
-`normalizeSchema` or `pipeSchema` is encoded as its source schema: callers send what the source
-checks, and the handler receives what the codec returns. `checkSchema` and `readSchema` answer the
-decoded type.
+/** One page of the organization's notes, newest first. */
+export const NotePageSchema = Page(NoteSchema, { $id: 'NotePage' });
+```
+
+```ts
+// routes/v1/notes/index.get.ts: GET /api/v1/notes
+import { defineHandler, PageQueryFields, t } from '@arbol-ai/maximus';
+import { inputSchema } from '@arbol-ai/maximus/schemas';
+
+import { NotePageSchema } from '../../../src/notes.ts';
+
+export default defineHandler(
+  async ({ input, notes, fail }) => (await notes.page(input)) ?? fail('INVALID_CURSOR'),
+  {
+    description: "List the organization's notes, newest first. Pass pageInfo.nextCursor as cursor for more.",
+    input: inputSchema(t.Object(PageQueryFields, { additionalProperties: false })),
+    output: NotePageSchema,
+    failures: ['INVALID_CURSOR'],
+    mcp: { name: 'list_notes' },
+  }
+);
+```
+
+- The query takes `cursor`, the opaque cursor of a previous page, absent for the first; `direction`,
+  `forward` or `backward` from that cursor, `forward` by default; and `limit`, an integer from 1 to 100,
+  25 by default. Spread the fields beside the list's own:
+  `t.Object({ ...PageQueryFields, done: t.Optional(t.Boolean()) }, { additionalProperties: false })`.
+- `inputSchema()` applies the defaults before the handler runs, so it always receives `direction` and
+  `limit` (the type `PageQuery`), and publishes both as optional. Without it the defaults still apply, but the
+  OpenAPI document and the MCP tool listing mark the two fields required.
+- `pageLimit()` gives a list whose items are costly a lower maximum:
+  `{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }`. Its default becomes the smaller of 25 and the
+  maximum, unless you pass `default`. It refuses
+  `A page limit has an integer default from 1 to its integer maximum.` otherwise.
+- The output is `{ object: 'list', data, pageInfo }`, where `pageInfo` holds `hasNextPage`,
+  `hasPreviousPage`, `nextCursor` and `previousCursor`, each cursor a string or `null`. [Wire
+  formats](../reference/wire-formats.md#lists) gives the exact schemas.
+- A cursor the list did not issue is the service's own failure to answer, such as the `INVALID_CURSOR` of
+  the [`d1-notes`](../../examples/d1-notes) example.
+
+`PageInfo` and each page are named schemas, so the OpenAPI document holds each once. That makes a page's
+name public: `Page` takes a PascalCase name, conventionally the item's and `Page`, and refuses any other
+(`Page "notePage" needs a PascalCase schema name, such as AppointmentPage.`). Give each list its own name:
+two different pages under one name become two components, the second suffixed `_2`.
 
 ## Input codecs
 
-Owner semantics live beside the schema, in `@arbol-ai/maximus/schemas`, and are compiled into the
-one validation boundary by `inputSchema`:
+A codec gives a field an owner's meaning on its way in: a default, a normalization, a conversion or a rule.
+The codecs live in `@arbol-ai/maximus/schemas`, and `inputSchema()` compiles them into the input the
+execution path decodes:
 
 ```ts
+// src/search.ts
 import { defaultSchema, inputSchema, normalizeSchema, refineSchema, t } from '@arbol-ai/maximus/schemas';
 
 const SearchSchema = t.Object(
@@ -96,6 +158,7 @@ const SearchSchema = t.Object(
   { additionalProperties: false }
 );
 
+/** A search of the organization's notes: trimmed text, at most 50 notes, a range that does not end early. */
 export const SearchInputSchema = inputSchema(
   refineSchema(SearchSchema, (value) => value.from <= value.to, {
     message: 'The range must not end before it starts.',
@@ -104,190 +167,227 @@ export const SearchInputSchema = inputSchema(
 );
 ```
 
-**Wrap an operation input in `inputSchema()` whenever it uses a codec.** A plain decode would skip
-normalizers, transforms, refinements and stripping and apply only the TypeBox checks and defaults,
-so `.build()` refuses an operation input that uses a codec outside `inputSchema()`.
+```ts
+// routes/v1/notes/search.post.ts: POST /api/v1/notes/search
+import { defineHandler, t } from '@arbol-ai/maximus';
 
-| Helper                                                                                                       | Effect                                                                                                                                                                                                |
-| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inputSchema(schema)`                                                                                        | Compiles the codecs below into one decoding schema. Defaulted fields become optional on the wire.                                                                                                     |
-| `inputSchema(schema, wire)`                                                                                  | Declares a different wire schema, decoded and then checked against `schema`. See [Query strings](#query-strings).                                                                                     |
-| `inputSchema(schema, { stripUnknown: true })`                                                                | Drops unknown keys of objects declared with `stripObject`, instead of refusing them. For readers of stored or provider data; an operation input stays strict, and `.build()` refuses this form there. |
-| `defaultSchema(schema, value)`                                                                               | A default applied before the handler.                                                                                                                                                                 |
-| `normalizeSchema(schema, fn)`                                                                                | Runs `fn` on the raw value, then applies the schema's length, pattern and format checks. Consecutive normalizers all run before those checks.                                                         |
-| `transformSchema(schema, fn)`                                                                                | Validates the source value, then converts it with `fn`.                                                                                                                                               |
-| `refineSchema(schema, predicate, detail?)`                                                                   | A semantic rule. `detail` is a message or `{ message, path }`.                                                                                                                                        |
-| `inspectSchema(schema, (value, { addIssue }) => …)`                                                          | Like `refineSchema`, reporting any number of issues.                                                                                                                                                  |
-| `pipeSchema(source, target)`                                                                                 | Validates and decodes `source`, then checks and decodes the result against `target`.                                                                                                                  |
-| `stripObject(properties)`, `strictObject(schema)`, `looseObject(schema)`, `extendObject(object, properties)` | Object shapes with explicit unknown-key behavior.                                                                                                                                                     |
-| `literalUnion(['a', 'b'])`                                                                                   | A union of literals.                                                                                                                                                                                  |
-| `urlSchema({ protocol, hostname?, maxLength? })`                                                             | A URI whose protocol (and optionally hostname) matches the given expressions.                                                                                                                         |
+import { NoteSchema } from '../../../src/notes.ts';
+import { SearchInputSchema } from '../../../src/search.ts';
 
-Callbacks run in declaration order. A refinement's message travels to the caller in
-`INVALID_INPUT` issues, so it must never contain the input's values.
+export default defineHandler(
+  async ({ input, notes }) => ({ notes: await notes.search(input.query, input.limit) }),
+  {
+    description: "Find the organization's notes that contain a text.",
+    effect: 'read',
+    input: SearchInputSchema,
+    output: { notes: t.Array(NoteSchema) },
+  }
+);
+```
 
-Outputs are checked, never decoded: a response must already be canonical. Keep the canonical schema
-for outputs and compile inputs from it, so output validation never repairs malformed data.
+`{ "query": "  call back  ", "from": "2026-10-01", "to": "2026-10-31" }` reaches the handler as
+`{ query: 'call back', limit: 20, from: '2026-10-01', to: '2026-10-31' }`. A range that ends before it starts
+answers `INVALID_INPUT` with this issue:
+
+```json
+{ "path": "/to", "message": "The range must not end before it starts." }
+```
+
+Wrap every input that uses a codec in `inputSchema()`: a plain decode would apply TypeBox's checks and
+defaults and skip the rest, so `.build()` refuses such an input:
+`Operation "postV1NotesSearch": its input uses codecs (normalize, transform, inspect, refine, pipe or stripObject) that run only inside inputSchema(); wrap the input in inputSchema().`
+
+| Helper                                              | Effect                                                                                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inputSchema(schema)`                               | Compiles the codecs below into one input schema. A field with a default is optional on the wire.                                                     |
+| `inputSchema(schema, wire)`                         | Reads another shape, `wire`, then checks and decodes the result as `schema`. See [Query strings](#query-strings).                                    |
+| `inputSchema(schema, { stripUnknown: true })`       | Drops the unknown keys of `stripObject` objects instead of refusing them, for readers of stored data. `.build()` refuses it as an operation's input. |
+| `defaultSchema(schema, value)`                      | A default the field takes when it is absent.                                                                                                         |
+| `normalizeSchema(schema, fn)`                       | Runs `fn` on the value, then checks the result's length, pattern and format. Consecutive normalizers all run before those checks.                    |
+| `transformSchema(schema, fn)`                       | Checks the value against `schema`, then converts it with `fn`.                                                                                       |
+| `refineSchema(schema, predicate, detail?)`          | Refuses a value `predicate` rejects; `detail` is a message, or `{ message, path }`.                                                                  |
+| `inspectSchema(schema, (value, { addIssue }) => …)` | Like `refineSchema`, reporting any number of issues.                                                                                                 |
+| `pipeSchema(source, target)`                        | Reads the value as `source`, then checks and decodes the result as `target`.                                                                         |
+| `stripObject(properties)`                           | A strict object whose unknown keys a reader that strips drops.                                                                                       |
+| `strictObject(schema)`, `looseObject(schema)`       | An object that refuses unknown keys even where a read strips them; one that admits and keeps them.                                                   |
+| `extendObject(object, properties)`                  | The object with more properties, treating unknown keys as it does.                                                                                   |
+| `literalUnion(['open', 'done'])`                    | A union of literals.                                                                                                                                 |
+| `urlSchema({ protocol, hostname?, maxLength? })`    | A `uri` whose protocol, and hostname when given, match the expressions.                                                                              |
+
+Codecs run in the order they are declared. A refinement's message reaches the caller in the issues of
+`INVALID_INPUT`, so it never contains the input's values. A codec that throws anything but a refusal is the
+service's error: the call answers `INTERNAL_ERROR`.
+
+A codec gives an input two types: what callers send, which the OpenAPI document publishes, and what the
+handler receives, `StaticDecode<typeof schema>` from `@arbol-ai/maximus/schemas`. Without codecs, the two
+are `Static<typeof schema>`.
+
+Outputs are checked, never decoded: a handler returns the canonical value, defaults included. Keep the
+canonical schema for outputs and build inputs from it, so an output check never repairs malformed data.
 
 ## Query strings
 
-A GET input arrives in the query string. A field declared as an integer, number, boolean or list of
-strings is read as one (`?limit=2&active=true&tags=a,b`), the way generated clients write it. For any
-other conversion, declare the wire schema with a decoding transform and the canonical schema
-separately; a wire field declared as a string stays a string:
+A GET reads its input from the query string, each field the input declares once, as its kind:
+
+| A field declared as                                      | Is read as                                                                             |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| An integer                                               | A decimal integer of at most 16 digits, without leading zeros: `limit=10`, `offset=-2` |
+| A number                                                 | A decimal, with an optional fraction and exponent: `ratio=0.25`, `ratio=-1.5e3`        |
+| A boolean                                                | `true` or `false`                                                                      |
+| A list of strings, or a list or a string                 | Comma-separated items, none empty: `tags=a,b` is `['a', 'b']`, and `tags=a` is `['a']` |
+| A string, a string literal or a union of string literals | The text as it is                                                                      |
+
+- A value that does not read as its kind (`limit=010`, `ratio=.5`, `done=yes`, `tags=a,,b`), a repeated key
+  and the key `__proto__` answer `400 INVALID_INPUT`, without issues. A list is one comma-separated value,
+  which the OpenAPI document declares with `style: form` and `explode: false`: `tags=a&tags=b` is refused.
+- A `null` alternative is ignored: `t.Union([t.Integer(), t.Null()])` reads as an integer.
+- Any other field (an object, a list of numbers, a tuple, a union of different kinds such as an integer or
+  `'all'`) has no query kind. Its value stays text, which its schema refuses unless it admits text.
+- A key the input does not declare stays text too, and the strict input refuses it as `Unexpected property`.
+
+To read a field another way, declare the shape it travels in, its wire schema, beside the input the handler
+receives, and join them with `inputSchema(input, wire)`. A wire field declared as a string stays a string,
+and its transform decodes it:
 
 ```ts
+// src/task-queries.ts
 import { inputSchema, t } from '@arbol-ai/maximus/schemas';
 
+/** The query as it travels: priorities as comma-separated digits, `?priority=1,3`. */
 const ListTasksQuery = t.Object(
   {
-    limit: t.Optional(
+    priority: t.Optional(
       t
-        .Transform(t.String({ pattern: '^[1-9][0-9]{0,2}$' }))
-        .Decode((value) => Number(value))
-        .Encode((value) => String(value))
+        .Transform(t.String({ pattern: '^[1-5](,[1-5])*$' }))
+        .Decode((value) => value.split(',').map(Number))
+        .Encode((value) => value.join(','))
     ),
-    status: t.Optional(t.Union([t.Literal('open'), t.Literal('done')])),
   },
   { additionalProperties: false }
 );
+
+/** The input the handler receives: `{ priority: [1, 3] }`. */
 const ListTasksInput = t.Object(
-  {
-    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
-    status: t.Optional(t.Union([t.Literal('open'), t.Literal('done')])),
-  },
+  { priority: t.Optional(t.Array(t.Integer({ minimum: 1, maximum: 5 }), { maxItems: 5 })) },
   { additionalProperties: false }
 );
 
-// input: inputSchema(ListTasksInput, ListTasksQuery)
+export const ListTasksInputSchema = inputSchema(ListTasksInput, ListTasksQuery);
 ```
 
-The decimal pattern belongs to the wire schema; the numeric bounds to the canonical one. OpenAPI
-documents the wire schema, the client sends strings, and the handler receives a number.
+The pattern belongs to the wire schema, and the bounds to the input. The OpenAPI document publishes the wire
+schema, callers send text, and the handler receives numbers.
 
-## Lists
+## Named schemas
 
-Every list uses one contract: bidirectional keyset pagination with an opaque cursor, and no page
-number, offset or implicit total. Spread `PageQueryFields` into the list's input beside its own
-filters, and name its output with `Page`:
+A schema with an `$id` is named. The OpenAPI document holds it once, as the component of that name, and
+every use of it is a reference, `{ "$ref": "#/components/schemas/Note" }`, beside which a description given
+at the use stays. The shared schemas and every page are named; name your own records the same way.
 
-```ts
-import { Page, PageQueryFields, inputSchema, t } from '@arbol-ai/maximus/schemas';
-import type { PageQuery } from '@arbol-ai/maximus/schemas';
-
-export const ListTasksInputSchema = inputSchema(
-  t.Object(
-    { ...PageQueryFields, status: t.Optional(t.Union([t.Literal('open'), t.Literal('done')])) },
-    { additionalProperties: false }
-  )
-);
-export const TaskPageSchema = Page(TaskSchema, { $id: 'TaskPage' });
-
-// A repository takes the PageQuery and answers the generic type Page<Task>.
-export declare function listTasks(organizationId: string, query: PageQuery): Promise<Page<Task>>;
-```
-
-The input takes `cursor` (optional, opaque), `direction` (`forward` or `backward`, default
-`forward`) and `limit` (an integer from 1 to 100, default 25); `inputSchema` applies the defaults
-and lists them as optional, so the handler always receives `direction` and `limit`. A list whose items
-are costly lowers its maximum with `pageLimit`:
-`{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }` (the default becomes the smaller of 25 and
-the maximum, unless you pass `default`). The output is
-`{ object: 'list', data: Item[], pageInfo }`, where `pageInfo` is `PageInfoSchema`:
-`{ hasNextPage, hasPreviousPage, nextCursor, previousCursor }`, the cursors a string or `null`. The
-exact schemas are in the [wire formats reference](../reference/wire-formats.md#lists).
-
-`PageInfo` and each page are named schemas, so the OpenAPI document carries each once as a
-component (`#/components/schemas/TaskPage`) and every SDK generated from it shares their types.
-That makes the name public:
-
-- give each list its own PascalCase name, conventionally the item's name and `Page`. `Page`
-  refuses any other name;
-- use a name for one shape only. Two different schemas under one `$id` become two components, the
-  second suffixed `_2`, and SDKs see two types.
-
-Every operation that returns many items should answer a page, so clients page every list the same
-way.
+- A name is public, so it names one shape. Two different schemas under one `$id` become two components, the
+  second suffixed `_2`, and clients generated from the document see two types.
+- An MCP tool's schemas are self-contained, as MCP clients compile them: each named schema is written where it
+  is used, without its `$id`, and a definition that a reference names is written once under `$defs`.
+- `t.Ref('Note')` refers to a schema by its name, and a recursive schema (`t.Recursive`) to itself. A
+  reference made outside the schema it names resolves only when that name has exactly one definition among
+  the application's schemas, which `.build()` checks before the service starts:
+  `Schema reference "Note" does not name exactly one definition.`
 
 ## Reading untrusted data
 
-Data that is not an operation's input still crosses a trust boundary: a stored record, a provider
-response, a model's answer, a file an operator wrote. Read it through its schema:
+Data that is not an operation's input still crosses a boundary: a stored record, a provider's or a model's
+answer, a file. Read it through its schema with `readSchema` or `checkSchema`, from
+`@arbol-ai/maximus/schemas`:
 
 ```ts
-import { checkSchema, readSchema } from '@arbol-ai/maximus/schemas';
+// src/task-reader.ts
+import { readSchema } from '@arbol-ai/maximus/schemas';
 
-const stored = await env.TASKS.get(key);
-const task = stored === null ? null : readSchema(TaskSchema, JSON.parse(stored)); // throws if invalid
+import { TaskSchema } from './tasks.ts';
+import type { Task } from './tasks.ts';
 
-const answer = checkSchema(ProviderAnswerSchema, body);
-if (!answer.success) {
-  return err(errors.upstreamUnavailable.create()); // answer.error.issues: [{ code, message, path }]
+/** The organization's task with this id, or null when it has none. */
+export async function readTask(
+  store: KVNamespace,
+  organizationId: string,
+  taskId: string
+): Promise<Task | null> {
+  const stored = await store.get(`tasks/${organizationId}/${taskId}`);
+  return stored === null ? null : readSchema(TaskSchema, JSON.parse(stored));
 }
 ```
 
-`checkSchema` returns `{ success: true, data }` or `{ success: false, error }`, where `error` is a
-`SchemaValidationError` listing every issue with its path. `readSchema` returns the data or throws
-that error. Both apply the schema's owner semantics: defaults, normalizers before checks, and unknown
-keys of `stripObject` objects dropped. Neither coerces types.
-
-Lower-level helpers:
-
-| Helper                        | Use                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `decodeInput(schema, value)`  | The operation boundary as a function: a `Result` whose failure is `INVALID_INPUT` with issues.         |
-| `decodeSchema(schema, value)` | The same decoding, throwing on refusal.                                                                |
-| `parseInput(schema, value)`   | Check only, no defaults or codecs: `{ ok: true, value }` or an `INVALID_INPUT` failure without issues. |
-| `parseSchema(schema, value)`  | Check only, returning the value or throwing.                                                           |
-
-All of them accept only plain JSON trees: no class instances, cycles, non-finite numbers or nesting
-deeper than 100 levels.
-
-For provider calls, read bodies with a byte limit before parsing them. `readJsonResponse(response,
-{ maxBytes, signal })` (from `@arbol-ai/maximus` or `@arbol-ai/maximus/body`) answers a `Result` and
-accepts `application/json` and `+json` media types; `retryAfterSeconds(header, Date.now())` reads a
-`Retry-After` hint. A hint never makes repeating a write safe.
-
-In a Worker, `fetch` accepts only `redirect: 'follow'` and `redirect: 'manual'`: `redirect: 'error'`
-throws a `TypeError` before any request leaves, so the call never reaches its provider, and a `catch`
-that reports an outage hides it. Send a credential with `redirect: 'manual'` and refuse a `3xx`
-response, so the key never follows a redirect and the call still runs:
+`readSchema` answers the decoded value, or throws a `SchemaValidationError` that lists every issue,
+`{ code, message, path }`. Thrown in a handler, it answers `INTERNAL_ERROR`: a record that does not match its
+schema is never answered as one. `checkSchema` answers `{ success: true, data }` or
+`{ success: false, error }` with that same error instead, for a refusal the code handles itself, as the
+`orders` Worker of the [`worker-rpc`](../../examples/worker-rpc) example does with a failure's data:
 
 ```ts
-const response = await fetch(url, {
-  headers: { authorization: `Bearer ${key}` },
-  redirect: 'manual',
-  signal,
+const unknown =
+  priced.error.code === 'UNKNOWN_SKU' ? checkSchema(UnknownSkuSchema, priced.error.data) : undefined;
+if (unknown?.success) {
+  return fail('UNKNOWN_ITEM', unknown.data);
+}
+```
+
+Both apply the schema's codecs: defaults, normalizers before their checks, refinements, and the unknown keys
+of `stripObject` objects dropped, so a record stored with a field the service does not read still reads:
+
+```ts
+import { readSchema, stripObject, t, UuidSchema } from '@arbol-ai/maximus/schemas';
+
+const StoredNoteSchema = stripObject({ noteId: UuidSchema, text: t.String() });
+
+// { noteId: '0190c6d4-8f3e-7a6b-9c1d-2e3f4a5b6c7d', text: 'Call back' }
+const note = readSchema(StoredNoteSchema, {
+  noteId: '0190c6d4-8f3e-7a6b-9c1d-2e3f4a5b6c7d',
+  text: 'Call back',
+  color: 'blue',
 });
-if (response.status >= 300 && response.status < 400) {
-  await response.body?.cancel();
-  return err(errors.upstreamUnavailable.create());
-}
 ```
 
-## Validation ownership
+Neither coerces a value, and both admit only a plain JSON tree: no class instances such as a `Date`, no
+cycles, no numbers that are not finite and no nesting deeper than 100 levels. Turn a date into its string
+first, as the [`r2-documents`](../../examples/r2-documents) example reads `object.uploaded.toISOString()`.
 
-Each value is checked exactly once, by the boundary that owns it:
+| Helper                        | Answers                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `parseInput(schema, value)`   | A check without defaults or codecs: `{ ok: true, value }`, or an `INVALID_INPUT` failure without issues.     |
+| `parseSchema(schema, value)`  | The same check, answering the value or throwing a `TypeError` that names no value.                           |
+| `decodeInput(schema, value)`  | The execution path's decoding as a function: the value, or an `INVALID_INPUT` failure with up to ten issues. |
+| `decodeSchema(schema, value)` | The same decoding, throwing its refusal.                                                                     |
 
-| Value                                                            | Checked by                                                      |
-| ---------------------------------------------------------------- | --------------------------------------------------------------- |
-| Operation input                                                  | The shared execution path, on every transport, after admission. |
-| Operation output and returned failures                           | The same path, before any transport sees them.                  |
-| MCP JSON-RPC envelopes                                           | The MCP SDK.                                                    |
-| Stored records, provider and model responses, operator files     | Their own reader: `checkSchema` or `readSchema`.                |
-| The arguments of your own RPC methods and Durable Object methods | The method that receives them.                                  |
+`parseInput` and `parseSchema` are also exported by the package root.
+
+Read a provider's answer within a byte limit before checking it.
+`readJsonResponse(response, { maxBytes, signal })`, from the package root or `@arbol-ai/maximus/body`, reads
+at most `maxBytes` of an `application/json` or `+json` body and answers a Result: the parsed value, `null` for
+a `204` or `205`, or the failure `HTTP_BODY_INVALID`, whose `data.reason` says why.
+`retryAfterSeconds(header, Date.now())` reads a provider's `Retry-After` as seconds, at most 3600 by default.
+A hint never makes repeating a write safe.
+
+## Where values are checked
+
+Each value is checked once, by the boundary that owns it:
+
+| Value                                                            | Checked by                                                     |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| An operation's input                                             | The shared execution path, on every transport, after admission |
+| An operation's output and the failures it answers                | The same path, before any transport sees them                  |
+| MCP's JSON-RPC envelopes                                         | The MCP SDK                                                    |
+| Stored records, provider and model answers, files                | Their reader: `readSchema` or `checkSchema`                    |
+| The arguments of your own RPC methods and Durable Object methods | The method that receives them                                  |
 
 Inside a handler, values are typed and already checked:
 
-- Do not parse an input, a derived value or a same-owner Durable Object result again before
-  returning it; the output check covers it.
-- When code behind a validating method needs the implementation, call the typed implementation
-  rather than the public method.
-- Never replace a check with a cast, a trust flag, a no-op validator or a cache of earlier results.
+- Do not parse an input, a value the context prepared or a Durable Object's answer of the same service
+  again before returning it: the output check covers it.
+- When code behind a method that checks its arguments needs the implementation, call the typed
+  implementation, not the checking method.
+- Never replace a check with a cast, a flag that marks a value as trusted or a cache of earlier checks.
 
 ## Contracts shared with browsers
 
-`@arbol-ai/maximus/schemas` needs no Worker runtime. A contract module that a browser also imports
-(a dashboard reading an API's limits, a widget's settings) takes `t`, `Static`, `StaticDecode`, the
-codecs, the readers and the shared schemas from there. The package root works in a browser too, but
-brings the whole framework.
+`@arbol-ai/maximus/schemas` needs no Worker runtime. A module that a browser also imports, such as a web
+app's form, takes `t`, the types, the codecs, the readers and the shared schemas from there.

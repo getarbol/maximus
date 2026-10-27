@@ -1,118 +1,238 @@
 # Deploying
 
-A Maximus service deploys like any Worker, with Cloudflare's [`cf`](https://developers.cloudflare.com/cf/)
-CLI: `cf build` writes the Build Output and `cf deploy --prebuilt` deploys that same build. This guide
-lists what to configure, what to check before deploying and how to verify the deployed Worker.
+A project deploys as one Cloudflare Worker, with `cf`, Cloudflare's command line, through `bun run deploy`.
+This guide covers what to set before the first deployment, the deployment itself, secrets, the resources a
+deployment creates and those you create, the starter's GitHub workflow, and how to check the Worker once it
+is deployed.
 
-## Configure the Worker
+## Before the first deployment
 
-`cloudflare.config.ts`:
+### Choose the origin
 
-```ts
-import { bindings, defineConfig } from 'cf/config';
+`origin` in `maximus()` is the public HTTPS URL the Worker answers at. The OpenAPI document, MCP resources and
+OAuth discovery advertise it, and access tokens must carry it as their audience unless `tokens.audience` says
+otherwise. `maximus()` routes the Worker to it:
 
-import * as entrypoint from './src/index.ts' with { type: 'cf-worker' };
+- A `workers.dev` origin, `https://notes.<subdomain>.workers.dev`: the Worker answers at its `workers.dev`
+  URL (`workersDev: true`), with no custom domain.
+- Any other origin, such as `https://notes.example.com`: its host becomes the Worker's custom domain
+  (`domains: ['notes.example.com']`), and the `workers.dev` URL is off (`workersDev: false`).
 
-export default defineConfig(({ mode }) => ({
-  worker: {
-    name: 'notes',
-    compatibilityDate: '2026-10-12',
-    compatibilityFlags: ['nodejs_compat'],
-    entrypoint,
-    domains: ['notes.example.com'],
-    workersDev: false,
-    previewUrls: false,
-    observability: { enabled: true, logs: { invocationLogs: true }, traces: { enabled: true } },
-    env: {
-      NOTES: bindings.kv({ id: '<namespace id>' }),
-      // Declared for `cf dev` alone: no deployed build carries the development token.
-      DEVELOPMENT_TOKEN: mode === 'development' && bindings.secret(),
-    },
-  },
-}));
+The Worker's `workers.dev` URL is `https://<name>.<subdomain>.workers.dev`, where the name is `maximus()`'s
+`name`, or else the package's name without its scope, and the subdomain is your account's. A custom domain
+needs its zone in the same Cloudflare account; the deployment attaches the domain to the Worker.
+
+When the options route the Worker themselves, with `domains` or a fetch trigger
+(`triggers.fetch({ pattern: 'example.com/notes/*' })`), `maximus()` adds no domain. `workersDev` and
+`previewUrls` in the options win over what `maximus()` sets; preview URLs are off unless you turn them on.
+
+### Name the token issuer
+
+`tokens.issuer` is the OAuth authorization server whose access tokens the deployed Worker accepts.
+[Authentication and scopes](authentication-and-scopes.md) describes the tokens it accepts and the claims it
+reads. A deployed Worker accepts no development token: only a build `vp dev`
+runs declares its binding and the policy that accepts it.
+
+### Sign in to Cloudflare
+
+```sh
+bunx cf auth login
 ```
 
-- `nodejs_compat` is required: Maximus keeps per-request diagnostics in `node:async_hooks`.
-- The application's `origin` must be the public HTTPS URL callers use; OpenAPI, MCP resources and
-  OAuth discovery advertise it.
-- `tokens.issuer` and `tokens.audience` must match what your authorization server issues for this
-  deployment.
-- Decide `workersDev` and `previewUrls` deliberately: a `workers.dev` URL is another origin for the
-  same Worker. `http.origins` refuses origins you did not list.
-- A binding without an id, such as `bindings.kv()`, is provisioned by `cf deploy`, which does not
-  write the new id back to `cloudflare.config.ts`.
-- Keep Durable Object class names stable, and declare each one as an export
-  (`exports.durableObject({ storage: 'sqlite' })`). Renaming a class orphans its state.
+`cf auth login` signs your machine in to your account once. A CI job signs in with the environment variables
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` instead.
+
+## Deploy
+
+```sh
+bun run deploy
+```
+
+`bun run deploy` runs `bun run verify` and then `cf deploy --prebuilt --mode production`. `verify` checks the
+types, lint and format, runs the tests and builds: `vp build` writes the Worker and its configuration to
+`.cloudflare/output/`. `cf deploy --prebuilt` uploads that build as it is, without building again, and
+makes it the Worker's deployed version.
+
+Before you deploy, look at what would be deployed:
+
+- `bun run preview` serves the production build locally, in workerd. Like a deployment, it accepts no
+  development token.
+- `bunx cf deploy --prebuilt --mode production --dry-run` checks the build in `.cloudflare/output/` and lists
+  the bindings the Worker would receive, without uploading anything:
+
+  ```text
+  ├  Deploy
+  |  Total Upload: 472.98 KiB / gzip: 127.61 KiB
+  |  Your Worker has access to the following bindings:
+  |  Binding                   Resource
+  |  env.NOTES                 KV Namespace
+  |  env.NOTES_DB (notes)      D1 Database
+  |
+  |  --dry-run: exiting now.
+  ```
+
+Options after `bun run deploy` go to `cf deploy`. `--tag` and `--message` record what a version is, such as
+the commit it was built from:
+
+```sh
+bun run deploy --tag "$(git rev-parse --short HEAD)"
+```
 
 ## Secrets
 
-- Declare each secret the Worker reads as `bindings.secret()` and upload its value with a version,
-  `cf deploy --secrets-file <path>` (JSON or `.env`), or keep it in a Secrets Store binding. Never put
-  it in a `bindings.text()` value, in code or in a repository. `cf` cannot set a single secret yet; until
-  it can, `npx wrangler secret put <NAME>` does.
-- `.dev.vars` is read only by `cf dev`; keep it out of version control.
-- Public material, such as a pinned public verification key, may live in a `bindings.text()` value.
-- Never set a development token or test credential on a deployed Worker.
+Declare each secret the Worker reads as a binding, so the generated `Env` types it:
 
-## Check before deploying
-
-```sh
-bun run typecheck                 # cf build does not typecheck
-bun run test
-cf build                          # writes .cloudflare/output/v0/, uploads nothing
-cf workers check --prebuilt --mode production   # profiles the Worker's startup
-cf deploy --prebuilt --mode production --dry-run
+```ts
+env: { NOTES: bindings.kv(), PARTNER_API_KEY: bindings.secret() },
 ```
 
-`cf deploy --prebuilt` must be given the mode the build recorded: `production` for a Vite build
-without `--mode` (`buildContext.mode` in `.cloudflare/output/v0/config.json`). Look in that Build
-Output too: `workers/default/worker.config.json` lists the bindings the deployment gets, and the
-development token must not be among them. A project made by `maximus init` chains the checks as
-`bun run verify`, and `bun run deploy` deploys the build `verify` made:
+Under `vp dev`, its value comes from `.dev.vars`, beside the development token, one `NAME=value` line each.
 
-```sh
-cf auth login                     # once, or set CLOUDFLARE_API_TOKEN in CI
-bun run deploy                    # verify, then cf deploy --prebuilt --mode production
+A deployment needs each declared secret to have a value:
+
+- **The first deployment supplies every one**, in a file outside the repository, as `NAME=value` lines or a
+  JSON object. A Worker that does not exist yet cannot receive a secret in advance, and a first deployment
+  without one stops with `The following required secrets have not been set`.
+
+  ```sh
+  bun run deploy --secrets-file .env.production
+  ```
+
+- **Later deployments keep each secret's value** unless their secrets file brings a new one. To change one,
+  deploy with a file that holds its new value. `bunx cf workers secrets update` sets one secret alone: it
+  takes the Worker with `--worker` and the value with `--text`, and creates a new version of the Worker with
+  that secret.
+
+The starter's `.gitignore` ignores `.env*` and `.dev.vars*`. A secret never goes in a `bindings.text()`
+value, in code or in the repository. A secret several Workers share can live in Secrets Store instead: bind it
+with `bindings.secretsStoreSecret({ storeId, secretName })` and read it with `await env.NAME.get()`.
+
+The development token is no secret of the deployed Worker. `maximus()` refuses a `DEVELOPMENT_TOKEN` binding
+in `env`:
+
+```text
+DEVELOPMENT_TOKEN is the development token: Maximus declares it under vp dev alone, so no deployed Worker carries it.
 ```
 
-Deploy from a clean, pushed commit. `cf deploy --tag <tag> --message <text>` records what a version
-is, for example the commit's id and subject, so `cf workers versions list` names exactly what runs.
+## Resources
 
-Look at the dry-run bundle after changing composition. Configuration, CLI and testing code must not
-reach the Worker; Maximus packages are side-effect free, so importing only what you use keeps them
-out. Package size and bundle size are separate budgets.
+### What a deployment creates
 
-## Verify the deployment
+`cf deploy` creates the resources of the Worker's bindings that need them, as it deploys:
 
-Check the real Worker, not a mock:
+- a KV namespace declared without an id, `bindings.kv()`;
+- an R2 bucket or a queue, by the name its binding gives;
+- the consumer trigger of each queue module, the cron trigger of each schedule a cron module states, and the
+  triggers the options declare;
+- the storage of each Durable Object class the options export, such as
+  `exports: { NoteCounter: exports.durableObject({ storage: 'sqlite' }) }`;
+- the custom domain of an origin outside `workers.dev`.
 
-1. `GET /health` answers `200` with the version you deployed.
-2. `GET /openapi.json` lists the operations you expect. `verifyContract` from
-   `@arbol-ai/maximus/testing` checks it and its YAML twin.
-3. An operation without a token answers `401` with a `WWW-Authenticate` challenge.
-4. An operation with a real token for a test organization succeeds.
-5. With MCP, `tools/list` with a token holding `<namespace>:mcp:use` lists the tools that token may
-   call.
-6. RPC operations: call them through a real caller deployment.
+It does not write the ids it creates into `vite.config.ts`. The examples' READMEs say what each first
+deployment creates; a queue's dead letter queue, for instance, appears when the first message moves to it.
 
-Record each check's status, request id and timing. Keep tokens and raw responses in a private,
-ignored directory (for example `.private/`, mode `0700`, files `0600`), and never print sensitive
-bodies to shared logs. A provider failure during verification is a failure, not evidence that there
-is no data. Stop when it is unclear which credential or account a check is using.
+A Durable Object class's name is its storage's: renaming or removing an exported class is a migration you
+declare in `exports`, never a rename in code alone. See [Durable Objects](durable-objects.md).
 
-Verify MCP directly against the Worker, separately from any third-party catalog that calls it. When
-you study a provider for an integration, keep raw evidence in the same private directory with an
-index of URLs, times and hashes; scripts that download pages bound their downloads and never run
-downloaded JavaScript.
+### What you create yourself
 
-A firewall or WAF in front of the Worker is an additional perimeter. It is not a substitute for
-operation scopes, and every operation still checks its token.
+A D1 database is yours to create, because its tables come from migrations you apply before the Worker that
+reads them is deployed:
 
-## Environments
+```sh
+bunx cf d1 create --name notes              # prints the database's id
+bunx cf d1 migrations apply <database-id>   # applies migrations/*.sql that are not applied yet
+```
 
-Give a preview or staging environment its own audience, state and credentials. A token for one
-environment must not be valid in another, and a test must never write to production state.
+`cf d1 migrations apply` reads `migrations/*.sql` in order and records each file it applied in the database's
+`d1_migrations` table, so running it again applies only new files. The binding names the database by its id:
 
-`cf workers versions create` uploads a version without deploying it (`--preview-alias` gives it a
-preview URL), `cf previews deploy` deploys a branch preview, and `cf workers deployments create` sends
-traffic to an earlier version.
+```ts
+// vite.config.ts
+import { maximus } from '@arbol-ai/vite-plugin';
+import { bindings } from 'cf/config';
+import { defineConfig } from 'vite-plus';
+
+/** The id of the local database, which no Cloudflare account holds: a build bound to it never deploys. */
+const LOCAL_DATABASE = '00000000-0000-4000-8000-00000000d1d1';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: { issuer: 'https://auth.example.com/' },
+      compatibilityDate: '2026-10-27',
+      env: { NOTES_DB: bindings.d1({ name: 'notes', id: process.env.NOTES_DB_ID ?? LOCAL_DATABASE }) },
+    }),
+  ],
+});
+```
+
+[`examples/d1-notes`](../../examples/d1-notes) reads the id from `NOTES_DB_ID` when it builds, so one
+configuration builds for any account, and migrates its local database, which `vp dev` keeps in
+`.cloudflare/state/`, with `cf d1 migrations apply <local id> --local --persist-to .cloudflare/state`.
+
+Deploy in that order: apply the migrations, then deploy the Worker. The version running until the new one
+is deployed meets the migrated schema, so a migration keeps what that version reads.
+
+A Worker this one binds over a Service Binding must exist before this one deploys: deploy it first, as
+[`examples/worker-rpc`](../../examples/worker-rpc) deploys pricing before orders.
+
+## The GitHub workflow
+
+The starter's `.github/workflows/ci.yml`, named Verify and deploy, runs on every pull request, on every push
+to `main` and on demand:
+
+1. It checks the repository out without keeping the job's token, sets up Bun and Node.js, and installs the
+   dependencies from the lockfile without running their install scripts.
+2. It runs `bun run verify`: types, lint and format, tests and the build.
+3. It runs `bunx cf deploy --prebuilt --mode production --dry-run`, which needs no Cloudflare credentials.
+4. On a push to `main`, and only there, it deploys the build:
+   `bunx cf deploy --prebuilt --mode production`.
+
+The deploy step alone receives the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`;
+add them in the repository's settings before the first push to `main`. The job's own token can only read
+the repository, its actions are pinned to commits, and runs of one branch wait for each other rather than
+cancel a deployment in progress.
+
+The workflow passes no secrets file: make the first deployment of a Worker with secrets from your machine,
+with `bun run deploy --secrets-file …`. The deployments the workflow makes after it keep them.
+
+## Check the deployment
+
+A suite that passed over stand-ins says nothing about the deployed Worker: check the Worker itself.
+
+```sh
+curl https://notes.example.com/health
+```
+
+```json
+{ "status": "ok", "service": "notes", "version": "0.1.0" }
+```
+
+1. `/health` answers `200` with the service's name and the version you deployed: `maximus()`'s `version`, or
+   else the package's.
+2. `/api/openapi.json` lists the operations you expect. `verifyContract` from `@arbol-ai/maximus/testing`,
+   given `fetch` and `https://notes.example.com/api`, also checks that the YAML document is the same document
+   (see [Testing](testing.md#check-the-published-contract)).
+3. A route called without a token answers `401` with a challenge that names the service's OAuth metadata:
+
+   ```text
+   www-authenticate: Bearer resource_metadata="https://notes.example.com/api/.well-known/oauth-protected-resource"
+   ```
+
+   That document names your issuer in `authorization_servers`, and an OAuth client reads it to find where to
+   obtain a token.
+
+4. `/mcp`, when the service serves MCP, answers `401` to a client without a token.
+5. A call with a real access token for a test organization succeeds. The development token is refused.
+6. An operation served over RPC answers a real calling Worker, deployed with its binding.
+
+The suite in [Testing](testing.md#run-suites-against-a-running-worker) runs the first three checks:
+`WORKER_URL=https://notes.example.com bun run test running`. Keep the access tokens and raw responses of
+these checks out of the repository and out of shared logs; the starter's `.gitignore` ignores `.private/`
+for them.
+
+A staging Worker is a deployment of its own: give it its own name and origin, its own resources and an
+audience its tokens are issued for, so a token for staging is never valid in production and a test never
+writes to production data.

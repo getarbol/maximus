@@ -1,62 +1,99 @@
 # Worker composition
 
-`createWorker` turns an application into a Worker and composes everything else the Worker serves:
-webhooks, prefix protocols, static assets, other handlers and entrypoints. Every option below runs
-inside the same native HTTP handler, so request ids, security headers and diagnostics cover it.
+A project's Worker is generated from its files. This guide covers what the Worker serves besides its
+routes and tools, and how to compose a Worker by hand from the application builder: pages and plain
+routes that answer without a token, provider webhooks, mounted APIs, transports, hooks, static assets and
+the Worker's other entrypoints. Read it when a project's conventions do not cover what you need to serve.
+
+## Pages
+
+A file of `pages/` answers `GET` and `HEAD` at a fixed path outside the API, without a token: a landing
+page, a status page, a `robots.txt`. Its default export is a plain route, a function of the request:
 
 ```ts
-import { mcp } from '@arbol-ai/maximus/mcp';
-import { createWorker } from '@arbol-ai/maximus/workers';
+// pages/index.ts
+import type { HttpRoute } from '@arbol-ai/maximus';
 
-const worker = createWorker(app, {
-  transports: [mcp()],
-  routes: { '/webhooks/payments': paymentWebhook },
-  http: { basePath: '/api', mounts: { '/files': serveFiles } },
-  handlers: { scheduled: runScheduledJobs },
-});
+/** GET /: a public page outside the API. Business data belongs to authenticated routes. */
+const home: HttpRoute<Env> = () =>
+  Promise.resolve(
+    new Response('Hello World\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } })
+  );
 
-export default worker.handler; // fetch, plus your other handlers
-export const NotesService = worker.entrypoint; // native RPC methods
+export default home;
 ```
 
-| Returned               | Use                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `handler`              | The Worker's default export: `fetch` plus `handlers`.                                      |
-| `entrypoint`           | A `WorkerEntrypoint` class whose methods are the `rpc` operations. Export it under a name. |
-| `service(Class)`       | Wraps your own `WorkerEntrypoint` with diagnostics.                                        |
-| `durableObject(Class)` | Wraps a Durable Object class the same way.                                                 |
+A page answers `HEAD` as it answers `GET`, without the body, and any other method with `405` and
+`allow: GET, HEAD`, without running. It may set its own `cache-control`; any other answer is
+`private, no-store`. A page cannot claim a path the Worker answers otherwise: the API's base path and
+everything below it, the health check, the versioned paths, `/.well-known` and `/mcp`. Such a page is
+refused with `Page path is reserved or malformed: <path>. Move the API with http.basePath.`
+[Project structure](project-structure.md) shows how a file's name gives its path.
 
-## Plain routes
+A page owns its answer completely: it receives no principal and appears in no OpenAPI document. Data of an
+organization belongs to routes, which require a token.
 
-Some callers cannot send a bearer token: a provider's webhook signs its body, a signed download link
-carries its own signature, an OAuth callback carries a code. Serve them as plain routes, by exact
-path:
+## A Worker composed by hand
+
+The application builder, `maximus()` from `@arbol-ai/maximus`, builds in code the application a project
+builds from its files, and `createWorker` from `@arbol-ai/maximus/workers` serves it. Compose a Worker by
+hand when Maximus is one part of a Worker you build yourself, or when the Worker needs what a project
+does not declare: mounted protocols, hooks around requests and operations, pinned origins, or
+entrypoints of your own. A project receives a provider's webhooks on a
+[page named for its method](project-structure.md#receive-a-webhook).
 
 ```ts
-import { readBodyBytes, standardErrors } from '@arbol-ai/maximus';
+import { defineErrors, maximus, ok, readBodyBytes, standardErrors, t } from '@arbol-ai/maximus';
 import type { HttpRoute } from '@arbol-ai/maximus';
-import { checkSchema } from '@arbol-ai/maximus/schemas';
+import { mcp } from '@arbol-ai/maximus/mcp';
+import { verifyStandardWebhook } from '@arbol-ai/maximus/webhooks';
+import { createWorker } from '@arbol-ai/maximus/workers';
 
-async function validSignature(secret: string, signature: string | null, body: Uint8Array<ArrayBuffer>) {
-  if (!signature || !/^[0-9a-f]{64}$/u.test(signature)) {
-    return false;
-  }
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  );
-  const expected = Uint8Array.from(signature.match(/../gu) ?? [], (pair) => Number.parseInt(pair, 16));
-  return crypto.subtle.verify('HMAC', key, expected, body);
+/** The bindings this Worker declares. */
+interface Env {
+  NOTES: KVNamespace;
+  PAYMENT_EVENTS: Queue;
+  PAYMENTS_WEBHOOK_SECRET: string;
 }
 
-export const paymentWebhook: HttpRoute<Env> = async (request, env, context) => {
+const errors = defineErrors({
+  noteNotFound: { code: 'NOTE_NOT_FOUND', status: 404, message: 'The note does not exist.' },
+});
+
+export const app = maximus<Env>({
+  name: 'notes',
+  namespace: 'notes',
+  title: 'Notes',
+  version: '1.0.0',
+  origin: 'https://notes.example.com',
+  tokens: { issuer: 'https://auth.example.com/', audience: 'https://notes.example.com' },
+  errors,
+  rpc: { callers: [] },
+  mcp: { instructions: 'notes keeps short notes for the organization your token belongs to.' },
+})
+  .derive(async ({ env, principal }) => ok({ kv: env.NOTES, prefix: `notes/${principal.organizationId}/` }))
+  .operation(
+    'countNotes',
+    {
+      scope: 'notes:notes:read',
+      effect: 'read',
+      title: 'Count notes',
+      description: "Count the organization's notes.",
+      input: t.Object({}, { additionalProperties: false }),
+      output: t.Object({ count: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+      http: { method: 'GET', path: '/v1/notes/count' },
+      mcp: { name: 'count_notes', idempotent: true },
+    },
+    async ({ kv, prefix }) => ok({ count: (await kv.list({ prefix })).keys.length })
+  )
+  .build();
+
+/** A provider's signed deliveries: verified on their exact bytes, then queued for the work they ask for. */
+const paymentWebhook: HttpRoute<Env> = async (request, env, context) => {
   if (request.method !== 'POST') {
     return context.fail(standardErrors.methodNotAllowed.create(), { allow: 'POST' });
   }
-  const body = await readBodyBytes(request, { maxBytes: 64 * 1024, signal: request.signal });
+  const body = await readBodyBytes(request, { maxBytes: 64 * 1024 });
   if (!body.ok) {
     return context.fail(
       body.error.data.reason === 'too_large'
@@ -64,99 +101,223 @@ export const paymentWebhook: HttpRoute<Env> = async (request, env, context) => {
         : standardErrors.invalidInput.create()
     );
   }
-  // Verify the exact bytes before treating any of them as data.
-  if (!(await validSignature(env.PAYMENTS_WEBHOOK_SECRET, request.headers.get('x-signature'), body.value))) {
+  const verified = await verifyStandardWebhook({
+    body: body.value,
+    headers: request.headers,
+    secret: env.PAYMENTS_WEBHOOK_SECRET,
+  });
+  if (!verified.ok) {
     return context.fail(standardErrors.unauthorized.create(), { 'www-authenticate': 'Signature' });
   }
-  let event;
-  try {
-    event = checkSchema(PaymentEventSchema, JSON.parse(new TextDecoder().decode(body.value)));
-  } catch {
-    return context.fail(standardErrors.invalidInput.create());
-  }
-  if (!event.success) {
-    return context.fail(standardErrors.invalidInput.create());
-  }
-  // Record the event durably and answer quickly; do the work elsewhere.
-  await env.PAYMENT_EVENTS.send(event.data);
+  await env.PAYMENT_EVENTS.send({
+    deliveryId: verified.value.id,
+    body: new TextDecoder().decode(body.value),
+  });
   return new Response(null, { status: 204 });
+};
+
+const worker = createWorker(app, {
+  transports: [mcp()],
+  routes: { '/webhooks/payments': paymentWebhook },
+  http: { basePath: '/api' },
+});
+
+export default worker.handler;
+export const Service = worker.entrypoint;
+```
+
+The builder declares each operation with its name, its definition and its handler, which receives the
+prepared context and the decoded input and answers a `Result`: `ok(value)`, or `err(failure)` from the
+catalog. A definition states everything a project derives: `scope`, `effect`, `title` and `description`,
+`http: { method, path }`, `mcp: { name, idempotent }`. [Concepts](../concepts.md#the-application-underneath)
+introduces the builder, [Context and middleware](middleware-and-context.md#in-a-worker-composed-by-hand)
+shows `.derive()`, `.use()` and `.mount()`, and
+[Route and operation options](../reference/operations.md) lists every field. `.build()` checks every
+rule and refuses a broken application with a `TypeError` that names the rule.
+
+`maximus()` in `vite.config.ts` always builds the Worker it generates, from `.maximus/entry.ts`. A Worker
+composed by hand is built as any other Worker, with its module as the entry, and needs the
+`nodejs_compat` compatibility flag: Maximus keeps each call's diagnostics in `node:async_hooks`.
+
+### createWorker
+
+`createWorker(app, options)` serves the application and composes the rest of the Worker:
+
+| Option       | Meaning                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transports` | Protocols served beside the operations, each at one exact path: `mcp()` from `@arbol-ai/maximus/mcp`.                                                         |
+| `routes`     | [Plain routes](#plain-routes), by exact path.                                                                                                                 |
+| `http`       | The options of the HTTP handler: [mounts](#mounted-apis), [hooks](#hooks), [base path and health](#base-path-and-health), `origins` and request `middleware`. |
+| `assets`     | [Static assets](#static-assets) from an assets binding.                                                                                                       |
+| `handlers`   | The Worker's other handlers: `scheduled`, `queue`, `email` and the rest of `ExportedHandler`.                                                                 |
+
+It returns:
+
+| Member                 | Meaning                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `handler`              | The Worker's default export: `fetch`, and the `handlers` given.                                  |
+| `entrypoint`           | A `WorkerEntrypoint` class with one method per operation that declares `rpc`. Export it by name. |
+| `service(Class)`       | Your own `WorkerEntrypoint` class, wrapped to run inside the application's diagnostics.          |
+| `durableObject(Class)` | Your own Durable Object class, wrapped the same way.                                             |
+
+Every other handler runs inside the application's diagnostics too: a failure it throws is reported by its
+safe description, then thrown on for the platform to retry or record. A project's Worker is
+`createProjectWorker(app, { pages, crons, queues, email }, options)` from `@arbol-ai/maximus/project`,
+which adds the project's pages and event handlers to `createWorker`.
+
+### createHttpHandler
+
+`createHttpHandler(app, options)` from `@arbol-ai/maximus` is the same HTTP handler without the Workers
+runtime: a function `(request, env, background?) => Promise<Response>`, for tests in Node and for code that
+answers HTTP outside a Worker. Its options are `createWorker`'s `http` options, plus `transports`, `routes`
+and `annotate(operation, requestId)`, which is called before each operation runs while telemetry is on;
+`createWorker` uses it to annotate the active trace span. A project's tests import the handler
+`.maximus/http.ts` builds the same way; see [Testing](testing.md).
+
+One `http` option exists for tests alone: `verify(token)` returns a token's claims in place of verifying
+the token, while the claim mapping and the scope checks still apply. Never deploy it.
+
+## Plain routes
+
+A plain route answers one exact path, with any method, outside token admission: a provider's webhook
+signs its body, a signed download link carries its own signature, an OAuth callback carries a code. It is
+a function `(request, env, context) => Promise<Response>`, typed `HttpRoute<Env>`, in `createWorker`'s
+`routes`.
+
+- It receives no principal, appears in no OpenAPI document, and owns its authentication completely: it
+  verifies a signature or a token before it treats any of the request as data.
+- `context.requestId` is the request's id, `context.fail(failure, headers?)` answers a failure of the
+  catalog in the standard envelope, and `context.waitUntil(promise)` keeps best-effort work running after
+  the answer. Work that must happen belongs in a queue, as the webhook above does.
+- It may set its own `cache-control`, as a signed file link may; any other answer is `private, no-store`.
+  An exception it throws answers `INTERNAL_ERROR`.
+- Its path is exact and made of unreserved characters. It cannot claim a [reserved path](#reserved-paths)
+  or an operation's route, or it is refused with `Route path is reserved or malformed: <path>`. A plain
+  route may sit below a transport's path, such as `/mcp/other`, since a transport answers its exact path
+  alone.
+
+A plain route that accepts the API's own tokens verifies them with `createTokenAuthorization`, which
+admits a request by its bearer token and a scope, as the API does:
+
+```ts
+import { createTokenAuthorization } from '@arbol-ai/maximus';
+import type { HttpRoute } from '@arbol-ai/maximus';
+
+const authorize = createTokenAuthorization(app.tokens);
+
+const exportNotes: HttpRoute<Env> = async (request, env, context) => {
+  const caller = await authorize(request, 'notes:notes:read');
+  if (!caller.ok) {
+    return context.fail(caller.error);
+  }
+  // caller.value: { actorId, actorKind, organizationId, scopes, client? }
+  return new Response(`notes of ${caller.value.organizationId}\n`);
 };
 ```
 
-- A plain route has no principal and is absent from OpenAPI. It owns its authentication completely
-  and must verify before it reads the request as data.
-- `context.requestId` is the request id, `context.fail(failure, headers?)` answers a catalog failure
-  in the standard envelope, and `context.waitUntil(promise)` is best-effort background work.
-- A route may set its own `cache-control` (a signed file link may be cacheable); every other response
-  is `private, no-store`.
-- An exception answers the `INTERNAL_ERROR` envelope.
-- Paths are exact. The versioned namespace (`/v<n>/…`), the service's own paths, operation paths and
-  transport paths are reserved. A route may sit beneath a transport's path, such as `/mcp/other`, because a
-  transport answers only its exact path.
+Its third argument is the resolution context `tokens.resolve` receives, and its fourth, `'all'`,
+requires every scope of a list. Without the third, it never accepts the development token.
 
-## Prefix mounts
+## Verify a webhook
 
-`http.mounts` hands a whole path namespace to a protocol handler with the same signature as a plain
-route:
+`@arbol-ai/maximus/webhooks` verifies the three signature schemes providers use, on the request's raw
+bytes. Read them with `readBodyBytes` or `readBodyText` and a byte limit, verify them, and only then parse
+them:
+
+| Function                     | Scheme                                                                                                                                                                                  | Answers                                                          |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `verifyHmacSignature`        | An HMAC-SHA256 of the body in one header, hex or base64, with an optional `prefix` such as `sha256=`.                                                                                   | `null`                                                           |
+| `verifyTimestampedSignature` | A `t=<seconds>,v1=<hex>` header signing `<t>.<body>`, with the signature `labels` to accept, such as `['v1']`.                                                                          | `{ timestamp }`                                                  |
+| `verifyStandardWebhook`      | [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks): `webhook-id`, `webhook-timestamp` and `webhook-signature`, or their `svix-` names, with a `whsec_` secret. | `{ id, timestamp }`, the id being the delivery's idempotency key |
+
+Each answers a `Result`. A refused signature is the failure `WEBHOOK_SIGNATURE_INVALID`, not retryable,
+whose `data.reason` says why: `missing`, `malformed`, `expired` or `mismatch`. It carries nothing else:
+no body, header value or secret. The two timestamped schemes refuse a timestamp more than five minutes
+from the current time, in either direction, unless `toleranceSeconds` says otherwise, and a header with
+more than eight signatures, several more than a provider rotating its secret sends. A missing or empty
+secret is the deployment's mistake, not the sender's: the verifier throws
+`A webhook secret is required; check the binding that holds it.` before it reads any header, and the
+route answers `INTERNAL_ERROR`.
+
+`WEBHOOK_SIGNATURE_INVALID` is not a failure of the standard catalog, and `context.fail` answers only
+failures of the application's catalog: answer a refused delivery with one of those, as the webhook above
+answers `UNAUTHORIZED`. Then record the delivery durably, by its id when the scheme has one, and answer
+quickly: do the work it asks for in a queue consumer.
+
+In a project, the same handler is a page named for its method, `pages/webhooks/payments.post.ts`, and
+the Worker answers any other method with `405` before the page runs; a plain route answers every method,
+so it checks the method itself, as the webhook above does.
+
+## Mounted APIs
+
+`http.mounts` hands a whole path namespace to a function with a plain route's signature, for a protocol
+of its own:
 
 ```ts
 http: { mounts: { '/files': serveFiles, '/files/archive': serveArchive } },
 ```
 
-A mount owns its prefix and every slash-delimited descendant: `/files` matches `/files` and
-`/files/a/b`, never `/files-extra`. With nested mounts, the longest prefix wins. A mount may not
-overlap the service's own paths, transports, plain routes or operation paths.
+A mount answers its prefix and every slash-delimited path below it, `/files` and `/files/2026/report.pdf`
+but never `/files-extra`, with any method and outside token admission. When mounts nest, the longest
+prefix answers. A mount may set its own `cache-control`, as a plain route may. It cannot overlap a reserved
+path, a transport, a plain route or an operation's route: such a mount is refused with
+`Mount path is reserved or malformed: <prefix>`.
 
-## Base path and health
+## Transports
 
-```ts
-http: { basePath: '/api', healthPath: '/healthz' },
-```
-
-- `basePath` serves operations and discovery below a prefix: `/api/v1/notes`, `/api/openapi.json`,
-  `/api/health`. OpenAPI's server URL and the `WWW-Authenticate` metadata URL include it. Transports,
-  plain routes and mounts stay absolute (`/mcp`, not `/api/mcp`).
-- `healthPath` moves the liveness endpoint to an absolute path of your choice. It never probes
-  dependencies.
-
-If a proxy in front of the Worker removes the prefix instead, leave `basePath` unset and set the
-application's `origin` to the public base URL, including the prefix, so documents and discovery
-advertise the URL callers actually use. The token audience stays whatever you configured.
+A transport serves a protocol at one exact path, beside the operations, after admitting the request as
+the API admits a call: its token and the transport's scope, the rate limit and a body limit.
+`mcp()` from `@arbol-ai/maximus/mcp` is one (see [MCP](mcp.md)). A transport of your own implements
+`HttpTransport`: its `path`, the `scope` a caller needs given the namespace, optionally the
+`maxBodyBytes` it admits, and `handle(context)`, which receives the admitted request and the verified
+caller, and `invoke`, which runs an operation through the shared execution path. Transports stay at
+their absolute paths whatever the base path; two at one path, or one below another, are refused, and a
+Worker serves one MCP transport at most.
 
 ## Hooks
 
 ```ts
 http: {
+  origins: ['https://notes.example.com'],
   before: async (request) => {
     const url = new URL(request.url);
     return url.hostname === 'www.notes.example.com'
       ? Response.redirect(`https://notes.example.com${url.pathname}${url.search}`, 308)
       : null;
   },
-  aroundOperation: async (request, env, operation, run) => {
-    const session = await openSession(env.DB, operation.effect);
-    try {
-      return await run({ ...env, DB: session });
-    } finally {
-      await session.close();
-    }
-  },
 },
 ```
 
-- `before(request, env, context)` runs for every request, after origin pinning and before any route.
-  Return a `Response` to answer, or `null` to continue. Use it for canonical redirects and
-  product-wide admission.
-- `aroundOperation(request, env, { name, effect }, run)` wraps only a matched HTTP operation. Call
-  `run(scopedEnv)` exactly once: token admission, body reading and execution all run inside it, with
-  that environment. Metadata, MCP and plain routes bypass it.
-- `fallback(request, env, context)` answers paths outside every API, versioned, service-owned,
-  `/.well-known` and transport namespace. A miss inside those namespaces stays a native `404`, so an
-  API typo never receives your web page.
+| Option            | Runs                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `origins`         | First: a request to any other origin answers `404` before anything else. Exact HTTPS origins, or the handler is refused with `HTTP origins must be exact HTTPS origins.`                                                                                                                                    |
+| `middleware`      | Around every request after origin pinning: the request middleware of [Context and middleware](middleware-and-context.md#request-middleware), as functions.                                                                                                                                                  |
+| `before`          | `before(request, env, context)`, for every request, before any route: answer a `Response`, which keeps its own `cache-control`, or `null` to continue. For canonical redirects and product-wide admission.                                                                                                  |
+| `aroundOperation` | `aroundOperation(request, env, { name, effect }, run)`, around a matched HTTP operation alone: call `run(scopedEnv)` once, and token admission, the body and execution run inside it with that environment. A second call answers `INTERNAL_ERROR`. MCP, plain routes and discovery do not pass through it. |
+| `fallback`        | `fallback(request, env, context)`, for a path outside every namespace the Worker owns: the base path, the versioned paths, `/.well-known` and each transport's. A miss inside them stays a `404`, so a mistyped API path never receives a web page.                                                         |
+
+## Base path and health
+
+`http.basePath` serves the operations and the service's own documents below a prefix, `/api/v1/notes` and
+`/api/openapi.json`; a project's is `/api` unless `http.basePath` in `maximus()` says otherwise. The
+OpenAPI document's server URL and OAuth discovery include it. Transports, plain routes and mounts stay
+at their absolute paths, `/mcp` and not `/api/mcp`. A base path is absolute, without a trailing slash or
+dot segments.
+
+The health check answers `GET` alone, without a token, with `{ status: 'ok', service, version }`, and
+probes no dependency. `http.healthPath` moves it to an absolute path of your choice; without it,
+`createWorker` serves it at `/health` below the base path. A project's is `/health`, at the root, unless
+`http.healthPath` in `maximus()` says otherwise.
+
+When a proxy in front of the Worker removes a prefix itself, leave `basePath` unset and set `origin` to
+the public base URL, prefix included, so the documents and discovery advertise the URLs callers use.
 
 ## Static assets
 
-`assets` serves a single-page application or other build output from a Workers assets binding:
+`assets` serves a single-page application, or another build, from a
+[Workers static assets](https://developers.cloudflare.com/workers/static-assets/) binding, with each
+path's answer decided by the Worker. A project with `index.html` at its root gets this policy from
+`maximus()`; see [Web apps](web-apps.md). In a Worker composed by hand:
 
 ```ts
 assets: {
@@ -168,70 +329,64 @@ assets: {
 },
 ```
 
-| Path kind                          | Served                                           | `cache-control`                       |
-| ---------------------------------- | ------------------------------------------------ | ------------------------------------- |
-| `pages.paths` and `pages.patterns` | The shell, `pages.shell` (default `/index.html`) | `no-store`                            |
-| `files`                            | The file itself                                  | `no-cache`                            |
-| Below `immutablePrefixes`          | The file itself                                  | `public, max-age=31536000, immutable` |
-| Anything else                      | The `404 NOT_FOUND` envelope                     | `no-store`                            |
+| Path                               | Answered with                                       | `cache-control`                       |
+| ---------------------------------- | --------------------------------------------------- | ------------------------------------- |
+| `pages.paths` and `pages.patterns` | The shell, `pages.shell` (`/index.html` by default) | `no-store`                            |
+| `files`                            | The file itself                                     | `no-cache`                            |
+| Below `immutablePrefixes`          | The file itself                                     | `public, max-age=31536000, immutable` |
+| Anything else                      | The `404` failure `NOT_FOUND`                       | `private, no-store`                   |
 
-A non-200 answer from the binding keeps its status and becomes `no-store`.
+- A path below an immutable prefix is served as an immutable file only when it is plain: an encoded
+  character or a dot segment there answers `404`. An answer of the binding other than `200` keeps its
+  status and is `no-store`.
+- Only `GET` and `HEAD` are served; another method answers `405` with `allow: GET, HEAD`. The binding
+  receives the path and the method alone: no credentials, query or request headers.
+- `headers`, or a function of the request and the environment that returns them, adds browser policy to
+  every asset; it cannot change `content-type` or `cache-control`, and `x-content-type-options: nosniff`
+  is always set.
+- `development: true` forwards any other `GET` or `HEAD` to the binding as it came, for a Vite dev server
+  that stands behind it. Pass `import.meta.env.DEV`, which every build sets to `false`: a deployed Worker
+  never forwards unknown paths.
+- Page patterns may not use the global or sticky flags, and an immutable prefix cannot be `/`. `assets`
+  and `http.fallback` cannot both be set, since both would answer unmatched paths:
+  `Worker assets and an HTTP fallback cannot both own unmatched paths.`
 
-Only `GET` and `HEAD` are served; other methods answer `405` with `Allow: GET, HEAD`. The binding
-receives only the path and method: no credentials, query or request headers. `headers` (or a
-function of the request and environment) adds browser policy but cannot change `content-type` or
-`cache-control`, and `nosniff` is always set. Patterns may not use the global or sticky flags.
-`assets` and `http.fallback` cannot both be set.
+Configure the Worker's static assets so the Worker decides every answer: `htmlHandling: 'none'`,
+`notFoundHandling: 'none'` and `runWorkerFirst: true`, as `maximus()` does for a web app.
 
-The pages are declared once, here. The API's discovery documents keep `/`,
-`/openapi.json`, `/openapi.yaml` and `/health`; a web app that needs `/` as a page moves the API below
-a prefix with `http.basePath` (`/api/openapi.json`, `/api/v1/…`).
+## Entrypoints and Durable Objects
 
-Configure the binding so the Worker decides every response, in `cloudflare.config.ts`:
-
-```ts
-assets: { htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true },
-env: { ASSETS: bindings.assets() /* , … */ },
-```
-
-### One Vite build for the Worker and its web app
-
-With the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/), which `cf`
-builds the Worker with, one Vite build makes the Worker and the web app together:
-`cf build` puts the app's build in the Worker's assets, and `cf dev` runs both on one dev server
-with hot reload. There, Vite's dev server stands behind the assets binding, and every request
-reaches the Worker first, Vite's own client and modules included. Set `development` so the Worker
-forwards to it, as it came, any `GET` it does not serve as a page, file or immutable asset:
+`worker.entrypoint` serves the operations that declare `rpc` to other Workers; export it under the name
+their Service Bindings give as `exportName` (see [Worker RPC](worker-rpc.md)). `worker.service(Class)` and
+`worker.durableObject(Class)` wrap classes of your own so their methods run inside the application's
+diagnostics:
 
 ```ts
-assets: {
-  binding: 'ASSETS',
-  pages: { paths: ['/', '/settings'] },
-  immutablePrefixes: ['/assets/'],
-  development: import.meta.env.DEV,
-},
+import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
+
+class ReportsEntrypoint extends WorkerEntrypoint<Env> {
+  async count(organizationId: string) {
+    // …
+  }
+}
+
+class Session extends DurableObject<Env> {
+  // …
+}
+
+export const ReportsService = worker.service(ReportsEntrypoint);
+export const SessionObject = worker.durableObject(Session);
 ```
 
-The production build replaces `import.meta.env.DEV` with `false`, so a deployed Worker never forwards.
-A strict `content-security-policy` must also let the dev server's inline
-React Refresh script run in development; the built app has none.
-
-## Other handlers
-
-`handlers` adds the rest of `ExportedHandler` (`scheduled`, `queue`, `email`, …) to the default
-export. `scheduled` runs inside the application's diagnostics context; other handlers run as written.
-The environment and execution context are Cloudflare's.
-
-## Origins
-
-`http.origins` lists exact HTTPS origins. Any other origin answers `404` before hooks, metadata or
-token handling. A Worker that serves several hosts with different policies builds one handler per
-host and dispatches explicitly.
+A wrapped class keeps its methods, its type and its identity. Maximus does not check the arguments of
+your own methods: check them where they enter, as any boundary does. Keep Durable Object class names and
+migrations stable across releases, since renaming a class orphans its stored state. A project declares
+its Durable Objects as files instead; see [Durable Objects](durable-objects.md).
 
 ## The route resolver
 
-`createHttpRouteResolver(definitions)` exposes the router for code that must choose something per
-route before invoking the handler, such as a database session:
+`createHttpRouteResolver(definitions)` exposes the router, for code that must choose something per route
+before it runs, such as a database session:
 
 ```ts
 import { createHttpRouteResolver } from '@arbol-ai/maximus';
@@ -239,21 +394,23 @@ import { createHttpRouteResolver } from '@arbol-ai/maximus';
 const routes = createHttpRouteResolver(
   Object.entries(app.operations).map(([name, operation]) => ({ name, http: operation.http }))
 );
-const match = routes.match(request.method, new URL(request.url).pathname);
-// match: { definition, parameters } or null
+const match = routes.match('GET', '/v1/notes/count');
+// { definition, parameters }, or null
 ```
 
-It applies the same exact matching and parameter decoding, and does nothing else: no
-authentication, no validation. `ownsPath(pathname)` says whether any method's route covers a path.
+It matches as the API does, decoding each path segment before it matches it, and does nothing else: no
+token, no input check. `routes.ownsPath(path)` says whether any route answers a path, whatever its
+method. Paths are matched without the base path.
 
 ## Reserved paths
 
-| Path                                                                                                                                                   | Owner                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| `/`, `/health`, `/openapi.json`, `/openapi.yaml`, `/openapi.yml`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp` | The service's own endpoints, below `basePath` when set |
-| `/v<n>/…`                                                                                                                                              | Operations                                             |
-| Each transport's path, `/mcp` by default                                                                                                               | The transport, exactly                                 |
-| `tokens.resources` keys                                                                                                                                | OAuth resource metadata                                |
+| Path                                                                                                                                                   | Owner                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `/`, `/health`, `/openapi.json`, `/openapi.yaml`, `/openapi.yml`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp` | The service's own answers, below the base path |
+| `/v<n>/…`                                                                                                                                              | Operations, below the base path                |
+| The health path, when `healthPath` moves it                                                                                                            | The health check                               |
+| Each transport's path, `/mcp` for MCP                                                                                                                  | The transport                                  |
+| Each key of `tokens.resources`                                                                                                                         | OAuth discovery                                |
 
-Plain routes, mounts and transports that collide with these, or with each other, fail when the Worker
-is built.
+Plain routes, mounts, transports and pages that collide with these, or with each other, are refused when
+the Worker starts.
