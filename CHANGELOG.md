@@ -80,6 +80,11 @@ Everything else:
   binding to one of the Worker's own Durable Object classes as `DurableObjectNamespace` of that class.
 - Each cron module's literal schedule becomes its trigger, and each queue module subscribes the Worker to
   the queue it names unless the options declare that consumer themselves.
+- A file of `pages/` named for a method answers that method, as a route's does:
+  `pages/webhooks/payments.post.ts` answers `POST /webhooks/payments`, so a project receives a provider's
+  webhooks without a Worker composed by hand. A page answers any method that no file of its path declares
+  with `405` and an `allow` header listing those that do. `createProjectWorker`'s `pages` takes a handler
+  or a record of one per method.
 - The MCP server is described in Markdown: `mcp/instructions.md`, `mcp/guides/<name>.md` as resources and
   prompts and `mcp/skills/<name>.md` as Agent Skills. The refusals the server answers itself (a hidden or
   unknown tool, a call over its operation's limit) are observed as admissions.

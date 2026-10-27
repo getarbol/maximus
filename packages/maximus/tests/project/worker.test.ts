@@ -1,12 +1,12 @@
 /**
- * createProjectWorker, the Worker a project's generated code composes: pages answer GET and HEAD at fixed paths
- * outside the API, other unmatched paths reach the fallback, the static assets or NOT_FOUND, a page path the
- * API, discovery, plain routes, mounts or transports own is refused, and discovered event modules become the
- * Worker's own handlers.
+ * createProjectWorker, the Worker a project's generated code composes: pages answer the methods they declare
+ * (GET with HEAD by default) at fixed paths outside the API and 405 for any other, other unmatched paths reach
+ * the fallback, the static assets or NOT_FOUND, a page path the API, discovery, plain routes, mounts or
+ * transports own is refused, and discovered event modules become the Worker's own handlers.
  */
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { defineErrors, maximus, ok, t } from '../../src/index.ts';
+import { defineErrors, maximus, ok, readBodyText, t } from '../../src/index.ts';
 import type { HttpRoute } from '../../src/index.ts';
 import { mcp } from '../../src/mcp/index.ts';
 import { createProjectWorker } from '../../src/project/index.ts';
@@ -61,18 +61,19 @@ function page(markup: string) {
   return { route, methods };
 }
 
-/** Sends one request to the Worker's fetch handler. */
+/** Sends one request to the Worker's fetch handler, with a body when one is given. */
 async function send(
   modules: ProjectModules<Env>,
   options: WorkerOptions<Env>,
   method: string,
-  path: string
+  path: string,
+  body?: string
 ): Promise<Response> {
   const { fetch } = createProjectWorker(app, modules, options).handler;
   if (!fetch) {
     throw new TypeError('The project Worker has no fetch handler.');
   }
-  const incoming = new Request(`https://clinic.example.test${path}`, { method });
+  const incoming = new Request(`https://clinic.example.test${path}`, { method, body });
   return fetch(incoming as Request<unknown, IncomingRequestCfProperties>, env, background);
 }
 
@@ -105,6 +106,37 @@ describe('pages', () => {
       error: { code: 'HTTP_METHOD_NOT_ALLOWED' },
     });
     expect(about.methods).toEqual([]);
+  });
+
+  it('answer each method a record names, with the body as sent, and refuse the others with what they allow', async () => {
+    const deliveries: string[] = [];
+    const receive: HttpRoute<Env> = async (request) => {
+      const body = await readBodyText(request, { maxBytes: 1024 });
+      if (!body.ok) {
+        return new Response(null, { status: 400 });
+      }
+      deliveries.push(body.value);
+      return new Response(null, { status: 204 });
+    };
+    const settings = page('<h1>Settings</h1>');
+    const pages = {
+      '/hooks/billing': { POST: receive },
+      '/settings': { GET: settings.route, PATCH: settings.route },
+    };
+    const delivered = await send({ pages }, API, 'POST', '/hooks/billing', '{"type":"invoice.paid"}');
+    expect(delivered.status).toBe(204);
+    expect(deliveries).toEqual(['{"type":"invoice.paid"}']);
+    for (const method of ['GET', 'HEAD', 'PUT']) {
+      const refused = await send({ pages }, API, method, '/hooks/billing');
+      expect(refused.status, method).toBe(405);
+      expect(refused.headers.get('allow'), method).toBe('POST');
+    }
+    expect(deliveries).toHaveLength(1);
+    expect((await send({ pages }, API, 'PATCH', '/settings', 'theme=dark')).status).toBe(200);
+    expect((await send({ pages }, API, 'HEAD', '/settings')).status).toBe(200);
+    const refused = await send({ pages }, API, 'DELETE', '/settings');
+    expect(refused.headers.get('allow')).toBe('GET, HEAD, PATCH');
+    expect(settings.methods).toEqual(['PATCH', 'HEAD']);
   });
 
   it('leave the API, its health check and its operations to the native pipeline', async () => {
@@ -185,6 +217,31 @@ it('refuses a page path the API, discovery, a plain route, a mount or a transpor
   expect(() =>
     createProjectWorker(app, { pages: { '/': route, '/about': route, '/v': route, '/api-docs': route } }, API)
   ).not.toThrow();
+});
+
+it('refuses a page record that names no method, or one a page cannot answer', () => {
+  const route: HttpRoute<Env> = async () => new Response('page');
+  expect(() => createProjectWorker(app, { pages: { '/about': {} } }, API)).toThrow(
+    new TypeError('Page /about must answer at least one method.')
+  );
+  const refusal = (method: string) =>
+    new TypeError(
+      `Page /about must map GET, POST, PUT, PATCH or DELETE to a handler function; it maps ${method}.`
+    );
+  const head: ProjectModules<Env> = {
+    // @ts-expect-error GET answers HEAD; a page does not declare it.
+    pages: { '/about': { HEAD: route } },
+  };
+  expect(() => createProjectWorker(app, head, API)).toThrow(refusal('HEAD'));
+  // What a module written without types could hand the Worker.
+  for (const [method, handler] of [
+    ['get', route],
+    ['OPTIONS', route],
+    ['POST', 'received'],
+  ] as const) {
+    const pages = { '/about': { [method]: handler } } as unknown as ProjectModules<Env>['pages'];
+    expect(() => createProjectWorker(app, { pages }, API), method).toThrow(refusal(method));
+  }
 });
 
 it("makes discovered crons, queues and email the Worker's handlers, beside its explicit fallbacks", async () => {

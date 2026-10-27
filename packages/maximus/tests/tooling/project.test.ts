@@ -28,7 +28,7 @@ test('discovery creates static typed imports without evaluating modules', () => 
   expect(middleware.indexOf('01-first')).toBeLessThan(middleware.indexOf('02-second'));
   expect(middleware).toContain('collectMiddleware([middleware_0, middleware_1] as const)');
   const worker = generated(root, 'worker.ts');
-  expect(worker).toContain('pages: { "/": page_0 },');
+  expect(worker).toContain('pages: { "/": { GET: page_0 } },');
   expect(worker).toContain('export const SessionStore = worker.durableObject(durable_object_0);');
 });
 

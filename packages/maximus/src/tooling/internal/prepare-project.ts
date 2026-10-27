@@ -180,29 +180,47 @@ function discoverTools(root: string, files: readonly ProjectFile[], imports: Imp
 
 /**
  * The pages `pages/` declares: native responses at fixed paths outside the API, refused at a path the generated
- * Worker answers otherwise, as it would refuse them when it starts.
+ * Worker answers otherwise, as it would refuse them when it starts. A page answers `GET` (and `HEAD`), or the
+ * method its name ends with, as a route's does: `hooks/billing.post.ts` answers `POST /hooks/billing`.
  */
 function discoverPages(
+  root: string,
   files: readonly ProjectFile[],
   imports: Imports,
   project: ProjectOptions,
   mcp: boolean
 ) {
-  const paths = new Set<string>();
-  const entries = files.map(({ name, file }, index) => {
-    const path = projectPath(name, 'pages');
-    if (paths.has(path)) {
-      throw new TypeError(`Multiple page files claim ${path}.`);
+  // Each path's methods, each with the file that answers it and the identifier it is imported as.
+  const pages = new Map<string, Map<string, { file: string; page: string }>>();
+  for (const [index, { name, file }] of files.entries()) {
+    const suffix = ROUTE_METHOD.exec(name);
+    const method = suffix?.[1]?.toUpperCase() ?? 'GET';
+    const path = projectPath(suffix ? name.slice(0, -suffix[0].length) : name, 'pages');
+    const methods = pages.get(path) ?? new Map<string, { file: string; page: string }>();
+    const owner = methods.get(method);
+    if (owner) {
+      throw new TypeError(
+        `Multiple page files claim ${method} ${path}: ${relative(root, owner.file)} and ${relative(root, file)}.`
+      );
     }
-    paths.add(path);
-    return `${JSON.stringify(path)}: ${imports.add(`page_${index}`, file)}`;
-  });
+    methods.set(method, { file, page: imports.add(`page_${index}`, file) });
+    pages.set(path, methods);
+  }
   // The generated Worker answers the API, its own paths and, when it mounts mcp(), MCP at /mcp.
-  checkPagePaths(paths, project.application.tokens, {
+  checkPagePaths(pages.keys(), project.application.tokens, {
     http: project.worker.http,
     transports: mcp ? [{ path: '/mcp' }] : [],
   });
-  return { paths, entries };
+  const entries = [...pages].map(([path, methods]) => {
+    const answered = [...methods].map(([method, { page }]) => `${method}: ${page}`);
+    return `${JSON.stringify(path)}: ${objectLiteral(answered)}`;
+  });
+  return { paths: new Set(pages.keys()), entries };
+}
+
+/** A generated object literal of these entries, `{ a: b }`, or `{}` without any. */
+function objectLiteral(entries: readonly string[]): string {
+  return entries.length ? `{ ${entries.join(', ')} }` : '{}';
 }
 
 /** The queue consumers or email recipients a folder declares, each a top-level module named after its key. */
@@ -454,7 +472,7 @@ export function prepareProject(directory: string, mode: string, project: Project
   );
 
   const worker = new Imports(output);
-  const pages = discoverPages(files.pages, worker, project, servesMcp);
+  const pages = discoverPages(root, files.pages, worker, project, servesMcp);
   const crons = files.crons.map(({ file }, index) => {
     worker.add(`cron_${index}, { cron as schedule_${index} }`, file);
     return `{ cron: schedule_${index}, handler: cron_${index} }`;
@@ -576,10 +594,10 @@ export function prepareProject(directory: string, mode: string, project: Project
         'const worker: WorkerRuntime<Env, typeof app.operations> = createProjectWorker(',
         '  app,',
         '  {',
-        `    pages: { ${pages.entries.join(', ')} },`,
+        `    pages: ${objectLiteral(pages.entries)},`,
         `    crons: [${crons.join(', ')}],`,
-        `    queues: { ${queues.join(', ')} },`,
-        `    email: { ${email.join(', ')} },`,
+        `    queues: ${objectLiteral(queues)},`,
+        `    email: ${objectLiteral(email)},`,
         '  },',
         '  {',
         '    ...options,',

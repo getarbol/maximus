@@ -3,7 +3,7 @@
  * generated output that are symlinks or not ordinary files, runtime imports of generated modules that would
  * form a cycle for each kind of module, Workers-only imports in the modules that complete the application,
  * modules that do not parse, cron schedules that are not literal constants, pages at paths the Worker answers
- * otherwise, and pages, events and Durable Objects whose names collide.
+ * otherwise, pages named for a method, and pages, events and Durable Objects whose names collide.
  */
 import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -202,12 +202,28 @@ test('a cron module may use the generated application, which does not import it'
   );
 });
 
-test('two page files may not claim one path', () => {
+test('a page file named for a method answers that method at its path, beside the one that answers GET', () => {
   const root = project({
-    'pages/about.ts': 'export default {};',
-    'pages/about/index.ts': 'export default {};',
+    'pages/hooks/billing.ts': 'export default {};',
+    'pages/hooks/billing.post.ts': 'export default {};',
+    'pages/index.delete.ts': 'export default {};',
   });
-  expect(() => prepare(root)).toThrow('Multiple page files claim /about.');
+  prepare(root);
+  expect(generated(root, 'worker.ts')).toContain(
+    'pages: { "/hooks/billing": { POST: page_0, GET: page_1 }, "/": { DELETE: page_2 } },'
+  );
+});
+
+test('two page files may not claim one method at one path, nor name a method a page cannot answer', () => {
+  const claimed = project({
+    'pages/about.ts': 'export default {};',
+    'pages/about/index.get.ts': 'export default {};',
+  });
+  expect(() => prepare(claimed)).toThrow(
+    'Multiple page files claim GET /about: pages/about.ts and pages/about/index.get.ts.'
+  );
+  const head = project({ 'pages/about.head.ts': 'export default {};' });
+  expect(() => prepare(head)).toThrow('Unsupported pages segment: about.head.');
 });
 
 test('a page may not claim a path the API, its health check, a versioned route or MCP answers', () => {
