@@ -166,10 +166,13 @@ See [Errors and results](../guides/errors-and-results.md) and
 | `TokenPolicy`               | type     | How the application verifies tokens: every option of `tokens`.                                                     |
 | `TokenResolutionContext`    | type     | What `resolve` receives besides the token: `env`, `request`, `surface`, `applicationScopes`, `background`.         |
 | `TokenScheme`               | type     | `oauth`, `bearer` or `oauth+bearer`.                                                                               |
+| `TokenSource`               | type     | Where requests present their token: `authorization` or `cloudflare-access`.                                        |
 | `TokenClient`               | type     | The OAuth client a token was issued to: `id`, and `class` `human`, `machine` or `dcr`.                             |
 | `TokenClaims`               | type     | The claim mapping: `organization`, `scopes`, `client`, `permissions` and `machineSubject`.                         |
+| `TokenAccess`               | type     | What Cloudflare Access tokens grant: `organizationId`, and the scopes of `people` and of each of `services`.       |
 | `TokenAlgorithm`            | type     | An algorithm an issuer may sign with.                                                                              |
 | `TokenDevelopment`          | type     | The development token's `binding` and `organizationId`.                                                            |
+| `projectAccessToken`        | function | The principal a verified Cloudflare Access application token grants under a policy's `access`: a `Result`.         |
 | `matchesScopes`             | function | Whether granted scopes admit a list of required scopes, any one or all of them.                                    |
 | `ScopeMatch`                | type     | `any` or `all`.                                                                                                    |
 | `protectedResourceMetadata` | function | The RFC 9728 metadata of a configured OAuth resource.                                                              |
@@ -525,15 +528,21 @@ with. It loads no Workers or build code.
 
 `maximus()`, the project's configuration: one `vite.config.ts` configures the application and its
 Cloudflare Worker. It runs in Node, under Vite+, and takes `@cloudflare/vite-plugin`, `cf` and `vite` as
-peers, which a project installs. See [Configuration](configuration.md).
+peers, which a project installs. `auth0()` and `cloudflareAccess()` state the `tokens` option for those
+providers. See [Configuration](configuration.md).
 
-| Export           | Kind     | What it is                                                                                                                                          |
-| ---------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MaximusOptions` | type     | What `maximus()` takes: the application's options and the Worker's settings, by Cloudflare's names.                                                 |
-| `Phase`          | type     | `development` under `vp dev`, `production` for every build.                                                                                         |
-| `TokenOptions`   | type     | The `tokens` option: the token policy less what `auth.ts` states. Its audience defaults to the origin; `development` is the token `vp dev` accepts. |
-| `WebAppOptions`  | type     | The `webApp` option: the headers of a web app's pages and files.                                                                                    |
-| `maximus`        | function | The plugin: prepares the project, brings the lint and format presets, and runs Cloudflare's Vite plugin.                                            |
+| Export                    | Kind     | What it is                                                                                                                                          |
+| ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaximusOptions`          | type     | What `maximus()` takes: the application's options and the Worker's settings, by Cloudflare's names.                                                 |
+| `Phase`                   | type     | `development` under `vp dev`, `production` for every build.                                                                                         |
+| `TokenOptions`            | type     | The `tokens` option: the token policy less what `auth.ts` states. Its audience defaults to the origin; `development` is the token `vp dev` accepts. |
+| `WebAppOptions`           | type     | The `webApp` option: the headers of a web app's pages and files.                                                                                    |
+| `auth0`                   | function | The `tokens` options of an API whose access tokens Auth0 issues: its issuer, from its domain or domains, its audience and its algorithms.           |
+| `cloudflareAccess`        | function | The `tokens` options of an application behind Cloudflare Access: the Access source, the team's issuer and keys, the AUD tag and what callers hold.  |
+| `Auth0Algorithm`          | type     | `RS256`, `RS512` or `PS256`: what Auth0 signs an API's tokens with that a JWKS can verify.                                                          |
+| `Auth0Options`            | type     | What `auth0()` takes: `domain`, `audience` and `algorithms`.                                                                                        |
+| `CloudflareAccessOptions` | type     | What `cloudflareAccess()` takes: `team`, `aud`, `organizationId` and `scopes`.                                                                      |
+| `maximus`                 | function | The plugin: prepares the project, brings the lint and format presets, and runs Cloudflare's Vite plugin.                                            |
 
 ## Binaries and files
 

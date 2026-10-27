@@ -3,6 +3,7 @@
  * paths below its base path, its transports, its plain routes and its mounts. No two of them may
  * claim the same path, and none may claim an operation route's.
  */
+import { usesCloudflareAccess } from '../cloudflare-access.ts';
 import type { HttpOptions, HttpRoute, HttpTransport } from '../http.ts';
 import type { OAuthResource } from '../oauth.ts';
 import { usesOwnBearer } from '../tokens.ts';
@@ -137,6 +138,21 @@ export function servesOwnBearer<E>(tokens: TokenPolicy<E>, mcp: HttpTransport | 
     throw new TypeError('The MCP transport needs OAuth discovery; it cannot serve a bearer token scheme.');
   }
   return ownBearer;
+}
+
+/**
+ * Whether the application admits Cloudflare Access application tokens, refusing the MCP transport beside
+ * them: MCP clients find their authorization server through OAuth discovery and present its bearer tokens,
+ * neither of which Access serves.
+ */
+export function servesCloudflareAccess<E>(tokens: TokenPolicy<E>, mcp: HttpTransport | undefined): boolean {
+  const access = usesCloudflareAccess(tokens);
+  if (access && mcp) {
+    throw new TypeError(
+      'The MCP transport needs OAuth discovery and bearer tokens; it cannot serve Cloudflare Access application tokens.'
+    );
+  }
+  return access;
 }
 
 /** Plain routes by exact path, and the mounted protocol that owns a path. */

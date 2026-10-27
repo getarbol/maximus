@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
+import type { ProjectOptions } from '../../src/tooling/internal/prepare-project.ts';
 import { generated, options, prepare, project, removeProjects, ROUTE, write } from './fixtures.ts';
 
 afterEach(removeProjects);
@@ -199,6 +200,35 @@ test('MCP tools are named by their file and bring the MCP transport, as a route 
   const plainWorker = generated(plain, 'worker.ts');
   expect(plainWorker).not.toContain('@arbol-ai/maximus/mcp');
   expect(plainWorker).not.toContain('transports');
+});
+
+test('behind Cloudflare Access, the Worker answers its pinned origins, and serving MCP is refused before anything is written', () => {
+  const configured = options();
+  const access: ProjectOptions = {
+    ...configured,
+    application: {
+      ...configured.application,
+      tokens: { ...configured.application.tokens, source: 'cloudflare-access' },
+    },
+    worker: { http: { ...configured.worker.http, origins: ['https://tasks.example.test'] } },
+  };
+  const api = project({ 'routes/v1/tasks.get.ts': ROUTE });
+  prepare(api, 'production', access);
+  expect(generated(api, 'config.ts')).toContain(
+    'export const worker: WorkerOptions<Env> = {"http":{"basePath":"/api","healthPath":"/health","origins":["https://tasks.example.test"]}};'
+  );
+  const servingMcp: Record<string, string>[] = [
+    { 'mcp/tools/summarize-tasks.ts': 'export default defineTool({});' },
+    { 'routes/v1/tasks.get.ts': 'export default defineHandler(list, { mcp: { name: "list_tasks" } });' },
+    { 'mcp/instructions.md': '# Tasks' },
+  ];
+  for (const files of servingMcp) {
+    const root = project(files);
+    expect(() => prepare(root, 'production', access), Object.keys(files)[0]).toThrow(
+      'A project behind Cloudflare Access serves no MCP, whose clients sign in through OAuth: remove mcp from its routes, and the mcp/ folder.'
+    );
+    expect(existsSync(join(root, '.maximus'))).toBe(false);
+  }
 });
 
 test('a route is an MCP tool as its contract shows, in the call or in a const of the module', () => {

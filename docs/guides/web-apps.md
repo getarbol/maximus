@@ -257,7 +257,9 @@ describes: `GET /v1/tasks` is `listTasks`. Every answer is the envelope describe
 The token comes from your authorization server, as the person signs in; never build one into the app. The
 default content security policy lets the pages call the token issuer's origin and its token endpoint's. Under
 `vp dev`, the development token in `.dev.vars` signs in from `localhost`: the tasks example's first page
-asks for it and keeps it in memory, so a reload asks again.
+asks for it and keeps it in memory, so a reload asks again. Behind
+[Cloudflare Access](authentication-and-scopes.md#cloudflare-access), the pages send no token: Access signs
+the person in, and adds its token to the calls their pages make to their own origin.
 
 ## Headers
 
@@ -273,8 +275,9 @@ The app's pages and files carry these headers by default:
 | `x-frame-options`              | `DENY`                                                                                                                                                                                                                                                         |
 | `x-content-type-options`       | `nosniff`                                                                                                                                                                                                                                                      |
 
-`<issuer>` is the origin of `tokens.issuer` and that of its token endpoint, `tokens.tokenEndpoint` or
-`oauth/token` below the issuer; without an issuer, `connect-src` is `'self'` alone. Scripts load from the
+`<issuer>` is the origin of `tokens.issuer`, of each issuer when it lists several, and that of its token
+endpoint, `tokens.tokenEndpoint` or `oauth/token` below the first issuer; without an issuer, or behind
+Cloudflare Access, which signs people in at the edge, `connect-src` is `'self'` alone. Scripts load from the
 Worker's origin alone, while `style-src` admits inline styles, which React's `style` attributes need without
 a nonce. Under `vp dev` the content security policy and `strict-transport-security` are left out, since
 Vite's development client runs inline scripts over plain HTTP.

@@ -1,67 +1,35 @@
 /**
  * Token verification: the principal every operation receives, the token policy, OAuth access token
- * verification against the issuer's JWKS, claim projection, and request admission by scope.
+ * verification against the issuer's JWKS, claim projection, and request admission by scope. Cloudflare Access
+ * application tokens, which a policy of the `cloudflare-access` source admits, are `cloudflare-access.ts`'s.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static } from '@sinclair/typebox';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
+import {
+  ACCESS_TOKEN_HEADER,
+  checkAccessPolicy,
+  projectAccessToken,
+  usesCloudflareAccess,
+} from './cloudflare-access.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
+import { claimAt } from './internal/claims.ts';
 import { sha256Hex } from './internal/digest.ts';
 import { isRecord } from './internal/record.ts';
 import type { OAuthResource } from './oauth.ts';
+import { TokenPrincipalSchema } from './principal.ts';
+import type { TokenPrincipal } from './principal.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
-import { OrganizationIdSchema, UuidSchema } from './schemas.ts';
+import { OrganizationIdSchema } from './schemas.ts';
 import { matchesScopes } from './scopes.ts';
 import type { ScopeMatch } from './scopes.ts';
 import type { BackgroundContext } from './telemetry.ts';
 import { parseInput } from './validation.ts';
 
-/**
- * Who calls, as every operation receives it: the actor, its kind, its verified organization and the request
- * id.
- */
-export const PrincipalSchema = Type.Object(
-  {
-    actorId: Type.String({ minLength: 1, maxLength: 255 }),
-    actorKind: Type.Union([Type.Literal('user'), Type.Literal('service')]),
-    organizationId: OrganizationIdSchema,
-    requestId: UuidSchema,
-  },
-  { additionalProperties: false }
-);
-/** Who calls: the actor, its kind, its organization and the request id. */
-export type Principal = Static<typeof PrincipalSchema>;
-/**
- * The OAuth client a token was issued to: its id and its class, `human`, `machine` or `dcr` (a dynamically
- * registered client).
- */
-export const TokenClientSchema = Type.Object(
-  {
-    id: Type.String({ minLength: 1, maxLength: 255 }),
-    class: Type.Union([Type.Literal('human'), Type.Literal('machine'), Type.Literal('dcr')]),
-  },
-  { additionalProperties: false }
-);
-/** The OAuth client a token was issued to. */
-export type TokenClient = Static<typeof TokenClientSchema>;
-/**
- * What a verified token grants: the principal without a request id, its scopes and, for an OAuth token, its
- * client. A custom `tokens.resolve` returns this shape.
- */
-export const TokenPrincipalSchema = Type.Object(
-  {
-    ...Type.Omit(PrincipalSchema, ['requestId']).properties,
-    scopes: Type.Array(Type.String({ maxLength: 255 }), { maxItems: 1000 }),
-    /** Custom resolvers must classify DCR from verified application policy, never request headers. */
-    client: Type.Optional(TokenClientSchema),
-  },
-  { additionalProperties: false }
-);
-/** What a verified token grants. */
-export type TokenPrincipal = Static<typeof TokenPrincipalSchema>;
+export { PrincipalSchema, TokenClientSchema, TokenPrincipalSchema } from './principal.ts';
+export type { Principal, TokenClient, TokenPrincipal } from './principal.ts';
+
 /**
  * How callers obtain and present the access token, as published in OpenAPI
  * and OAuth discovery.
@@ -85,6 +53,31 @@ export type TokenScheme =
   | { type: 'oauth' }
   | { type: 'bearer'; description: string }
   | { type: 'oauth+bearer'; description: string };
+
+/**
+ * Where a request presents its token: `authorization`, as a bearer token of the `Authorization` header, or
+ * `cloudflare-access`, as the application token Cloudflare Access sets in `Cf-Access-Jwt-Assertion` on each
+ * request it lets through.
+ */
+export type TokenSource = 'authorization' | 'cloudflare-access';
+
+/**
+ * What a Cloudflare Access application token grants, under the `cloudflare-access` source. Access decides who
+ * reaches the application and grants no scope, so the policy states them: every person Access lets through
+ * holds `people`, and a service token what `services` lists under its client id. The organization is named
+ * once, as `organizationId` or as the claim `claims.organization` names.
+ */
+export interface TokenAccess {
+  /** The organization every caller acts in, when the tokens carry none: an application of one tenant. */
+  organizationId?: string;
+  /** The scopes every person Access lets through holds, each of the application's namespace. */
+  people: readonly string[];
+  /**
+   * The scopes of each service token, by its client id (`<id>.access`, its token's `common_name`); a service
+   * token not listed holds none.
+   */
+  services?: Readonly<Record<string, readonly string[]>>;
+}
 
 /**
  * What `tokens.resolve` and a `tokens.resourceMetadataUrl` function receive about the request being admitted.
@@ -135,6 +128,8 @@ const TOKEN_ALGORITHMS: ReadonlySet<string> = new Set<TokenAlgorithm>([
   'ES512',
   'EdDSA',
 ]);
+/** The sources a token policy may read tokens from. */
+const TOKEN_SOURCES: ReadonlySet<string> = new Set<TokenSource>(['authorization', 'cloudflare-access']);
 /**
  * Where an authorization server's access tokens put what the principal needs, and the subject its machines
  * carry, when they differ from the defaults. A claim is named as it is, or by a dotted path into an object
@@ -184,20 +179,23 @@ export interface TokenDevelopment {
 
 /**
  * How the application verifies bearer tokens: the audiences they must carry, the OAuth issuer and its JWKS,
- * or the application's own `resolve`, the scheme OpenAPI publishes and the OAuth discovery it serves.
+ * or the application's own `resolve`, the scheme OpenAPI publishes and the OAuth discovery it serves; or,
+ * under the `cloudflare-access` source, Cloudflare Access application tokens and what they grant.
  */
 export interface TokenPolicy<E = unknown> {
   /**
    * The audience access tokens must carry, or a list of audiences any one of which a token may carry
    * (the service's own and a gateway's in front of it, for example). The first is the canonical
-   * resource that OAuth discovery names.
+   * resource that OAuth discovery names. Under Cloudflare Access, the application's AUD tag.
    */
   audience: string | readonly string[];
   /**
-   * The OAuth authorization server, an absolute HTTPS URL; the default verification requires it as `iss`.
-   * Required unless `scheme.type` is `bearer`.
+   * The OAuth authorization server, an absolute HTTPS URL that a token must name as `iss`, or a list of the
+   * issuer identifiers one server answers to, such as an Auth0 tenant's own domain and its custom domain. The
+   * first is canonical: the authorization server discovery names, and what the JWKS and the endpoints resolve
+   * against. Required unless `scheme.type` is `bearer`, or `resolve` verifies Cloudflare Access tokens itself.
    */
-  issuer?: string;
+  issuer?: string | readonly string[];
   /** The issuer's JWKS URL, resolved against `issuer` and HTTPS only; defaults to `.well-known/jwks.json`. */
   jwksUri?: string;
   /**
@@ -215,9 +213,25 @@ export interface TokenPolicy<E = unknown> {
   algorithms?: readonly TokenAlgorithm[];
   /**
    * Where the access tokens put the organization, the scopes, the client and a person's permissions, and the
-   * subject a machine's carries; the standard claims and Auth0's conventions by default.
+   * subject a machine's carries; the standard claims and Auth0's conventions by default. Under Cloudflare
+   * Access, only the organization's claim.
    */
   claims?: TokenClaims;
+  /**
+   * Where requests present their tokens: `authorization` (the default), as a bearer token, or
+   * `cloudflare-access`, as the application token Cloudflare Access sets in `Cf-Access-Jwt-Assertion`, which
+   * is then the only place a token is read: never `Authorization`, never the `CF_Authorization` cookie. The
+   * development token is a bearer token from localhost under either source. Under `cloudflare-access`, no
+   * OAuth discovery is served, a 401 challenges with a plain `Bearer`, writes a browser sends for another
+   * site are refused, and no MCP transport can be mounted.
+   */
+  source?: TokenSource;
+  /**
+   * What Cloudflare Access application tokens grant under the `cloudflare-access` source: the scopes of a
+   * person and of each service token, and the organization every caller acts in. Without it, `resolve`
+   * verifies Access tokens itself.
+   */
+  access?: TokenAccess;
   /**
    * A token accepted from localhost as a developer holding every scope the application declares. A request
    * to any other host never matches, and neither does a token shorter than 32 characters. Never set the
@@ -225,13 +239,13 @@ export interface TokenPolicy<E = unknown> {
    */
   development?: TokenDevelopment;
   /**
-   * Verifies every bearer token itself, in place of the default OAuth verification; only the development
-   * token is checked before it. It answers the token's principal, or a failure Result: `FORBIDDEN` answers
-   * 403 and any other failure 401. Verify the token cryptographically. A principal that does not match
-   * `TokenPrincipalSchema`, a client whose class disagrees with the actor kind (a `machine` client is a
-   * `service`), a machine whose actor id is not its client id or `<client id>@clients` (except under
-   * `oauth+bearer`), and a thrown error answer `UNAUTHORIZED`. The operation's scopes are then checked
-   * against the principal's.
+   * Verifies every token the request presents at the policy's `source` itself, in place of the default
+   * verification; only the development token is checked before it. It answers the token's principal, or a
+   * failure Result: `FORBIDDEN` answers 403 and any other failure 401. Verify the token cryptographically. A
+   * principal that does not match `TokenPrincipalSchema`, a client whose class disagrees with the actor kind
+   * (a `machine` client is a `service`), a machine whose actor id is not its client id or
+   * `<client id>@clients` (except under `oauth+bearer`), and a thrown error answer `UNAUTHORIZED`. The
+   * operation's scopes are then checked against the principal's.
    */
   resolve?: (
     token: string,
@@ -283,25 +297,11 @@ async function isDevelopmentToken(
 export function usesOwnBearer(policy: Pick<TokenPolicy, 'scheme'>): boolean {
   return policy.scheme?.type === 'bearer';
 }
-/**
- * A claim's own value under its name, else at a dotted path through object claims; undefined when absent.
- * Only own properties are read, so no path reaches a prototype.
- */
-function claimAt(claims: Record<string, unknown>, path: string): unknown {
-  if (Object.hasOwn(claims, path)) {
-    return claims[path];
-  }
-  let value: unknown = claims;
-  for (const key of path.split('.')) {
-    if (!isRecord(value) || !Object.hasOwn(value, key)) {
-      return undefined;
-    }
-    value = value[key];
-  }
-  return value;
-}
 
-/** A claim's scopes: a space-separated string or a list of strings, none when absent; null when malformed. */
+/**
+ * A claim that lists values, such as scopes, permissions or grant types: a space-separated string or a list of
+ * strings, none when absent; null when malformed.
+ */
 function scopeList(value: unknown): string[] | null {
   if (value === undefined) {
     return [];
@@ -329,7 +329,9 @@ function tokenClient(claims: Record<string, unknown>, path: string | undefined):
  * The principal a verified access token grants, read where `mapping` says. A subject of the shape
  * `mapping.machineSubject` names, `<client id>@clients` by default, is a machine; anyone else is a person,
  * who holds only the granted scopes their permissions claim also lists. Malformed or inconsistent claims,
- * such as a missing `sub` or a subject shaped like another client's, are refused as `UNAUTHORIZED`.
+ * such as a missing `sub`, a subject shaped like another client's, or a token of the client credentials grant
+ * (`gty: client-credentials`, as Auth0 names it) whose subject is not a machine's, are refused as
+ * `UNAUTHORIZED`.
  */
 export function projectToken(claims: unknown, mapping: TokenClaims = {}): Result<TokenPrincipal, Failure> {
   const refused = err(standardErrors.unauthorized.create());
@@ -346,6 +348,12 @@ export function projectToken(claims: unknown, mapping: TokenClaims = {}): Result
   const machine = client !== undefined && subject === (clientsSuffix ? `${client}@clients` : client);
   // A subject shaped like a machine's that names another client is forged.
   if (clientsSuffix && !machine && subject.endsWith('@clients')) {
+    return refused;
+  }
+  // A token the client credentials grant issued is a machine's: whatever its subject, it never passes as a
+  // person's.
+  const grants = scopeList(claimAt(claims, 'gty'));
+  if (grants === null || (grants.includes('client-credentials') && !machine)) {
     return refused;
   }
   let scopes = [...new Set(granted)];
@@ -367,15 +375,31 @@ export function projectToken(claims: unknown, mapping: TokenClaims = {}): Result
   });
   return principal.ok ? ok(principal.value) : refused;
 }
+
 /**
- * The OAuth authorization server; there is no default, so a deployment always names its own, and a policy
- * without one throws a TypeError.
+ * The issuers a token may name as its `iss`, the canonical one first: the authorization server discovery
+ * names, and the one the JWKS and the endpoints resolve against. There is no default, so a deployment always
+ * names its own; a missing issuer, an empty one and a repeated one throw a TypeError.
  */
-export function tokenIssuer(policy: Pick<TokenPolicy, 'issuer'>): string {
-  if (!policy.issuer) {
+export function tokenIssuers(policy: Pick<TokenPolicy, 'issuer'>): [string, ...string[]] {
+  const listed: unknown = policy.issuer;
+  const issuers: unknown[] = Array.isArray(listed) ? listed : [listed];
+  const valid = issuers.filter((value): value is string => typeof value === 'string' && value !== '');
+  const [canonical, ...others] = valid;
+  if (canonical === undefined) {
     throw new TypeError('tokens.issuer is required to verify or document OAuth access tokens.');
   }
-  return policy.issuer;
+  if (valid.length !== issuers.length || new Set(valid).size !== valid.length) {
+    throw new TypeError(
+      'tokens.issuer is one issuer, or a list of distinct issuers, the canonical one first.'
+    );
+  }
+  return [canonical, ...others];
+}
+
+/** The canonical OAuth authorization server, the first issuer; a policy without one throws a TypeError. */
+export function tokenIssuer(policy: Pick<TokenPolicy, 'issuer'>): string {
+  return tokenIssuers(policy)[0];
 }
 
 /**
@@ -406,11 +430,13 @@ function httpsUrl(value: string, base?: string): boolean {
 
 /**
  * Refuses, at construction, a token policy that could never verify or document a token: a malformed
- * `development` and, unless the application issues its own bearer tokens, an empty or unknown algorithm, a
- * malformed claim mapping, a missing issuer, or an issuer or endpoint that is not an HTTPS URL. Verification
- * is built on first use, so without this check such a policy would fail only at run time, as a 401 for every
- * token and a 500 for the OpenAPI document. An application that issues its own bearer tokens names no
- * authorization server.
+ * `development`, an unknown `source`, `access` outside the `cloudflare-access` source, what that source
+ * refuses (see `checkAccessPolicy`, which checks its scopes against the application's `namespace`) and,
+ * unless the application issues its own bearer tokens or verifies Access tokens itself, an empty or unknown
+ * algorithm, a malformed claim mapping, a missing issuer, or an issuer or endpoint that is not an HTTPS URL.
+ * Verification is built on first use, so without this check such a policy would fail only at run time, as a
+ * 401 for every token and a 500 for the OpenAPI document. An application that issues its own bearer tokens
+ * names no authorization server.
  */
 export function checkTokenAuthority<E>(
   policy: Pick<
@@ -423,7 +449,13 @@ export function checkTokenAuthority<E>(
     | 'algorithms'
     | 'claims'
     | 'development'
-  >
+    | 'source'
+    | 'access'
+    | 'resolve'
+    | 'resources'
+    | 'resourceMetadataUrl'
+  >,
+  namespace: string
 ): void {
   const { development } = policy;
   if (
@@ -435,7 +467,20 @@ export function checkTokenAuthority<E>(
   ) {
     throw new TypeError('tokens.development names the binding of its token and a valid organization id.');
   }
-  if (usesOwnBearer(policy)) {
+  if (policy.source !== undefined && !TOKEN_SOURCES.has(policy.source)) {
+    throw new TypeError('tokens.source is authorization or cloudflare-access.');
+  }
+  const access = usesCloudflareAccess(policy);
+  if (policy.access !== undefined && !access) {
+    throw new TypeError(
+      'tokens.access grants Cloudflare Access callers: set tokens.source to cloudflare-access.'
+    );
+  }
+  if (access) {
+    checkAccessPolicy(policy, namespace);
+  }
+  // Without an issuer, an Access policy's resolver verifies every token itself.
+  if (usesOwnBearer(policy) || (access && policy.resolve !== undefined && policy.issuer === undefined)) {
     return;
   }
   const { algorithms, claims } = policy;
@@ -462,11 +507,11 @@ export function checkTokenAuthority<E>(
       );
     }
   }
-  const issuer = tokenIssuer(policy);
+  const issuers = tokenIssuers(policy);
   if (
-    !httpsUrl(issuer) ||
+    issuers.some((issuer) => !httpsUrl(issuer)) ||
     [policy.jwksUri, policy.authorizationEndpoint, policy.tokenEndpoint].some(
-      (endpoint) => endpoint !== undefined && !httpsUrl(endpoint, issuer)
+      (endpoint) => endpoint !== undefined && !httpsUrl(endpoint, issuers[0])
     )
   ) {
     throw new TypeError(
@@ -487,17 +532,31 @@ export function tokenEndpoints(
 }
 
 /**
+ * Whether a token's `typ` header lets it be an access token: absent or `JWT`, a plain JWT, else RFC 9068's
+ * `at+jwt` (`application/at+jwt` in full), in any case. Any other type, such as `dpop+jwt` or `logout+jwt`,
+ * says the issuer's keys signed another kind of token.
+ */
+function accessTokenType(typ: unknown): boolean {
+  if (typ === undefined) {
+    return true;
+  }
+  const type = typeof typ === 'string' ? typ.toLowerCase().replace(/^application\//, '') : '';
+  return type === 'jwt' || type === 'at+jwt';
+}
+
+/**
  * Verifies OAuth access tokens against the issuer's JWKS and answers their claims, or throws for a token it
- * refuses: the signature by one of the policy's algorithms (`RS256` by default), `iss`, an `aud` that names
- * any one of the policy's audiences, and `exp` and `sub`, with five seconds of clock tolerance. The JWKS is
- * fetched within ten seconds and cached for ten minutes. An issuer or JWKS URL that is not HTTPS throws a
- * TypeError at construction.
+ * refuses: the signature by one of the policy's algorithms (`RS256` by default), an `iss` that is one of the
+ * policy's issuers, an `aud` that names any one of the policy's audiences, `exp` and `sub`, with five seconds
+ * of clock tolerance, and a `typ` header, when the token has one, of a plain JWT or an RFC 9068 access token
+ * (`at+jwt`). The JWKS, at `jwksUri` resolved against the first issuer, is fetched within ten seconds and
+ * cached for ten minutes. An issuer or JWKS URL that is not HTTPS throws a TypeError at construction.
  */
 export function createTokenVerifier<E>(policy: TokenPolicy<E>) {
-  const issuer = tokenIssuer(policy);
+  const issuers = tokenIssuers(policy);
   const audience = tokenAudiences(policy);
-  const uri = new URL(policy.jwksUri ?? '.well-known/jwks.json', issuer);
-  if (new URL(issuer).protocol !== 'https:' || uri.protocol !== 'https:') {
+  const uri = new URL(policy.jwksUri ?? '.well-known/jwks.json', issuers[0]);
+  if (issuers.some((issuer) => new URL(issuer).protocol !== 'https:') || uri.protocol !== 'https:') {
     throw new TypeError('Token authority must use HTTPS.');
   }
   const jwks = createRemoteJWKSet(uri, {
@@ -506,23 +565,58 @@ export function createTokenVerifier<E>(policy: TokenPolicy<E>) {
     cooldownDuration: 30_000,
   });
   return async (token: string) => {
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer,
+    const { payload, protectedHeader } = await jwtVerify(token, jwks, {
+      issuer: issuers,
       audience,
       algorithms: [...(policy.algorithms ?? ['RS256'])],
       clockTolerance: 5,
       requiredClaims: ['exp', 'sub'],
     });
+    if (!accessTokenType(protectedHeader.typ)) {
+      throw new Error('The token is typed as another kind of JWT than an access token.');
+    }
     return payload;
   };
 }
+
+/** The longest token admission reads; a longer one is refused unread. */
+const MAX_TOKEN_LENGTH = 16_384;
+/** A compact JWS: three base64url segments separated by dots. */
+const COMPACT_JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+/** Any token: characters other than whitespace. */
+const ANY_TOKEN = /^\S+$/;
+
+/** The bearer token of a request's `Authorization` header, `Bearer <token>` in any case of the scheme. */
+function bearerToken(request: Request): string | undefined {
+  return /^Bearer (\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
+}
+
 /**
- * Admits a request by its bearer token: verifies it (the development token from a local host, else the
- * policy's own `resolve` when it has one, else OAuth against the issuer's JWKS) and checks that its scopes
- * admit the request. A request without a bearer token, with a token longer than 16384 characters, or with an
- * `x-api-key` header is refused; without `resolve` or a development token, the token must be a compact JWS.
- * Refusals are `UNAUTHORIZED` or `FORBIDDEN` failures, never exceptions. `given` stands in for the JWKS check
- * in tests, answering a token's claims.
+ * The token a request presents where the policy reads it: the bearer token of `Authorization` or, under the
+ * `cloudflare-access` source, the application token of `Cf-Access-Jwt-Assertion` and nothing else. Only a
+ * compact JWS is a token, unless the policy's own `resolve` verifies tokens, or, read from `Authorization`,
+ * the token may be the development token. Undefined when the request presents none, or one longer than 16384
+ * characters.
+ */
+function presentedToken<E>(
+  request: Request,
+  policy: Pick<TokenPolicy<E>, 'source' | 'resolve' | 'development'>
+): string | undefined {
+  const access = usesCloudflareAccess(policy);
+  const token = access ? request.headers.get(ACCESS_TOKEN_HEADER) : bearerToken(request);
+  const shape = policy.resolve || (policy.development && !access) ? ANY_TOKEN : COMPACT_JWS;
+  return token && token.length <= MAX_TOKEN_LENGTH && shape.test(token) ? token : undefined;
+}
+
+/**
+ * Admits a request by its token: verifies it (the development token, a bearer token from a local host; else
+ * the policy's own `resolve` when it has one; else, for OAuth, against the issuer's JWKS, or for Cloudflare
+ * Access, against the team's keys, projected by `access`) and checks that its scopes admit the request. The
+ * token is the bearer token of `Authorization`, or under the `cloudflare-access` source the application token
+ * of `Cf-Access-Jwt-Assertion` alone. A request without a token, with one longer than 16384 characters, or
+ * with an `x-api-key` header is refused; without `resolve` (or, for a bearer token, a development token), the
+ * token must be a compact JWS. Refusals are `UNAUTHORIZED` or `FORBIDDEN` failures, never exceptions. `given`
+ * stands in for the JWKS check in tests, answering a token's claims.
  */
 export function createTokenAuthorization<E>(
   policy: TokenPolicy<E>,
@@ -535,6 +629,9 @@ export function createTokenAuthorization<E>(
     verifier ??= createTokenVerifier(policy);
     return verifier(token);
   };
+  /** The principal a verified token's claims grant: Access's projection, or the OAuth claim mapping. */
+  const project = (claims: unknown) =>
+    usesCloudflareAccess(policy) ? projectAccessToken(claims, policy) : projectToken(claims, policy.claims);
   /**
    * Admits the request when its token carries `scope` or, for a list, any one of them (every one with
    * `scopeMatch` `all`).
@@ -548,18 +645,16 @@ export function createTokenAuthorization<E>(
     const accepted = typeof scope === 'string' ? [scope] : scope;
     /** Whether granted scopes admit the request. */
     const admits = (scopes: readonly string[]) => matchesScopes(accepted, scopes, scopeMatch);
-    const bearer =
-      policy.resolve || policy.development
-        ? /^Bearer (\S+)$/i
-        : /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i;
-    const token = bearer.exec(request.headers.get('authorization') ?? '')?.[1];
-    if (!token || token.length > 16_384 || request.headers.has('x-api-key')) {
+    if (request.headers.has('x-api-key')) {
       return err(standardErrors.unauthorized.create());
     }
+    const bearer = bearerToken(request);
     if (
       policy.development &&
       context &&
-      (await isDevelopmentToken(policy.development, token, request, context.env))
+      bearer &&
+      bearer.length <= MAX_TOKEN_LENGTH &&
+      (await isDevelopmentToken(policy.development, bearer, request, context.env))
     ) {
       const developer: TokenPrincipal = {
         actorId: 'local-developer',
@@ -569,6 +664,10 @@ export function createTokenAuthorization<E>(
         client: { id: 'local-development', class: 'human' },
       };
       return admits(developer.scopes) ? ok(developer) : err(standardErrors.forbidden.create());
+    }
+    const token = presentedToken(request, policy);
+    if (!token) {
+      return err(standardErrors.unauthorized.create());
     }
     if (policy.resolve) {
       try {
@@ -606,7 +705,7 @@ export function createTokenAuthorization<E>(
     } catch {
       return err(standardErrors.unauthorized.create());
     }
-    const principal = projectToken(claims, policy.claims);
+    const principal = project(claims);
     if (!principal.ok) {
       return principal;
     }

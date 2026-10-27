@@ -34,11 +34,12 @@ export interface ProjectOptions {
     rateLimit?: { binding: string; retryAfter?: number };
   };
   /**
-   * The API's base path and the health path the Worker serves, and, for a web app (`index.html` at the
-   * project's root), the static assets binding its build is served through and the headers of its responses.
+   * The API's base path and the health path the Worker serves, the origins it answers when it is pinned to
+   * them, and, for a web app (`index.html` at the project's root), the static assets binding its build is
+   * served through and the headers of its responses.
    */
   worker: {
-    http: { basePath: string; healthPath: string };
+    http: { basePath: string; healthPath: string; origins?: readonly string[] };
     assets?: { binding: string; headers?: Readonly<Record<string, string>> };
   };
   /** The bindings each mode declares, as `cf/config` states them: the generated `Env` is inferred from them. */
@@ -470,6 +471,12 @@ export function prepareProject(directory: string, mode: string, project: Project
   const tools = discoverTools(root, files.mcp, application);
   // A route or a tool that MCP serves, or Markdown that describes the server, needs the MCP transport.
   const servesMcp = routes.mcp || tools.length > 0 || described !== undefined;
+  // The Worker would refuse the transport as it starts: MCP clients sign in through OAuth.
+  if (servesMcp && project.application.tokens.source === 'cloudflare-access') {
+    throw new TypeError(
+      'A project behind Cloudflare Access serves no MCP, whose clients sign in through OAuth: remove mcp from its routes, and the mcp/ folder.'
+    );
+  }
   const binders = [
     ...(files.routes.length ? ['bindRoute'] : []),
     ...(tools.length ? ['bindTool'] : []),

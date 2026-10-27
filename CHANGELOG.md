@@ -167,6 +167,19 @@ Everything else:
 - `observability` options merge key by key over the defaults, so a partial setting keeps query strings
   redacted, and logs and traces follow `enabled` unless set. Two cron modules on one schedule make one
   trigger, and `vp dev` restarts when a queue or cron module is added or removed.
+- `auth0()` and `cloudflareAccess()` from `@arbol-ai/maximus/vite` state the `tokens` option for an API
+  whose tokens Auth0 issues and for an application behind Cloudflare Access. `tokens.issuer` takes a list
+  of the issuers one authorization server answers to, the canonical one first, such as an Auth0 tenant's
+  domain and its custom domain.
+- `tokens.source: 'cloudflare-access'` admits the application token Cloudflare Access sets in
+  `cf-access-jwt-assertion`, and no other, verified against the team's keys for the application's AUD tag;
+  `tokens.access` grants people and each service token their scopes, in one organization or in the one a
+  claim names. Behind Access, OpenAPI describes the service token's headers, no OAuth discovery is served,
+  no token reaches `authority.token`, a write another site's page sends answers `403`, MCP is refused, and
+  a production build answers the origin alone. `projectAccessToken` maps an Access token's claims.
+- A token of the client credentials grant, `gty: client-credentials` as Auth0 marks it, whose subject is
+  not its client's machine, and a token whose `typ` header names another type than `JWT` or RFC 9068's
+  `at+jwt`, are refused.
 - Seven examples deploy to Cloudflare as they are, each with tests in Node and an end-to-end suite: tasks
   with a web app, notes in D1, two Workers over RPC, a queue with a dead letter queue, Browser Run, documents
   in R2 and a Durable Object that books appointments.

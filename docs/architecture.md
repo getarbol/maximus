@@ -208,11 +208,13 @@ in step; arbitrary regular-expression paths and route generators are deliberatel
 ## Tokens and tenancy
 
 Every call has a principal with an organization. The default verifier maps organization-bound OAuth access
-tokens; anything else goes through the application's own `resolve` in `auth.ts`, which must verify
-cryptographically and return a strict principal. The framework owns no credential store, profile database or
-permission list: an owner enforces client, environment, tenant activity and resource policy. Organization ids
-never come from input, and annotations never authorize. The development token exists only in a development
-build, and only from localhost.
+tokens, or, under `tokens.source: 'cloudflare-access'`, Cloudflare Access application tokens, verified the
+same way whatever reached the Worker and granted the scopes `tokens.access` states; anything else goes
+through the application's own `resolve` in `auth.ts`, which must verify cryptographically and return a
+strict principal. The framework owns no credential store, profile database or permission list: an owner
+enforces client, environment, tenant activity and resource policy. Organization ids never come from input,
+and annotations never authorize. The development token exists only in a development build, and only from
+localhost.
 
 ## Behind a gateway
 

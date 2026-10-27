@@ -105,8 +105,9 @@ build.
 - **Small Workers.** A Worker without MCP builds to under 200 kB. With MCP, the SDK is a separate chunk that
   loads with the first MCP request.
 
-The trade-offs are deliberate. Maximus targets Cloudflare Workers. Every route requires a bearer token
-with an organization: standard OAuth access tokens from your authorization server, or your own verifier.
+The trade-offs are deliberate. Maximus targets Cloudflare Workers. Every route requires a token with an
+organization: standard OAuth access tokens from your authorization server, such as Auth0, Cloudflare
+Access application tokens, or your own verifier.
 Routes are versioned (`/v1/…`) with whole-segment parameters. Bodies are JSON, plus explicit byte uploads.
 Schemas are [TypeBox](https://github.com/sinclairzx81/typebox).
 

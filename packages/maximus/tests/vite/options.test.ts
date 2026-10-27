@@ -10,8 +10,10 @@ import { join } from 'node:path';
 import { bindings, triggers } from 'cf/config';
 import { afterEach, expect, test } from 'vite-plus/test';
 
+import { maximus, standardErrors } from '../../src/index.ts';
 import { projectOptions, workerConfig } from '../../src/vite/options.ts';
-import type { MaximusOptions } from '../../src/vite/options.ts';
+import type { MaximusOptions, TokenOptions } from '../../src/vite/options.ts';
+import { auth0, cloudflareAccess } from '../../src/vite/tokens.ts';
 
 const directories: string[] = [];
 /** A project root with this package.json. */
@@ -294,6 +296,52 @@ test("a web app's pages and files carry secure headers, the policy admitting the
   expect(projectOptions(app, minimal).worker.assets?.headers?.['content-security-policy']).toContain(
     "connect-src 'self';"
   );
+});
+
+/** An Access application's AUD tag. */
+const AUD = '4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2';
+/** A tasks service of one tenant behind Cloudflare Access, whose people read tasks. */
+const ACCESS = cloudflareAccess({
+  team: 'acme',
+  aud: AUD,
+  organizationId: 'org_acme',
+  scopes: { people: ['tasks:tasks:read'] },
+});
+
+test('behind Cloudflare Access, a production build pins the Worker to its origin, and vp dev does not', () => {
+  const production = projectOptions(root(), { ...minimal, tokens: ACCESS }, 'production');
+  expect(production.worker.http).toEqual({
+    basePath: '/api',
+    healthPath: '/health',
+    origins: ['https://tasks.example.test'],
+  });
+  expect(production.application.tokens).toEqual(ACCESS);
+  const development = projectOptions(root(), { ...minimal, tokens: ACCESS }, 'development');
+  expect(development.worker.http).toEqual({ basePath: '/api', healthPath: '/health' });
+  expect(development.application.tokens.development).toEqual({ binding: 'DEVELOPMENT_TOKEN' });
+  // OAuth access tokens leave the Worker where its origin and routes serve it.
+  const oauth = auth0({ domain: 'acme.us.auth0.com', audience: 'https://tasks.example.test' });
+  expect(projectOptions(root(), { ...minimal, tokens: oauth }).worker.http).not.toHaveProperty('origins');
+  // The application the generated modules build from these options starts, in either phase.
+  for (const { application } of [production, development]) {
+    expect(() => maximus({ ...application, errors: standardErrors }).build()).not.toThrow();
+  }
+});
+
+test("a web app's pages call each token issuer, and behind Cloudflare Access their own origin alone", () => {
+  const app = root();
+  writeFileSync(join(app, 'index.html'), '<!doctype html>');
+  /** The `connect-src` of the pages' content security policy under these token options. */
+  const connect = (tokens: TokenOptions) =>
+    projectOptions(app, { ...minimal, tokens })
+      .worker.assets?.headers?.['content-security-policy']?.split('; ')
+      .find((directive) => directive.startsWith('connect-src'));
+  expect(connect(ACCESS)).toBe("connect-src 'self'");
+  expect(
+    connect(
+      auth0({ domain: ['login.acme.example', 'acme.us.auth0.com'], audience: 'https://tasks.example.test' })
+    )
+  ).toBe("connect-src 'self' https://login.acme.example https://acme.us.auth0.com");
 });
 
 test('a web app refuses a binding of its own named ASSETS', () => {

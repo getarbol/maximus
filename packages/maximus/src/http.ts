@@ -7,6 +7,7 @@
 
 import type { Attachment } from './attachment-schema.ts';
 import { attachmentResponse, binaryBody } from './binary.ts';
+import { isCrossSiteWrite } from './cloudflare-access.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
 import { executeOperation } from './execution.ts';
@@ -19,6 +20,7 @@ import {
   httpTransports,
   nativePaths,
   ownsPrefix,
+  servesCloudflareAccess,
   servesOwnBearer,
   VERSIONED_PATH,
 } from './internal/http-layout.ts';
@@ -278,7 +280,7 @@ interface ServedRoute {
  * such as MCP, plain routes and mounts. Every response but a protocol upgrade (101) carries `x-request-id`,
  * `x-content-type-options: nosniff`, `server-timing` and `cache-control: private, no-store`, unless a plain
  * route, mount, fallback or `before` hook sets its own `cache-control`. Construction throws a TypeError for a
- * path two of them would claim, and for an option or token scheme it cannot serve.
+ * path two of them would claim, and for an option, token scheme or token source it cannot serve.
  */
 export function createHttpHandler<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
@@ -325,6 +327,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     ]),
   ]);
   const ownBearer = servesOwnBearer(manifest.tokens, mcpTransport);
+  const access = servesCloudflareAccess(manifest.tokens, mcpTransport);
+  // OAuth access tokens alone come with discovery, a challenge that points at it, and a token to forward.
+  const oauth = !ownBearer && !access;
   if (mcpTransport?.path === '/') {
     // An MCP server mounted at the root answers `/` itself.
     paths.reserved.delete('/');
@@ -374,10 +379,10 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     headers.set('x-content-type-options', 'nosniff');
     headers.set('x-request-id', requestId);
     if (error.code === 'UNAUTHORIZED' && !headers.has('www-authenticate')) {
-      const metadataUrl = challengeMetadataUrl(context);
+      const metadataUrl = oauth ? challengeMetadataUrl(context) : null;
       headers.set(
         'www-authenticate',
-        ownBearer || metadataUrl === null ? 'Bearer' : `Bearer resource_metadata="${metadataUrl}"`
+        metadataUrl === null ? 'Bearer' : `Bearer resource_metadata="${metadataUrl}"`
       );
     }
     const retry = manifest.errors.retryAfter(error.code);
@@ -427,7 +432,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
       }
       case '/.well-known/oauth-protected-resource':
       case '/.well-known/oauth-protected-resource/mcp': {
-        if (ownBearer || manifest.tokens.resources !== undefined) {
+        if (!oauth || manifest.tokens.resources !== undefined) {
           return reject(standardErrors.notFound.create());
         }
         return Response.json(metadata(), { headers: { 'access-control-allow-origin': '*' } });
@@ -565,6 +570,11 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         }
         invoked = true;
         requestEnv = scopedEnv;
+        // An Access session travels in a cookie, which a browser sends with another site's request too: a
+        // write sent for another site's page is refused before its token is read.
+        if (access && isCrossSiteWrite(incoming)) {
+          return reject(standardErrors.forbidden.create());
+        }
         const result = await authorize(
           incoming,
           operationRoute
@@ -578,9 +588,10 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         }
         const authenticated = result.value;
         // The verified OAuth access token, for an operation that calls another service as the same caller.
-        const accessToken = ownBearer
-          ? undefined
-          : /^Bearer (\S+)$/i.exec(incoming.headers.get('authorization') ?? '')?.[1];
+        // Neither the application's own bearer token nor an Access application token is passed on.
+        const accessToken = oauth
+          ? /^Bearer (\S+)$/i.exec(incoming.headers.get('authorization') ?? '')?.[1]
+          : undefined;
         const actor: Principal = {
           actorId: authenticated.actorId,
           actorKind: authenticated.actorKind,

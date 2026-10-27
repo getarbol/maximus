@@ -1,9 +1,10 @@
 # Authentication and scopes
 
-Every call to the API and to the MCP server carries a bearer token. This guide covers how Maximus verifies
-it and turns it into the caller, how scopes decide which routes a caller may run, the development token,
-tokens your application verifies itself, OAuth discovery and rate limits. Read it before your first
-deployment, and whenever you connect an authorization server.
+Every call to the API and to the MCP server carries a bearer token, or, behind Cloudflare Access, the
+token Access adds. This guide covers how Maximus verifies it and turns it into the caller, how scopes decide
+which routes a caller may run, Auth0 and Cloudflare Access, the development token, tokens your application
+verifies itself, OAuth discovery and rate limits. Read it before your first deployment, and whenever you
+connect an authorization server.
 
 ## Configure the token issuer
 
@@ -27,12 +28,13 @@ export default defineConfig({
 
 A token is accepted when one of the issuer's keys signed it with an algorithm `tokens.algorithms` allows,
 its `iss` is `tokens.issuer`, its `aud` names one of the audiences, and it carries `exp` and `sub`. An
-expired token is refused, with five seconds of tolerance for clocks that disagree. The options of
-`tokens`:
+expired token is refused, with five seconds of tolerance for clocks that disagree, and so is a token whose
+`typ` header names another type than a plain `JWT` or an access token, `at+jwt` (RFC 9068): the issuer's
+keys signed it for another use. A token without a `typ` header is a plain JWT. The options of `tokens`:
 
 | Option                  | Default                            | Meaning                                                                                                                                                      |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `issuer`                | None                               | The authorization server, an HTTPS URL. Required, except under the `bearer` [scheme](#token-schemes).                                                        |
+| `issuer`                | None                               | The authorization server, an HTTPS URL, or the issuers it answers to, the canonical first. Required, except under the `bearer` [scheme](#token-schemes).     |
 | `audience`              | `origin`                           | The audience a token must carry, or a list of audiences, any one of which it may carry. The first is the resource [OAuth discovery](#oauth-discovery) names. |
 | `jwksUri`               | `.well-known/jwks.json`            | Where the issuer publishes its signing keys, resolved against `issuer`. HTTPS only.                                                                          |
 | `algorithms`            | `['RS256']`                        | The algorithms the issuer signs with: `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`, `ES256`, `ES384`, `ES512` or `EdDSA`.                            |
@@ -41,6 +43,8 @@ expired token is refused, with five seconds of tolerance for clocks that disagre
 | `claims`                | The standard claims                | Where the token carries the organization, the scopes, the client and a person's permissions. See [From token to caller](#from-token-to-caller).              |
 | `development`           | `{ binding: 'DEVELOPMENT_TOKEN' }` | The token `vp dev` accepts from localhost, or `false` for none. See [The development token](#the-development-token).                                         |
 | `scheme`                | `{ type: 'oauth' }`                | How callers obtain tokens. See [Token schemes](#token-schemes).                                                                                              |
+| `source`                | `'authorization'`                  | Where requests present their token: the bearer token of `authorization`, or `'cloudflare-access'`. See [Cloudflare Access](#cloudflare-access).              |
+| `access`                | None                               | What Cloudflare Access tokens grant: the scopes of people and of each service token, and the organization. See [Cloudflare Access](#cloudflare-access).      |
 
 The defaults of `jwksUri`, `authorizationEndpoint` and `tokenEndpoint` are Auth0's paths. For another
 authorization server, copy them from its metadata (`jwks_uri`, `authorization_endpoint` and
@@ -57,10 +61,15 @@ tokens: {
 },
 ```
 
-A token for any other audience is refused. A configuration that could never verify a token is refused
-when the Worker starts, and in every test that loads it: a missing `issuer` with
-`tokens.issuer is required to verify or document OAuth access tokens.`, and likewise an empty or repeated
-audience, an algorithm outside the list, and an issuer or endpoint that is not HTTPS.
+A token for any other audience is refused. An authorization server that answers to several issuer
+identifiers, such as an Auth0 tenant with a custom domain, lists them in `issuer`, the canonical one first:
+a token may name any of them as its `iss`, and the first is the one OAuth discovery names and the JWKS and
+the endpoints resolve against.
+
+A configuration that could never verify a token is refused when the Worker starts, and in every test that
+loads it: a missing `issuer` with `tokens.issuer is required to verify or document OAuth access tokens.`,
+and likewise an empty or repeated audience or issuer, an algorithm outside the list, and an issuer or
+endpoint that is not HTTPS.
 
 ## From token to caller
 
@@ -80,7 +89,8 @@ The subject decides who acts. A token whose subject is `<client>@clients`, where
 token's own client, is a machine: its `actorKind` is `service`, and it holds every scope it is granted. Any
 other subject is a person, `actorKind: 'user'`, who holds only the granted scopes their `permissions` also
 list, and none when the token lists no permissions. A subject that ends in `@clients` but names another
-client is refused.
+client is refused, and so is a token of the client credentials grant, `gty: client-credentials` as Auth0
+marks it, whose subject is not a machine's: such a token never passes as a person.
 
 A person's scopes must appear in both claims because the client chooses which scopes it requests. An
 authorization server that grants whatever scope a client asks for would otherwise let any member of an
@@ -109,7 +119,7 @@ Two entries change a rule rather than a name:
 
 | Authorization server  | `claims`                                                                           |
 | --------------------- | ---------------------------------------------------------------------------------- |
-| Auth0                 | None.                                                                              |
+| Auth0                 | None. See [Auth0](#auth0).                                                         |
 | Okta                  | `{ scopes: 'scp', client: 'cid', permissions: false, machineSubject: '{client}' }` |
 | WorkOS session tokens | `{ scopes: 'permissions' }`                                                        |
 
@@ -123,6 +133,59 @@ machine's, and the verified token itself. A token that names no client still run
 admit, but its calls carry no `authority`, and routes with
 [conditional scopes](#scopes-the-handler-checks) refuse them.
 [Context and middleware](middleware-and-context.md#what-a-handler-receives) shows what a handler receives.
+
+## Auth0
+
+`auth0()` from `@arbol-ai/maximus/vite` states the token options of an API whose access tokens Auth0
+issues:
+
+```ts
+import { auth0, maximus } from '@arbol-ai/maximus/vite';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: auth0({ domain: 'acme.us.auth0.com', audience: 'https://notes.example.com' }),
+      compatibilityDate: '2026-10-27',
+    }),
+  ],
+});
+```
+
+`domain` is the tenant's domain, and `audience` the identifier of the API in Auth0, which its tokens carry
+as their audience. The preset returns plain options: the issuer `https://acme.us.auth0.com/`, with the
+trailing slash Auth0 writes in `iss`, the audience, and `algorithms: ['RS256']`; the JWKS, the endpoints
+and the claims keep their defaults, which are Auth0's. Set `algorithms` to the API's signing algorithm when
+it is `RS512` or `PS256`. `HS256` is refused, since a secret signs those tokens and no JWKS publishes it, and
+so is a domain with a scheme, a port or a path. Spread the preset to add what it leaves out, such as
+`{ ...auth0({ domain, audience }), development: false }`.
+
+A tenant with a custom domain writes in `iss` the domain a token was requested from. List both domains,
+the canonical one first, and tokens from either are accepted:
+
+```ts
+tokens: auth0({ domain: ['login.acme.com', 'acme.us.auth0.com'], audience: 'https://notes.example.com' }),
+```
+
+The API's **JSON Web Token (JWT) Profile** chooses the dialect of its access tokens, and Maximus reads both:
+
+| What              | Auth0 profile                                               | RFC 9068 profile            |
+| ----------------- | ----------------------------------------------------------- | --------------------------- |
+| The `typ` header  | `JWT`                                                       | `at+jwt`                    |
+| The client        | `azp`                                                       | `client_id`                 |
+| A machine's token | `sub` is `<client>@clients`, with `gty: client-credentials` | `sub` is `<client>@clients` |
+
+Both carry the granted scopes in `scope` and the organization in `org_id`. A person holds only the granted
+scopes their `permissions` also list, which Auth0 adds when **Enable RBAC** and **Add Permissions in the
+Access Token** are on in the API's settings: turn both on. The `aud` of a token that also serves OpenID
+Connect lists `https://<domain>/userinfo` beside the API's identifier, which is the one that must be there.
+For the organization, sign people in to an [Organization](https://auth0.com/docs/manage-users/organizations),
+and issue machine tokens for one with
+[organizations for machine-to-machine applications](https://auth0.com/docs/manage-users/organizations/organizations-for-m2m-applications):
+a token without `org_id` is refused. A token of the client credentials grant whose subject is not
+`<client>@clients` of its own client is refused, so it never passes as a person.
 
 ## Refused calls
 
@@ -138,7 +201,9 @@ read. Then every call is refused, before its body is read and before any of your
 
 Each of these answers `401` with the failure `UNAUTHORIZED` and a `www-authenticate` challenge (see
 [OAuth discovery](#oauth-discovery)). A valid token that lacks the route's scope answers `403` with
-`FORBIDDEN`. [Standard failures](../reference/standard-failures.md) lists both.
+`FORBIDDEN`. [Standard failures](../reference/standard-failures.md) lists both. Behind
+[Cloudflare Access](#cloudflare-access), the token is the one of the `cf-access-jwt-assertion` header
+instead, and a write another site's page sends is refused too.
 
 ## Scopes
 
@@ -427,6 +492,117 @@ the two halves of what Maximus applies without `auth.ts`. Every route must name 
 decide the scheme the OpenAPI document publishes for it; a route that names none is refused with
 `Operation "<name>": dual authentication requires explicit actor eligibility.`
 
+## Cloudflare Access
+
+[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/) signs people and
+service tokens in at Cloudflare's edge, before a request reaches the Worker, and sets the application
+token, a JWT that Access signs, in the `cf-access-jwt-assertion` header of each request it lets through.
+`cloudflareAccess()` from `@arbol-ai/maximus/vite` makes that token the one the API admits:
+
+```ts
+import { cloudflareAccess, maximus } from '@arbol-ai/maximus/vite';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: cloudflareAccess({
+        team: 'acme',
+        aud: '4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2',
+        organizationId: 'org_acme',
+        scopes: {
+          people: ['notes:notes:read', 'notes:notes:write'],
+          services: { '88bf3b6d86161464f6509f7219099e57.access': ['notes:notes:read'] },
+        },
+      }),
+      compatibilityDate: '2026-10-27',
+    }),
+  ],
+});
+```
+
+`team` is the Zero Trust team name, `acme` for `acme.cloudflareaccess.com`, and `aud` the Application
+Audience (AUD) tag of the self-hosted Access application that protects the origin, from its overview in
+the dashboard. The preset returns plain options: `source: 'cloudflare-access'`, the team's domain as the
+issuer, its keys at `/cdn-cgi/access/certs` as `jwksUri`, the AUD tag as the audience, `RS256`, and
+`access`, what callers hold.
+
+### What an Access token grants
+
+Access decides who reaches the application, but its tokens carry no scope, so `tokens.access` states them:
+
+| Token             | Recognized by                         | `actorId`                     | `actorKind` | Client                   | Scopes                                  |
+| ----------------- | ------------------------------------- | ----------------------------- | ----------- | ------------------------ | --------------------------------------- |
+| A person's        | A `sub`, and no `common_name`         | `sub`, the person's Access id | `user`      | The AUD tag, `human`     | `people`                                |
+| A service token's | An empty `sub`, and its `common_name` | `common_name`, its client id  | `service`   | Its client id, `machine` | What `services` lists for its client id |
+
+A token of any other shape is refused with `401`: one whose `type` is not `app`, such as an Access
+organization token, and one with both a `sub` and a `common_name`, or neither. A person's email is never
+their `actorId`. A service token reaches the application when one of its Access policies admits it with
+the **Service Auth** action; list its client id, which ends in `.access`, under `services`. One that
+`services` does not list holds no scope, so every route refuses it with `403`.
+
+Every caller acts in `access.organizationId`, which suits an application of one tenant. For several, read
+the organization from a claim of the token, such as a custom OIDC claim of the identity provider that
+Access passes on under `custom`, named in `claims.organization`:
+
+```ts
+tokens: {
+  ...cloudflareAccess({
+    team: 'acme',
+    aud: '4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2',
+    scopes: { people: ['notes:notes:read'] },
+  }),
+  claims: { organization: 'custom.org_id' },
+},
+```
+
+A token without the claim, or whose claim is not an organization id, is refused with `401`. A policy that
+names the organization both ways, or neither, is refused when the Worker starts.
+
+### What is verified
+
+A Worker cannot assume that Access stands in front of it: a request reaches it around Access at its
+`workers.dev` and preview URLs, at a path the Access application does not cover, and through a Service
+Binding, and any client can send a `cf-access-jwt-assertion` header. So every token is verified: signed by
+one of the team's keys, issued by the team, for the application's AUD tag, so that a token another Access
+application of the team issued is refused, and not expired. The token is read from that header alone:
+never from `authorization`, never from the `CF_Authorization` cookie, which not every request carries, and
+never from a header Access adds unsigned, such as `cf-access-authenticated-user-email`.
+
+A production build also pins the Worker to its `origin`: a request for any other host, such as its
+`workers.dev` URL, answers `404` before any middleware, page or route runs. `vp dev` serves `localhost` and
+is not pinned, and there, as in tests, the [development token](#the-development-token) signs in as a bearer
+token, as it does without Access.
+
+### What changes behind Access
+
+- No OAuth discovery is served: `/.well-known/oauth-protected-resource` answers `404`, and a `401`
+  challenges with a plain `Bearer`.
+- The OpenAPI document describes the headers of an Access service token, `CF-Access-Client-Id` and
+  `CF-Access-Client-Secret`, as two `apiKey` schemes that every operation requires together. A client sends
+  both, and Access checks them at the edge and forwards the request with the service token's application
+  token. People sign in to Access in a browser.
+- A person's Access session lives in a cookie, which a browser also attaches to the requests other sites'
+  pages send. So a call with any method but `GET`, `HEAD` and `OPTIONS` that carries
+  `sec-fetch-site: cross-site`, or an `origin` other than its own, answers `403` with `FORBIDDEN` before its
+  token is read. A web app on the same origin, and clients that are no browser, are unaffected.
+- `authority.token` is absent: operations never receive the Access token. Call the Workers of your account
+  over [Worker RPC](worker-rpc.md).
+- The Worker serves no MCP, whose clients sign in through OAuth discovery. `maximus prepare` refuses a
+  project whose routes or `mcp/` folder declare MCP, and a Worker that mounts `mcp()` does not start.
+- A web app's content security policy admits its own origin alone: Access signs people in at the edge, so
+  the pages never call the team's domain.
+
+Without `tokens.access`, `auth.ts` verifies Access tokens itself, for scopes the configuration cannot state,
+such as ones a person's groups decide. `resolve` then receives the token of `cf-access-jwt-assertion`:
+`createTokenVerifier`, given the team's issuer, keys and AUD tag, verifies it as Maximus does, and
+`projectAccessToken`, given an `access` of the resolver's choosing, maps its claims as the table above. When
+the Worker starts, a policy under `cloudflare-access` is refused without either of them, and with scopes
+outside the service's namespace or an option only OAuth uses, such as `scheme`;
+[Configuration](../reference/configuration.md#refusals) quotes each message.
+
 ## Rate limits
 
 A [Workers rate limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
@@ -467,7 +643,8 @@ are calls over [Worker RPC](worker-rpc.md), which carry no token.
 
 ## Rules
 
-- The organization comes from the verified token. Never from input, a header or a subdomain.
+- The organization comes from the verified token, or, for an application of one tenant behind Cloudflare
+  Access, from `tokens.access.organizationId`. Never from input, a header or a subdomain.
 - A route is authorized by its scopes, its actor kinds and your handler's checks of conditional scopes.
   Never by its effect, its visibility, its description, its MCP annotations or its path.
 - Request middleware runs before admission and cannot admit a caller; see

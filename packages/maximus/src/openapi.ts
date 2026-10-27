@@ -7,6 +7,7 @@
 import { Type } from '@sinclair/typebox';
 import type { TSchema } from '@sinclair/typebox';
 
+import { usesCloudflareAccess } from './cloudflare-access.ts';
 import type { ErrorDefinition } from './errors.ts';
 import { operationPathParameters } from './http-paths.ts';
 import { wireInput } from './input-schemas.ts';
@@ -591,11 +592,15 @@ function addFailure(definition: ErrorDefinition, components: ComponentSchemas): 
  * The security requirements that admit an operation, any one of which is enough: its scopes as
  * OAuth requirements (all of them in one requirement when it needs all), or the application's own
  * bearer tokens. With both schemes, users present OAuth tokens and services the application's own.
+ * Behind Cloudflare Access, a client presents a service token's two headers together.
  */
 function operationSecurity(
   op: OperationShape,
-  tokens: Pick<TokenPolicy, 'scheme'>
+  tokens: Pick<TokenPolicy, 'scheme' | 'source'>
 ): Record<string, string[]>[] {
+  if (usesCloudflareAccess(tokens)) {
+    return [{ accessClientId: [], accessClientSecret: [] }];
+  }
   let security: Record<string, string[]>[];
   if (tokens.scheme?.type === 'bearer') {
     security = [{ bearer: [] }];
@@ -620,12 +625,30 @@ function operationSecurity(
 /**
  * How callers obtain a token: the OAuth 2.0 flows of the issuer (authorization code, and client
  * credentials unless services use the application's own tokens), the application's own bearer
- * tokens, or both.
+ * tokens, or both. Behind Cloudflare Access, the headers of an Access service token, which Access
+ * exchanges at the edge for the application token the API verifies; people sign in to Access in a
+ * browser, which no scheme describes.
  */
 function securitySchemes(
-  tokens: Pick<TokenPolicy, 'scheme' | 'issuer' | 'authorizationEndpoint' | 'tokenEndpoint'>,
+  tokens: Pick<TokenPolicy, 'scheme' | 'source' | 'issuer' | 'authorizationEndpoint' | 'tokenEndpoint'>,
   scopes: Record<string, string>
 ): Record<string, unknown> {
+  if (usesCloudflareAccess(tokens)) {
+    return {
+      accessClientId: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'CF-Access-Client-Id',
+        description: 'The Client ID of a Cloudflare Access service token, sent with its Client Secret.',
+      },
+      accessClientSecret: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'CF-Access-Client-Secret',
+        description: 'The Client Secret of the Cloudflare Access service token whose Client ID is sent.',
+      },
+    };
+  }
   const { scheme } = tokens;
   if (scheme?.type === 'bearer') {
     return { bearer: { type: 'http', scheme: 'bearer', description: scheme.description } };

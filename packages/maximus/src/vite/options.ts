@@ -34,9 +34,10 @@ export type TokenOptions = Omit<
 export interface WebAppOptions {
   /**
    * Response headers for the app's pages and files, merged over Maximus's defaults: a Content Security Policy
-   * that admits the app's own origin and its token issuer, `frame-ancestors 'none'`, `no-referrer`, same-origin
-   * opener and resource policies, and HSTS. A header set to `false` is left out. Under `vp dev` the policy and
-   * HSTS are left out, since Vite's development client runs inline scripts over plain HTTP.
+   * that admits the app's own origin and its token issuers (none behind Cloudflare Access),
+   * `frame-ancestors 'none'`, `no-referrer`, same-origin opener and resource policies, and HSTS. A header set
+   * to `false` is left out. Under `vp dev` the policy and HSTS are left out, since Vite's development client
+   * runs inline scripts over plain HTTP.
    */
   headers?: Readonly<Record<string, string | false>>;
 }
@@ -72,7 +73,10 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
    * served there; any other is the Worker's custom domain, unless `domains` or a fetch trigger route it.
    */
   origin: string;
-  /** How tokens are verified: the OAuth issuer, the audience and the development token. */
+  /**
+   * How tokens are verified: the OAuth issuer, the audience and the development token, or Cloudflare Access.
+   * `auth0()` and `cloudflareAccess()` state them for those providers.
+   */
   tokens?: TokenOptions;
   /** The Workers allowed to call native RPC methods, by the `caller` their Service Binding names; none by default. */
   rpc?: { callers: readonly string[] };
@@ -232,14 +236,20 @@ function workerEnv(root: string, options: MaximusOptions, phase: Phase): Record<
   };
 }
 
-/** The origins the web app's pages may call besides their own: the token issuer's and its token endpoint's. */
-function tokenOrigins(tokens: TokenOptions | undefined): string[] {
-  if (!tokens?.issuer) {
+/**
+ * The origins the web app's pages may call besides their own: each token issuer's and the token endpoint's,
+ * resolved against the canonical issuer. Behind Cloudflare Access, none: Access signs people in at the edge,
+ * and the pages call their own origin alone.
+ */
+function tokenOrigins(tokens: TokenOptions = {}): string[] {
+  const { issuer = [], tokenEndpoint = 'oauth/token' } = tokens;
+  const issuers: readonly string[] = typeof issuer === 'string' ? [issuer] : issuer;
+  const [canonical] = issuers;
+  if (!canonical || tokens.source === 'cloudflare-access') {
     return [];
   }
-  const issuer = new URL(tokens.issuer);
-  const endpoint = new URL(tokens.tokenEndpoint ?? 'oauth/token', issuer);
-  return [...new Set([issuer.origin, endpoint.origin])];
+  const endpoint = new URL(tokenEndpoint, canonical);
+  return [...new Set([...issuers.map((listed) => new URL(listed).origin), endpoint.origin])];
 }
 
 /**
@@ -286,7 +296,8 @@ function webAppHeaders(options: MaximusOptions, phase: Phase): Record<string, st
 
 /**
  * What the generated modules carry in a phase: the application this file configures, with the development
- * token's policy under `vp dev` alone, and a web app's binding and headers.
+ * token's policy under `vp dev` alone, the Worker's HTTP paths, pinned to the origin in production behind
+ * Cloudflare Access, and a web app's binding and headers.
  */
 export function projectOptions(
   root: string,
@@ -297,6 +308,9 @@ export function projectOptions(
   const { name, version } = identity(root, options);
   const { audience = application.origin, development: _declared, ...tokens } = application.tokens ?? {};
   const development = developmentToken(options);
+  // Behind Cloudflare Access, a deployed Worker answers its origin alone: a request that reaches it around
+  // Access, at its workers.dev or preview URL, carries no Access token and answers 404 before anything runs.
+  const pinned = phase === 'production' && tokens.source === 'cloudflare-access';
   return {
     application: {
       name,
@@ -316,6 +330,7 @@ export function projectOptions(
       http: {
         basePath: application.http?.basePath ?? '/api',
         healthPath: application.http?.healthPath ?? '/health',
+        ...(pinned ? { origins: [new URL(application.origin).origin] } : {}),
       },
       ...(servesWebApp(root) ? { assets: { binding: ASSETS, headers: webAppHeaders(options, phase) } } : {}),
     },

@@ -89,11 +89,14 @@ export type {
   TokenPolicy,
   TokenResolutionContext,
   TokenScheme,
+  TokenSource,
   TokenClient,
   TokenClaims,
+  TokenAccess,
   TokenAlgorithm,
   TokenDevelopment,
 } from './tokens.ts';
+export { projectAccessToken } from './cloudflare-access.ts';
 export { matchesScopes } from './scopes.ts';
 export type { ScopeMatch } from './scopes.ts';
 export { protectedResourceMetadata } from './oauth.ts';

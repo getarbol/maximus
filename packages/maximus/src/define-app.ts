@@ -105,7 +105,7 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
     throw new TypeError('Application origin must use HTTPS.');
   }
   checkTelemetry(manifest.telemetry);
-  checkTokenAuthority(manifest.tokens);
+  checkTokenAuthority(manifest.tokens, manifest.namespace);
   tokenAudiences(manifest.tokens);
   if (
     Object.keys(manifest.tokens.resources ?? {}).length > 0 &&

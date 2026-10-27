@@ -361,6 +361,7 @@ through one.
 | `Start the skill with frontmatter, ---, description: …, ---: <path>`                                                                                          | A skill without frontmatter.                                                                                                        |
 | `State the skill's one-line description in its frontmatter: <path>`                                                                                           | A skill whose frontmatter has no description.                                                                                       |
 | `A skill's frontmatter states its one-line description, and its name only as its file does: <path>`                                                           | Any other frontmatter key, or a `name` its file does not have.                                                                      |
+| `A project behind Cloudflare Access serves no MCP, whose clients sign in through OAuth: remove mcp from its routes, and the mcp/ folder.`                     | A route or a tool that MCP serves, or the Markdown of `mcp/`, in a project whose `tokens.source` is `cloudflare-access`.            |
 
 A generated module imports your modules, so importing it back at runtime would form a cycle. An
 `import type` or `export type` is always allowed; `import { type app }` is not, since under

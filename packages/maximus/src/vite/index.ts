@@ -17,6 +17,8 @@ import type { MaximusOptions, Phase } from './options.ts';
 import { maximusProject } from './project.ts';
 
 export type { MaximusOptions, Phase, TokenOptions, WebAppOptions } from './options.ts';
+export { auth0, cloudflareAccess } from './tokens.ts';
+export type { Auth0Algorithm, Auth0Options, CloudflareAccessOptions } from './tokens.ts';
 
 /**
  * The Maximus lint and format presets, for each of `lint` and `fmt` the configuration does not set itself.
