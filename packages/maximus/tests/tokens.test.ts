@@ -1,5 +1,5 @@
 /**
- * OAuth access token verification against a JWKS: signature, issuer, audiences and expiry.
+ * OAuth access token verification against a JWKS: signature, issuer, audiences and a required expiry.
  */
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { it, expect, vi } from 'vite-plus/test';
@@ -7,33 +7,46 @@ import { it, expect, vi } from 'vite-plus/test';
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../src/index.ts';
 import { createTokenAuthorization } from '../src/tokens.ts';
 
-it('verifies signatures, issuer, audience and expiry through remote public keys', async () => {
+it('verifies signatures, issuer, audience and a required expiry through remote public keys', async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
   const jwk = await exportJWK(publicKey);
   const fetch = vi
     .spyOn(globalThis, 'fetch')
     .mockResolvedValue(Response.json({ keys: [{ ...jwk, kid: 'test', alg: 'RS256', use: 'sig' }] }));
-  async function token(audience = 'expected', expiry = '1h') {
-    return new SignJWT({
+  /** A token the trusted key signs, for the audience, issuer and expiry given; a null expiry sets none. */
+  async function token(claims: { audience?: string; issuer?: string; expiry?: string | null } = {}) {
+    const unsigned = new SignJWT({
       sub: 'client@clients',
       client_id: 'client',
       org_id: 'org_1234567890abcdef',
       scope: 'read',
     })
       .setProtectedHeader({ alg: 'RS256', kid: 'test' })
-      .setIssuer('https://issuer.test/')
-      .setAudience(audience)
-      .setIssuedAt()
-      .setExpirationTime(expiry)
-      .sign(privateKey);
+      .setIssuer(claims.issuer ?? 'https://issuer.test/')
+      .setAudience(claims.audience ?? 'expected')
+      .setIssuedAt();
+    if (claims.expiry !== null) {
+      unsigned.setExpirationTime(claims.expiry ?? '1h');
+    }
+    return unsigned.sign(privateKey);
   }
   try {
     const authorize = createTokenAuthorization({ issuer: 'https://issuer.test/', audience: 'expected' });
     const request = (value: string) =>
       new Request('https://app.test', { headers: { authorization: `Bearer ${value}` } });
     expect((await authorize(request(await token()), 'read')).ok).toBe(true);
-    expect((await authorize(request(await token('wrong')), 'read')).ok).toBe(false);
-    expect((await authorize(request(await token('expected', '-1h')), 'read')).ok).toBe(false);
+    // Another audience or issuer, an expired token and one that never expires.
+    for (const claims of [
+      { audience: 'wrong' },
+      { issuer: 'https://other-issuer.test/' },
+      { expiry: '-1h' },
+      { expiry: null },
+    ]) {
+      expect(await authorize(request(await token(claims)), 'read'), JSON.stringify(claims)).toMatchObject({
+        ok: false,
+        error: { code: 'UNAUTHORIZED' },
+      });
+    }
     expect((await authorize(request(`${(await token()).slice(0, -20)}invalidsignature`), 'read')).ok).toBe(
       false
     );

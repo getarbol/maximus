@@ -197,7 +197,7 @@ export interface HandlerOptions {
   failures?: readonly DomainCode[];
   /** The principal kinds it admits. */
   actorKinds?: Exposure['actorKinds'];
-  /** `internal` keeps it out of the public OpenAPI document and the typed client. */
+  /** `internal` keeps it out of the public OpenAPI document and the discovery metadata. */
   visibility?: Exposure['visibility'];
   /** The HTTP options besides the path and method: a byte body, header-sourced fields, an attachment. */
   http?: HandlerHttp;
@@ -396,7 +396,8 @@ export interface ContextDeclaration<D, E = RegisteredEnv> {
 /**
  * Declares, as `context.ts`'s default export, what every handler receives besides the invocation: it runs
  * once per call after admission and returns the values handlers destructure, such as a store scoped to
- * `principal.organizationId`, or `fail(code)` to answer the call instead.
+ * `principal.organizationId`, or `fail(code)` to answer the call instead. A route that lists its `failures`
+ * answers a domain code of the context only when it lists that code too.
  */
 export function defineContext<D extends object>(
   prepare: (args: ContextArguments) => D | Failed | Promise<D | Failed>

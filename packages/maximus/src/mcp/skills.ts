@@ -63,7 +63,7 @@ async function skillEntry(skill: McpSkill) {
 
 /**
  * Serve skills through the Skills extension: `skills/list`, `skills/get`, and `resources/read` of each
- * `SKILL.md`, each request answered through `answer`, which counts it against the caller's rate limit.
+ * `SKILL.md`, each request answered through `answer`, which reports an unexpected failure without its text.
  * Clients without the extension still find the files among the server's resources.
  */
 export function registerSkills(

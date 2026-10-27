@@ -35,7 +35,7 @@ interface Env {
 }
 
 /** A records service with one public route, under the token policy and MCP configuration given. */
-function application(tokens: Partial<TokenPolicy<Env>> = {}, mcp?: McpConfiguration) {
+function service(tokens: Partial<TokenPolicy<Env>> = {}, mcp?: McpConfiguration) {
   return maximus<Env>({
     name: 'records',
     namespace: 'records',
@@ -47,21 +47,24 @@ function application(tokens: Partial<TokenPolicy<Env>> = {}, mcp?: McpConfigurat
     rpc: { callers: [] },
     telemetry: { enabled: false },
     ...(mcp ? { mcp } : {}),
-  })
-    .operation(
-      'listRecords',
-      {
-        scope: 'records:records:read',
-        title: 'List records',
-        description: 'List the organization records.',
-        effect: 'read',
-        input: empty,
-        output: empty,
-        http: { method: 'GET', path: '/v1/records' },
-      },
-      async () => ok({})
-    )
-    .build();
+  }).operation(
+    'listRecords',
+    {
+      scope: 'records:records:read',
+      title: 'List records',
+      description: 'List the organization records.',
+      effect: 'read',
+      input: empty,
+      output: empty,
+      http: { method: 'GET', path: '/v1/records' },
+    },
+    async () => ok({})
+  );
+}
+
+/** The records service, built. */
+function application(tokens: Partial<TokenPolicy<Env>> = {}, mcp?: McpConfiguration) {
+  return service(tokens, mcp).build();
 }
 
 /** A protocol endpoint beside the operations, answering every admitted request with its name. */
@@ -174,6 +177,54 @@ it('publishes the inferred protected-resource metadata, and none under its own b
   }
 });
 
+it('keeps an internal operation routed and scope-checked, and its scope out of the published metadata', async () => {
+  const adjust = vi.fn(async () => ok({}));
+  const app = service()
+    .operation(
+      'adjustRecord',
+      {
+        scope: 'records:staff:operate',
+        title: 'Adjust a record',
+        description: 'Correct a record for the organization.',
+        effect: 'write',
+        input: empty,
+        output: empty,
+        http: { method: 'POST', path: '/v1/records/adjust' },
+        visibility: 'internal',
+      },
+      adjust
+    )
+    .build();
+  /** A call to `adjustRecord` by a machine client whose token grants the scope given. */
+  const adjustWith = (scope: string) =>
+    createHttpHandler(app, {
+      verify: async () => ({
+        sub: 'client@clients',
+        client_id: 'client',
+        org_id: 'org_1234567890abcdef',
+        scope,
+      }),
+    })(
+      new Request(`${ORIGIN}/v1/records/adjust`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      {}
+    );
+  expect((await adjustWith('records:records:read')).status).toBe(403);
+  expect(adjust).not.toHaveBeenCalled();
+  // Hiding is not authorization: the scope is what admits the caller.
+  expect((await adjustWith('records:staff:operate')).status).toBe(200);
+  const metadata = await createHttpHandler(app)(
+    new Request(`${ORIGIN}/.well-known/oauth-protected-resource`),
+    {}
+  );
+  expect(((await metadata.json()) as { scopes_supported: unknown }).scopes_supported).toEqual([
+    'records:records:read',
+  ]);
+});
+
 it('serves each configured resource from its env, deduplicated, and only to GET', async () => {
   const path = '/.well-known/oauth-protected-resource/api';
   const handle = createHttpHandler(
@@ -231,6 +282,17 @@ it('refuses to publish non-HTTPS or credentialed identifiers, an issuer with a q
 
 it('challenges a missing token toward the discovery the application publishes', async () => {
   expect(await challenge(createHttpHandler(application()))).toBe(
+    `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`
+  );
+  // A request that names another host is still pointed at the application's own origin.
+  const elsewhere = await createHttpHandler(application())(
+    new Request('https://records.example.net/v1/records', {
+      headers: { host: 'records.example.net', 'x-forwarded-host': 'records.example.net' },
+    }),
+    {}
+  );
+  expect(elsewhere.status).toBe(401);
+  expect(elsewhere.headers.get('www-authenticate')).toBe(
     `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`
   );
   expect(await challenge(createHttpHandler(application(), { basePath: '/api' }), '/api/v1/records')).toBe(

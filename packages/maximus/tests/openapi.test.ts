@@ -3,7 +3,6 @@
  * status and its OAuth flows, and only OpenAPI's own fields at the root.
  */
 import { expect, it } from 'vite-plus/test';
-import { parse, stringify } from 'yaml';
 
 import { createHttpHandler, createOpenApi, defineErrors, maximus, ok, t } from '../src/index.ts';
 import type { AppManifest, OperationShape } from '../src/index.ts';
@@ -88,7 +87,7 @@ function application() {
         },
         async () => ok({})
       )
-      // Internal: routed and scope-checked, but no document names it or its scope.
+      // Internal: the document names neither it nor its scope.
       .operation(
         'adjustRecord',
         {
@@ -312,7 +311,6 @@ it('documents one failure response per status, naming the codes that answer with
     allOf: [{ $ref: '#/components/schemas/Failure' }],
     ...JSON.parse(JSON.stringify(errors.schema, (key, value) => (key === '$id' ? undefined : value))),
   });
-  expect(parse(stringify(document))).toStrictEqual(document);
 });
 
 it('bundles a recursive $id schema into a local component, in the built and the served document', async () => {

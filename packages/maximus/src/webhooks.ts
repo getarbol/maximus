@@ -13,7 +13,8 @@
  * timing leak. Timestamps are checked in both directions (a signed request
  * from the future is as suspicious as a replayed one). Call these on the raw
  * body, before parsing it; a failure carries only a closed reason, never the
- * body, a header value or the secret.
+ * body, a header value or the secret. A missing or empty secret throws a
+ * TypeError: it is the deployment's mistake, not the sender's.
  *
  * Sources: https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md,
  * https://docs.stripe.com/webhooks#verify-manually.
@@ -103,6 +104,17 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> | null {
   }
 }
 
+/**
+ * The secret a verifier was given. A missing or empty one is a configuration error, such as a secret binding
+ * the deployment lacks, never a refusal: anyone could sign with it, so no verifier runs without one.
+ */
+function requireSecret<S extends string | Uint8Array>(secret: S | null | undefined): S {
+  if ((typeof secret !== 'string' && !(secret instanceof Uint8Array)) || secret.length === 0) {
+    throw new TypeError('A webhook secret is required; check the binding that holds it.');
+  }
+  return secret;
+}
+
 /** An HMAC-SHA256 key that can only verify. */
 async function hmacKey(secret: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   return await crypto.subtle.importKey('raw', secret, { hash: 'SHA-256', name: 'HMAC' }, false, ['verify']);
@@ -130,6 +142,7 @@ export async function verifyHmacSignature(options: {
   secret: string | Uint8Array;
   signature: string | null | undefined;
 }): Promise<Result<null, WebhookSignatureFailure>> {
+  const secret = requireSecret(options.secret);
   if (!options.signature) {
     return failure('missing');
   }
@@ -143,7 +156,7 @@ export async function verifyHmacSignature(options: {
   }
   const valid = await crypto.subtle.verify(
     'HMAC',
-    await hmacKey(bytes(options.secret)),
+    await hmacKey(bytes(secret)),
     signature,
     bytes(options.body)
   );
@@ -164,6 +177,7 @@ export async function verifyTimestampedSignature(options: {
   secret: string | Uint8Array;
   toleranceSeconds?: number;
 }): Promise<Result<{ timestamp: number }, WebhookSignatureFailure>> {
+  const secret = requireSecret(options.secret);
   if (!options.header) {
     return failure('missing');
   }
@@ -192,7 +206,7 @@ export async function verifyTimestampedSignature(options: {
   if (!withinTolerance(timestamp, options.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS, now)) {
     return failure('expired');
   }
-  const key = await hmacKey(bytes(options.secret));
+  const key = await hmacKey(bytes(secret));
   const message = concat(encoder.encode(`${timestamp}.`), bytes(options.body));
   for (const signature of signatures) {
     if (await crypto.subtle.verify('HMAC', key, signature, message)) {
@@ -215,6 +229,9 @@ export async function verifyStandardWebhook(options: {
   secret: string;
   toleranceSeconds?: number;
 }): Promise<Result<{ id: string; timestamp: number }, WebhookSignatureFailure>> {
+  const given = requireSecret(options.secret);
+  // The key is what follows the optional prefix: `whsec_` alone is as empty as no secret.
+  const encoded = requireSecret(given.startsWith('whsec_') ? given.slice(6) : given);
   /** A Standard Webhooks header, or its `svix-` spelling. */
   const header = (name: string) =>
     options.headers.get(`webhook-${name}`) ?? options.headers.get(`svix-${name}`);
@@ -232,7 +249,7 @@ export async function verifyStandardWebhook(options: {
   if (!withinTolerance(timestamp, options.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS, now)) {
     return failure('expired');
   }
-  const secret = fromBase64(options.secret.startsWith('whsec_') ? options.secret.slice(6) : options.secret);
+  const secret = fromBase64(encoded);
   if (!secret) {
     return failure('malformed');
   }

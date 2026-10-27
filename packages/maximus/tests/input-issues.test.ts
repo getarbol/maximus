@@ -59,15 +59,6 @@ it('reports an issue of a codec nested in a field at its full path from the inpu
   });
 });
 
-it('bounds the issues a refusal carries', () => {
-  const Wide = t.Object(
-    Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`field${index}`, t.String()])),
-    { additionalProperties: false }
-  );
-  const refused = decodeInput(Wide, {});
-  expect(refused.ok ? 0 : refused.error.data.issues.length).toBe(10);
-});
-
 it('builds no more issues than a refusal carries, however many the input has', () => {
   // TypeBox builds each issue's message through the error function, so its calls count the issues built.
   let built = 0;

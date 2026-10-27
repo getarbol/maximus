@@ -1,7 +1,7 @@
 /**
  * What `.build()` refuses, rule by rule: the namespace, origin and limits of the application, each
- * operation's name, scopes, actors, schemas, byte bodies, attachments, headers, limits and routes, MCP tool
- * names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with the rule's message,
+ * operation's name, scopes, actors, schemas, byte bodies, attachments, headers, limits and routes, schema
+ * references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with the rule's message,
  * and an application that breaks several rules always meets the same one first.
  */
 import { expect, it } from 'vite-plus/test';
@@ -77,8 +77,9 @@ function build(
       .build();
 }
 
-it('refuses a namespace that is not a lowercase kebab-case word of 2 to 64 characters', () => {
-  for (const namespace of ['Records', 'r', '1records', 'records_x', 'records:x', `r${'x'.repeat(64)}`]) {
+it('refuses a namespace or an application name that is not a lowercase kebab-case word of 2 to 64 characters', () => {
+  const malformed = ['Records', 'r', '1records', 'records_x', 'records:x', `r${'x'.repeat(64)}`];
+  for (const namespace of malformed) {
     expect(build(readRecord, 'readRecord', { namespace }), namespace).toThrow(
       new TypeError('A scope namespace is required.')
     );
@@ -87,6 +88,13 @@ it('refuses a namespace that is not a lowercase kebab-case word of 2 to 64 chara
     // A 64-character namespace is admitted: what breaks is the operation's scope of another namespace.
     'every scope is'
   );
+  // The name identifies the service in its observations and analytics events, which carry no other shape.
+  for (const name of malformed) {
+    expect(build(readRecord, 'readRecord', { name }), name).toThrow(
+      new TypeError('An application name is a lowercase kebab-case word of 2 to 64 characters.')
+    );
+  }
+  expect(build(readRecord, 'readRecord', { name: `r${'x'.repeat(63)}` })).not.toThrow();
 });
 
 it('refuses an application body limit outside 1 byte to 16 MiB, and an origin that is not HTTPS', () => {
@@ -111,17 +119,39 @@ it('refuses a scope match other than any or all, and actor kinds that name no el
     );
   }
   expect(build({ ...readRecord, scopeMatch: 'all', actorKinds: ['service', 'user'] })).not.toThrow();
+  // Under dual authentication, the actors decide which scheme admits a caller, so every operation names them.
+  const dual = {
+    tokens: { ...configuration.tokens, scheme: { type: 'oauth+bearer', description: 'A key.' } },
+  };
+  const { actorKinds: _, ...anyone } = readRecord;
+  expect(build(anyone)).not.toThrow();
+  expect(build(anyone, 'readRecord', dual as never)).toThrow(
+    new TypeError('Operation "readRecord": dual authentication requires explicit actor eligibility.')
+  );
+  expect(build(readRecord, 'readRecord', dual as never)).not.toThrow();
+});
+
+it('refuses a schema reference that names no single definition, before the OpenAPI document is requested', () => {
+  const Money = t.Object({ amount: t.Integer() }, { $id: 'Money', ...strict });
+  const Cents = t.Object({ cents: t.Integer() }, { $id: 'Money', ...strict });
+  const priced = (output: object) => ({ ...readRecord, input: t.Object({ price: Money }, strict), output });
+  expect(build(priced(t.Object({ total: t.Ref('Money') }, strict)))).not.toThrow();
+  expect(build(priced(t.Object({ total: t.Ref('Money'), refund: Cents }, strict)))).toThrow(
+    new TypeError('Schema reference "Money" does not name exactly one definition.')
+  );
 });
 
 it('refuses an operation name that is not camelCase or that a Worker entrypoint or a promise already uses', () => {
   const reserved = ['fetch', 'connect', 'constructor', 'then', 'scheduled', 'queue', 'alarm', 'prototype'];
-  for (const name of ['ReadRecord', 'read-record', 'read_record', '1read', ...reserved]) {
+  const long = `read${'X'.repeat(97)}`;
+  for (const name of ['ReadRecord', 'read-record', 'read_record', '1read', long, ...reserved]) {
     expect(build(readRecord, name), name).toThrow(
       new TypeError(
-        `Operation "${name}": use a camelCase name that is not a reserved Worker method. Use safe operation names, namespaced scopes and strict object schemas.`
+        `Operation "${name}": use a camelCase name of up to 100 characters that is not a reserved Worker method. Use safe operation names, namespaced scopes and strict object schemas.`
       )
     );
   }
+  expect(build(readRecord, `read${'X'.repeat(96)}`)).not.toThrow();
 });
 
 it("refuses a scope outside the application's namespace, malformed or listed twice", () => {

@@ -163,6 +163,13 @@ export function bundleSchemas(
   return { values: rewritten.map((value) => replaceReferences(value, resolve)), components };
 }
 
+/** Whether a value refers to a named schema (`$ref` to a plain `$id`) anywhere within it. */
+export function hasSchemaReferences(value: unknown): boolean {
+  const references = new Set<string>();
+  collectReferences(value, references);
+  return [...references].some((reference) => SCHEMA_ID.test(reference));
+}
+
 /** Adds every `$ref` found in a value to `references`. */
 function collectReferences(value: unknown, references: Set<string>): void {
   if (Array.isArray(value)) {

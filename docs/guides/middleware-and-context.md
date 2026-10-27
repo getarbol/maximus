@@ -48,8 +48,9 @@ export const reports = connected.operation('listReports', definition, async ({ a
 - `.derive()` must come before any `.operation()` on the same chain; calling it after one throws.
 - It runs once per call, after authentication, scope checks and input validation, and before
   middleware. Its fields merge into the context, and a later `.derive()` sees earlier ones.
-- Returning a failure ends the call with that failure, validated against the catalog. The handler
-  does not run.
+- Returning a failure ends the call with that failure, validated against the catalog and, when the
+  operation declares its `failures`, against them: a domain failure it does not declare becomes
+  `INTERNAL_ERROR`, as one its handler returned would. The handler does not run.
 
 Keep preparation in one module per concern. Do not repeat token parsing, session lookup or
 `withConnection(context, callback)` wrappers in every handler.

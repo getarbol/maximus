@@ -1,13 +1,15 @@
 /**
- * Token admission at its edges: a custom resolver's refusals answered as the standard ones and never with
- * their text, malformed or self-contradicting principals, a resolver that throws, scopes a resolved
- * principal lacks, the development token without an env to read or beyond the declared scopes, and a
- * verifier that refuses an issuer or JWKS outside HTTPS.
+ * Token admission at its edges: a bearer that is no compact JWT, comes with an `x-api-key` header or exceeds
+ * 16 KiB refused before verification, a custom resolver's refusals answered as the standard ones and never
+ * with their text, malformed or self-contradicting principals, a machine whose actor is not its client
+ * admitted only under dual authentication, a resolver that throws, scopes a resolved principal lacks, the
+ * development token without an env to read or beyond the declared scopes, and a verifier that refuses an
+ * issuer or JWKS outside HTTPS.
  */
 import { expect, it, vi } from 'vite-plus/test';
 
 import { createTokenAuthorization, createTokenVerifier, err, ok, standardErrors } from '../../src/index.ts';
-import type { TokenPolicy, TokenPrincipal, TokenResolutionContext } from '../../src/index.ts';
+import type { TokenPolicy, TokenPrincipal, TokenResolutionContext, TokenScheme } from '../../src/index.ts';
 
 const READ = 'records:records:read';
 const WRITE = 'records:records:write';
@@ -27,6 +29,34 @@ const own = (resolve: NonNullable<TokenPolicy['resolve']>): TokenPolicy => ({
   audience: 'https://records.example.test',
   scheme: { type: 'bearer', description: 'A session token.' },
   resolve,
+});
+
+it('refuses a bearer that is no compact JWT, comes with an x-api-key header or exceeds 16 KiB, never verifying it', async () => {
+  const verify = vi.fn(async () => ({
+    sub: 'worker@clients',
+    azp: 'worker',
+    org_id: principal.organizationId,
+    scope: READ,
+  }));
+  const authorize = createTokenAuthorization(
+    { issuer: 'https://issuer.example.test/', audience: 'https://records.example.test' },
+    verify
+  );
+  // A compact JWT of 16 KiB, the longest bearer admitted.
+  const longest = `${'h'.repeat(16_380)}.p.s`;
+  const withKey = new Request('https://records.example.test/v1/records', {
+    headers: { authorization: 'Bearer header.payload.signature', 'x-api-key': 'key-0123456789' },
+  });
+  for (const [label, refused] of [
+    ['no compact JWT', request('api-key-deadbeef')],
+    ['with an x-api-key header', withKey],
+    ['longer than 16 KiB', request(`h${longest}`)],
+  ] as const) {
+    expect(await authorize(refused, READ), label).toEqual(unauthorized);
+  }
+  expect(verify).not.toHaveBeenCalled();
+  expect((await authorize(request(longest), READ)).ok).toBe(true);
+  expect(verify).toHaveBeenCalledOnce();
 });
 
 it("answers a resolver's refusal as FORBIDDEN or UNAUTHORIZED, never with the resolver's own failure", async () => {
@@ -50,18 +80,28 @@ it('refuses a resolved principal that is malformed or whose client contradicts i
     { ...principal, scopes: READ },
     { ...principal, isAdmin: true },
     ok({ ...principal, actorId: '' }),
-    // A person with a machine's client, and a machine whose actor names another client.
+    // A person with a machine's client.
     { ...principal, client: { id: 'worker', class: 'machine' } },
-    {
-      ...principal,
-      actorKind: 'service',
-      actorId: 'another-worker',
-      client: { id: 'worker', class: 'machine' },
-    },
   ];
   for (const value of resolved) {
     const authorize = createTokenAuthorization(own(async () => value as TokenPrincipal));
     expect(await authorize(request(), READ), JSON.stringify(value)).toEqual(unauthorized);
+  }
+});
+
+it('admits a machine whose actor is not its client only under dual authentication', async () => {
+  // Under oauth+bearer, machines present workload keys, which the resolver names as actors of their own.
+  const workload: TokenPrincipal = {
+    ...principal,
+    actorId: 'workload-key-1',
+    actorKind: 'service',
+    client: { id: 'worker', class: 'machine' },
+  };
+  const under = (scheme: TokenScheme) => createTokenAuthorization({ ...own(async () => workload), scheme });
+  const description = 'A workload key issued in the console.';
+  expect(await under({ type: 'oauth+bearer', description })(request(), READ)).toEqual(ok(workload));
+  for (const scheme of [{ type: 'oauth' }, { type: 'bearer', description }] as const) {
+    expect(await under(scheme)(request(), READ), scheme.type).toEqual(unauthorized);
   }
 });
 

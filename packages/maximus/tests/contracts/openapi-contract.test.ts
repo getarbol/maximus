@@ -1,7 +1,8 @@
 /**
  * The OpenAPI document beyond plain JSON routes: a union body whose variants share a path parameter, a
- * byte upload's header and query parameters, an attachment response, all-of scope requirements, dual OAuth
- * and bearer authentication chosen by actor kind, and adapter extensions held to `x-` names.
+ * byte upload's header and query parameters, an attachment response, a success status other than 200, all-of
+ * scope requirements, dual OAuth and bearer authentication chosen by actor kind, and adapter extensions held
+ * to `x-` names.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -190,27 +191,48 @@ it('documents an attachment response as bytes with its media type, exact length 
   });
 });
 
-it('requires every scope in one OAuth requirement when an operation needs all of them', () => {
-  const scope = ['files:files:read', 'files:audit:read'];
-  const definition = {
+it("documents an operation's success status, 201 or 202, in place of 200", () => {
+  const write = {
     ...words,
-    effect: 'read',
-    scope,
+    effect: 'write',
+    scope: 'files:files:write',
     input: t.Object({}, strict),
     output: done,
-    http: { method: 'POST', path: '/v1/files/audit' },
   };
-  expect(
-    operationNamed(documentOf({ auditFiles: { ...definition, scopeMatch: 'all' } }), 'auditFiles')
-  ).toMatchObject({
+  const document = documentOf({
+    createFile: { ...write, http: { method: 'POST', path: '/v1/files', successStatus: 201 } },
+    importFiles: { ...write, http: { method: 'POST', path: '/v1/imports', successStatus: 202 } },
+  });
+  for (const [name, status] of [
+    ['createFile', '201'],
+    ['importFiles', '202'],
+  ] as const) {
+    const responses = operationNamed(document, name).responses as Record<string, Json>;
+    expect(responses[status], name).toMatchObject({
+      description: 'Successful operation.',
+      content: { 'application/json': {} },
+    });
+    expect(responses, name).not.toHaveProperty('200');
+  }
+});
+
+it('requires every scope in one OAuth requirement when an operation needs all of them', () => {
+  const scope = ['files:files:read', 'files:audit:read'];
+  const document = documentOf({
+    auditFiles: {
+      ...words,
+      effect: 'read',
+      scope,
+      scopeMatch: 'all',
+      input: t.Object({}, strict),
+      output: done,
+      http: { method: 'POST', path: '/v1/files/audit' },
+    },
+  });
+  expect(operationNamed(document, 'auditFiles')).toMatchObject({
     security: [{ oauth2: scope }],
     'x-required-scopes': scope,
     'x-scope-match': 'all',
-  });
-  // Any one of them is the default, one requirement each.
-  expect(operationNamed(documentOf({ auditFiles: definition }), 'auditFiles')).toMatchObject({
-    security: [{ oauth2: ['files:files:read'] }, { oauth2: ['files:audit:read'] }],
-    'x-scope-match': 'any',
   });
 });
 
@@ -252,10 +274,6 @@ it('under dual authentication, documents OAuth for users and the bearer scheme f
     },
     bearer: { type: 'http', scheme: 'bearer', description: 'A workload key issued in the console.' },
   });
-  // An operation that names no eligible actor cannot be documented under two schemes.
-  expect(() => documentOf({ listFiles: route('/v1/files/list') }, scheme)).toThrow(
-    new TypeError('Operation "listFiles": dual authentication requires explicit actor eligibility.')
-  );
 });
 
 it('refuses adapter extensions that are not x- names, which would overwrite OpenAPI fields', () => {

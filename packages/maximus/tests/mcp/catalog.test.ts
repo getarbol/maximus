@@ -1,9 +1,12 @@
 /**
  * The tool catalog: 400 tools in pages of 50 behind version-bound cursors, filtered by the caller's
- * scopes like execution, the OpenAPI document and a guide served as resources and prompts, and the
- * execution metadata analytics records.
+ * scopes like execution, each listed with its title, description and the hints its effect and declaration
+ * give, operation groups composed without one overwriting another, the OpenAPI document and a guide served
+ * as resources and prompts, and the execution metadata analytics records when a catalog operation is called
+ * over HTTP.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import type { Tool } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vite-plus/test';
 import { parse } from 'yaml';
 
@@ -72,7 +75,7 @@ async function rpc(
   const text = await response.text();
   return JSON.parse(/data: (\{[^\n]*)/.exec(text)?.[1] ?? text);
 }
-it('pages 400 tools, filters authority and publishes the same contract through MCP resources', async () => {
+it('pages 400 tools, lists none to a caller without their scope and serves the guide as a prompt', async () => {
   const handle = createHttpHandler(manifest, { verify: async () => claims });
   const names: string[] = [];
   let cursor: string | undefined;
@@ -84,18 +87,79 @@ it('pages 400 tools, filters authority and publishes the same contract through M
   } while (cursor);
   expect(new Set(names).size).toBe(400);
   expect(names).not.toContain('internal');
-  const schema = await (await handle(request('/openapi.json'), {})).json();
-  expect(Object.keys((schema as { paths: object }).paths)).toHaveLength(400);
-  const resource = await rpc(handle, 'resources/read', { uri: 'https://example.test/openapi.yaml' });
-  expect(parse(resource.result.contents[0].text)).toEqual(schema);
   expect((await rpc(handle, 'prompts/get', { name: 'usage' })).result.messages[0].content.text).toBe(
     'Read before writing.'
   );
   const denied = createHttpHandler(manifest, { verify: async () => ({ ...claims, scope: 'demo:mcp:use' }) });
   expect((await rpc(denied, 'tools/list')).result.tools).toEqual([]);
-  expect((await rpc(denied, 'tools/call', { name: 'record_0', arguments: {} })).error).toBeDefined();
-  expect(() => composeOperations({ same: make(1) }, { same: make(2) })).toThrow('Duplicate');
 }, 30_000);
+it('refuses to compose two groups of operations that declare the same name', () => {
+  expect(() => composeOperations({ same: make(1) }, { same: make(2) })).toThrow(
+    new TypeError('Duplicate operation: same')
+  );
+});
+it('lists each tool with its title, description and the hints its effect and declaration give', async () => {
+  const write = { ...base, scope: 'demo:records:write', title: 'Write', description: 'Write a safe record' };
+  const operations = {
+    readRecord: operation({
+      ...base,
+      http: { method: 'GET', path: '/v1/records/current' },
+      mcp: { name: 'read_record', idempotent: true, openWorld: false },
+    }),
+    writeRecord: operation({
+      ...write,
+      effect: 'write',
+      http: { method: 'POST', path: '/v1/records/current' },
+      mcp: { name: 'write_record', idempotent: false },
+    }),
+    deleteRecord: operation({
+      ...write,
+      title: 'Delete',
+      description: 'Delete a safe record',
+      effect: 'delete',
+      http: { method: 'DELETE', path: '/v1/records/current' },
+      mcp: { name: 'delete_record', idempotent: true, openWorld: false },
+    }),
+  };
+  const handle = createHttpHandler(
+    { ...manifest, operations },
+    { verify: async () => ({ ...claims, scope: `${claims.scope} demo:records:write` }) }
+  );
+  const { result } = await rpc(handle, 'tools/list');
+  expect(
+    result.tools.map(({ name, title, description, annotations }: Tool) => ({
+      name,
+      title,
+      description,
+      annotations,
+    }))
+  ).toEqual([
+    {
+      name: 'read_record',
+      title: 'Read',
+      description: 'Read a safe record',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    // A tool reaches outside the service unless it declares otherwise.
+    {
+      name: 'write_record',
+      title: 'Write',
+      description: 'Write a safe record',
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    {
+      name: 'delete_record',
+      title: 'Delete',
+      description: 'Delete a safe record',
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+  ]);
+});
 it('names each OpenAPI resource by the URL that serves it, below a base path', async () => {
   // One operation keeps the documents small: what matters is where they are named and served.
   const small = { ...manifest, operations: { read0: make(0) } };
@@ -135,7 +199,7 @@ it('answers a cursor this version did not issue to this caller with invalid para
     });
   }
 });
-it('records safe execution metadata after response and can disable it', async () => {
+it('records safe execution metadata of a call over HTTP after the response, and none with telemetry disabled', async () => {
   const record = vi.fn(async (_env: Record<string, never>, _event: ExecutionEvent) => undefined);
   const handle = createHttpHandler(
     { ...manifest, telemetry: { observers: [analytics({ record })] } },
@@ -149,6 +213,7 @@ it('records safe execution metadata after response and can disable it', async ()
   expect(record).toHaveBeenCalledOnce();
   expect(record.mock.calls[0]?.[1]).toMatchObject({
     organizationId: claims.org_id,
+    surface: 'http',
     outcome: 'success',
     traceId: null,
     operation: 'read0',

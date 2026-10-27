@@ -1,8 +1,8 @@
 /**
  * The request pipeline around native dispatch: ordered middleware over a bodyless copy of the request and a
- * continuation that runs once, `aroundOperation` scoping the env of a matched operation, background work of
- * plain routes, upgrades passed through, and unexpected errors answered as INTERNAL_ERROR without their
- * message.
+ * continuation that runs once, `aroundOperation` scoping the env of a matched operation, a request id of its
+ * own on every answer, background work of plain routes, upgrades passed through, unexpected errors answered
+ * as INTERNAL_ERROR without their message, and each refused admission observed.
  */
 import { expect, it, vi } from 'vite-plus/test';
 
@@ -18,6 +18,7 @@ import type {
 const ISSUER = 'https://issuer.example.test/';
 const ORIGIN = 'https://records.example.test';
 const ORGANIZATION = 'org_1234567890abcdef';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const record = t.Object({ recordId: t.String() }, { additionalProperties: false });
 /** A machine client of the organization that may write records. */
 const claims = {
@@ -27,9 +28,10 @@ const claims = {
   scope: 'records:records:write',
 };
 
-/** The database a request is scoped to. */
+/** The database a request is scoped to, and the rate limiting binding Workers provides. */
 interface Env {
   DATABASE: string;
+  LIMIT?: { limit: (input: { key: string }) => Promise<{ success: boolean }> };
 }
 const env: Env = { DATABASE: 'primary' };
 
@@ -112,6 +114,32 @@ it('wraps native dispatch in ordered middleware that sees a bodyless copy of the
     { body: null, authorization: 'Bearer a.b.c', id: response.headers.get('x-request-id') },
   ]);
   expect(verify).toHaveBeenCalledExactlyOnceWith('a.b.c');
+});
+
+it('answers with a request id of its own, never one the caller sends or a plain route sets', async () => {
+  lock.mockClear();
+  const seen: string[] = [];
+  const handle = handler({
+    routes: {
+      '/hooks/payments': async (_request, _env, context) => {
+        seen.push(context.requestId);
+        return new Response(null, { status: 204, headers: { 'x-request-id': 'route-chosen' } });
+      },
+    },
+  });
+  const called = post();
+  called.headers.set('x-request-id', 'caller-chosen');
+  const answered = await handle(called, env);
+  const id = answered.headers.get('x-request-id');
+  expect(id).toMatch(UUID);
+  expect(await answered.json()).toMatchObject({ metadata: { requestId: id } });
+  expect(lock.mock.calls[0]?.[0]).toMatchObject({ principal: { requestId: id } });
+  const routed = await handle(
+    new Request(`${ORIGIN}/hooks/payments`, { method: 'POST', headers: { 'x-request-id': 'caller-chosen' } }),
+    env
+  );
+  expect(routed.headers.get('x-request-id')).toMatch(UUID);
+  expect(seen).toEqual([routed.headers.get('x-request-id')]);
 });
 
 it('lets middleware answer without dispatching, and refuses a continuation run twice or after its wrapper settled', async () => {
@@ -279,6 +307,55 @@ it('answers an exception as INTERNAL_ERROR, logs only its safe description, and 
     });
   } finally {
     errors.mockRestore();
+    warnings.mockRestore();
+  }
+});
+
+it('observes each refused admission, with the principal only once its token is admitted, and no execution', async () => {
+  const warnings = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    const admission = vi.fn(async (_event: AdmissionObservation) => undefined);
+    const execution = vi.fn(async () => undefined);
+    const tasks: Promise<unknown>[] = [];
+    const background: BackgroundContext = { waitUntil: (task) => tasks.push(task) };
+    const app = {
+      ...application({ observers: [{ admission, execution }] }),
+      rateLimit: { binding: 'LIMIT' as const },
+    };
+    const exhausted: Env = { ...env, LIMIT: { limit: async () => ({ success: false }) } };
+    const writer = handler({}, app);
+    const reader = handler({ verify: async () => ({ ...claims, scope: 'records:records:read' }) }, app);
+    const tokenless = new Request(`${ORIGIN}/v1/records/lock`, { method: 'POST' });
+    const unknown = new Request(`${ORIGIN}/v1/records/unknown`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c' },
+    });
+    const responses = [
+      await writer(tokenless, exhausted, background),
+      await reader(post(), exhausted, background),
+      await writer(unknown, exhausted, background),
+      await writer(post(), exhausted, background),
+    ];
+    await Promise.all(tasks);
+    expect(responses.map((response) => response.status)).toEqual([401, 403, 404, 429]);
+    const [unauthorized, forbidden, missing, limited] = responses.map((response) =>
+      response.headers.get('x-request-id')
+    );
+    expect(admission.mock.calls.map(([event]) => event)).toMatchObject([
+      { operation: 'lockRecord', principal: null, requestId: unauthorized, errorCode: 'UNAUTHORIZED' },
+      { operation: 'lockRecord', principal: null, requestId: forbidden, errorCode: 'FORBIDDEN' },
+      { operation: null, principal: null, requestId: missing, errorCode: 'NOT_FOUND' },
+      { operation: 'lockRecord', requestId: limited, errorCode: 'RATE_LIMITED' },
+    ]);
+    // The rate limit refuses a verified caller, observed as the principal an operation would receive.
+    expect(admission.mock.calls[3]?.[0].principal).toStrictEqual({
+      actorId: 'client@clients',
+      actorKind: 'service',
+      organizationId: ORGANIZATION,
+      requestId: limited,
+    });
+    expect(execution).not.toHaveBeenCalled();
+  } finally {
     warnings.mockRestore();
   }
 });

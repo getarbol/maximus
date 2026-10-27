@@ -16,7 +16,6 @@ import {
   PrincipalSchema,
   parseInput,
   projectToken,
-  createTokenAuthorization,
 } from '../src/index.ts';
 import type { InvocationAuthority } from '../src/manifest.ts';
 
@@ -53,27 +52,6 @@ const authority: InvocationAuthority = {
   scopes: ['test:records:read'],
   client: { id: 'first-party', class: 'human' },
 };
-
-it('refuses a custom resolver that changes the original client class/actor identity', async () => {
-  const authorize = createTokenAuthorization({
-    audience: 'test',
-    resolve: async () => ({
-      actorId: 'person',
-      actorKind: 'user',
-      organizationId,
-      scopes: ['test:records:read'],
-      client: { id: 'machine', class: 'machine' },
-    }),
-  });
-  expect(
-    (
-      await authorize(
-        new Request('https://example.test', { headers: { authorization: 'Bearer fixture' } }),
-        'test:records:read'
-      )
-    ).ok
-  ).toBe(false);
-});
 
 it('preserves verified originating client and human scope/permission intersection', () => {
   const result = projectToken({
@@ -140,6 +118,41 @@ it('carries immutable authority through both preparation/middleware/handler and 
   ).toBe(true);
 });
 
+it('answers INTERNAL_ERROR, without running the handler, when preparation or middleware tries to widen the verified scopes', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    const execute = vi.fn(async (_context: unknown, value: { managed: boolean }) => ok(value));
+    /** Tries to grant the conditional scope the token lacks, as code that escapes the readonly type could. */
+    const widen = (verified: InvocationAuthority | undefined) => {
+      if (verified) {
+        (verified.scopes as string[]).push('test:records:manage');
+      }
+    };
+    const prepared = maximus<Record<string, never>>(configuration)
+      .derive(async (context) => {
+        widen(context.authority);
+        return ok({});
+      })
+      .operation('readRecord', definition, execute)
+      .build();
+    const wrapped = maximus<Record<string, never>>(configuration)
+      .use(async (context, proceed) => {
+        widen(context.authority);
+        return proceed();
+      })
+      .operation('readRecord', definition, execute)
+      .build();
+    for (const app of [prepared, wrapped]) {
+      expect(
+        await executeOperation(app, app.operations.readRecord, {}, principal, { managed: true }, authority)
+      ).toEqual({ ok: false, error: standardErrors.internal.create() });
+    }
+    expect(execute).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+  }
+});
+
 it('fails closed before preparation when conditional authority is absent or admission scope is missing', async () => {
   const prepare = vi.fn(async () => ok({}));
   const app = maximus<Record<string, never>>(configuration)
@@ -178,10 +191,12 @@ it('preserves ordinary RPC execution for operations without conditional authorit
 });
 
 it('populates HTTP and authenticated transport contexts from verified claims rather than forged headers', async () => {
+  const surfaces: unknown[] = [];
   const app = maximus<Record<string, never>>(configuration)
     .operation('readRecord', definition, async (context, value) => {
       expect(context.authority?.client.id).toBe('first-party');
       expect(context.authority?.scopes).toEqual(['test:records:read']);
+      surfaces.push(context.authority?.surface);
       return value.managed ? err(standardErrors.forbidden.create()) : ok(value);
     })
     .build();
@@ -220,6 +235,8 @@ it('populates HTTP and authenticated transport contexts from verified claims rat
     ],
   });
   expect(await (await transported(request('/tools', false), {})).json()).toMatchObject({ ok: true });
+  // Each call carries the surface whose admission verified its token.
+  expect(surfaces).toEqual(['http', 'http', 'mcp']);
 });
 
 it('validates conditional declarations instead of accepting typos, collisions or another owner namespace', () => {

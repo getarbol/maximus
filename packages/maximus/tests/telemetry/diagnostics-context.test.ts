@@ -1,10 +1,12 @@
 /**
- * The telemetry switch and an invocation's diagnostics: a switch function decides per env and stays off
- * without one, `reportUnexpected` logs a safe description and tells the invocation's observers, and neither
- * a failing observer nor a failing console reaches the caller.
+ * The telemetry switch and an invocation's diagnostics: a switch function decides per env, stays off without
+ * one and turns telemetry off when it fails, without failing the request; each invocation keeps its own
+ * switch; `reportUnexpected` logs a safe description and tells the invocation's observers; and neither a
+ * failing observer nor a failing console reaches the caller.
  */
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 
+import { createHttpHandler, defineErrors, maximus, ok, t } from '../../src/index.ts';
 import {
   diagnosticsEnabled,
   reportUnexpected,
@@ -37,6 +39,84 @@ it('decides per env with a switch function, and stays off when there is no env t
   expect(telemetryEnabled({ enabled: true }, undefined)).toBe(true);
   expect(telemetryEnabled({}, undefined)).toBe(true);
   expect(telemetryEnabled(undefined, undefined)).toBe(true);
+});
+
+it('turns telemetry off when its switch fails, and still answers every request', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const execution = vi.fn(async () => undefined);
+  const empty = t.Object({}, { additionalProperties: false });
+  const app = maximus<{ TELEMETRY: { on: boolean } }>({
+    name: 'records',
+    namespace: 'records',
+    title: 'Records',
+    version: '1',
+    origin: 'https://records.example.test',
+    tokens: { issuer: 'https://issuer.example.test/', audience: 'https://records.example.test' },
+    errors: defineErrors({}),
+    rpc: { callers: [] },
+    telemetry: { enabled: (env) => env.TELEMETRY.on, observers: [{ execution }] },
+  })
+    .operation(
+      'listRecords',
+      {
+        scope: 'records:records:read',
+        title: 'List records',
+        description: 'List the organization records.',
+        effect: 'read',
+        input: empty,
+        output: empty,
+        http: { method: 'GET', path: '/v1/records' },
+      },
+      async () => ok({})
+    )
+    .build();
+  const handle = createHttpHandler(app, {
+    verify: async () => ({
+      sub: 'client@clients',
+      client_id: 'client',
+      org_id: 'org_1234567890abcdef',
+      scope: 'records:records:read',
+    }),
+  });
+  const tasks: Promise<unknown>[] = [];
+  const background = {
+    waitUntil: (task: Promise<unknown>) => {
+      tasks.push(task);
+    },
+  };
+  // A deployment that forgot the binding its switch reads.
+  const forgotten = {} as { TELEMETRY: { on: boolean } };
+  expect(
+    (await handle(new Request('https://records.example.test/health'), forgotten, background)).status
+  ).toBe(200);
+  const listed = await handle(
+    new Request('https://records.example.test/v1/records', { headers: { authorization: 'Bearer a.b.c' } }),
+    forgotten,
+    background
+  );
+  expect(listed.status).toBe(200);
+  await Promise.all(tasks);
+  expect(execution).not.toHaveBeenCalled();
+  expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toContainEqual({
+    event: 'maximus.telemetry.switch_failed',
+  });
+  expect(JSON.stringify(log.mock.calls)).not.toContain('TELEMETRY');
+});
+
+it('isolates telemetry switches across concurrent invocations', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  await Promise.all([
+    withDiagnostics(false, async () => {
+      await Promise.resolve();
+      reportUnexpected(new Error('private'));
+    }),
+    withDiagnostics(true, async () => {
+      await Promise.resolve();
+      reportUnexpected(new Error('visible'));
+    }),
+  ]);
+  expect(log).toHaveBeenCalledOnce();
+  expect(JSON.stringify(log.mock.calls)).not.toContain('private');
 });
 
 it("runs work inside the diagnostics its env turns on, telling the configuration's observers of unexpected errors", () => {

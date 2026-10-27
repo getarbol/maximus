@@ -1,6 +1,6 @@
 /**
  * The list contract: the named response metadata, PageInfo and each Page, the query defaults on the wire,
- * and page names.
+ * page limits with their own maximum and default, and page names.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -13,6 +13,7 @@ import {
   defineErrors,
   maximus,
   ok,
+  pageLimit,
   parseInput,
   t,
 } from '../src/index.ts';
@@ -319,6 +320,23 @@ it('validates exactly the canonical page and page info', () => {
   }
   const query: PageQuery = { direction: 'forward', limit: 25 };
   expect(parseInput(t.Object(PageQueryFields), query).ok).toBe(true);
+});
+
+it('builds a page limit with its own maximum and default', () => {
+  expect(JSON.parse(JSON.stringify(pageLimit()))).toStrictEqual(
+    JSON.parse(JSON.stringify(PageQueryFields.limit))
+  );
+  expect(JSON.parse(JSON.stringify(pageLimit({ maximum: 20 })))).toStrictEqual({
+    type: 'integer',
+    minimum: 1,
+    maximum: 20,
+    default: 20,
+    description: 'Maximum items returned in one page. Defaults to 20; larger reads require another cursor.',
+  });
+  expect(pageLimit({ maximum: 500, default: 50 })).toMatchObject({ maximum: 500, default: 50 });
+  for (const options of [{ maximum: 0 }, { maximum: 10, default: 11 }, { default: 0 }, { maximum: 2.5 }]) {
+    expect(() => pageLimit(options), JSON.stringify(options)).toThrow(TypeError);
+  }
 });
 
 it('refuses a page name that cannot be a public schema type', () => {

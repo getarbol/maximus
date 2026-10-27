@@ -50,7 +50,8 @@ export type TransactionResult<T> = { ok: true; value: T } | { ok: false; error: 
  * and unbounded retries.
  */
 function validateOptions(tenant: TenantContext, options: TransactionOptions) {
-  if (!ORGANIZATION_ID.test(tenant.organizationId)) {
+  // A pattern test reads any value as text: `['org_1']` would pass it, so the type is checked first.
+  if (typeof tenant.organizationId !== 'string' || !ORGANIZATION_ID.test(tenant.organizationId)) {
     throw new TypeError('A trusted organization identifier is required.');
   }
   for (const value of [options.statementTimeoutMs, options.lockTimeoutMs, options.idleTimeoutMs]) {
@@ -59,7 +60,7 @@ function validateOptions(tenant: TenantContext, options: TransactionOptions) {
     }
   }
   if (
-    options.isolation &&
+    options.isolation !== undefined &&
     !['read committed', 'repeatable read', 'serializable'].includes(options.isolation)
   ) {
     throw new TypeError('Unsupported isolation level.');

@@ -1,6 +1,6 @@
 /**
- * Results, catalogs and scopes: which untrusted answers are Results; the catalog refusals of a repeated
- * code, a status outside 400 to 599 and loose failure data; a code's status and Retry-After; the schema of a
+ * Results, catalogs and scopes: which untrusted answers are Results; the catalog refusals of a malformed or
+ * repeated code, a status outside 400 to 599 and loose failure data; a code's status and Retry-After; the schema of a
  * Result; and scope matching, which admits nobody for an empty requirement or an unknown match mode and
  * accepts only scopes of the namespace itself.
  */
@@ -47,6 +47,30 @@ it('recognizes a Result only by its value, or by a failure with a code, message,
   for (const answer of malformed) {
     expect(isResult(answer), JSON.stringify(answer)).toBe(false);
   }
+});
+
+it('refuses a code that is not uppercase words joined by underscores, as clients and observations read it', () => {
+  for (const code of [
+    'record-missing',
+    'RecordMissing',
+    '_MISSING',
+    'MISSING RECORD',
+    `M${'X'.repeat(81)}`,
+  ]) {
+    expect(
+      () => defineErrors({ missing: { code, status: 404, message: 'The record does not exist.' } }),
+      code
+    ).toThrow(
+      new TypeError(
+        `An error code is uppercase words joined by underscores, such as RECORD_NOT_FOUND: ${code}`
+      )
+    );
+  }
+  expect(() =>
+    defineErrors({
+      missing: { code: `R${'X'.repeat(80)}`, status: 404, message: 'The record does not exist.' },
+    })
+  ).not.toThrow();
 });
 
 it('refuses a catalog that repeats a code, answers outside 400 to 599 or declares loose failure data', () => {

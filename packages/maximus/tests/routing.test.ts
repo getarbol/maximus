@@ -1,5 +1,5 @@
 /**
- * HTTP routing: transport and plain route ownership of paths, ambiguous templates, typed GET queries, and
+ * HTTP routing: transport and plain route ownership of paths, malformed templates, typed GET queries, and
  * the verified access token an operation receives.
  */
 import { expect, it, vi } from 'vite-plus/test';
@@ -52,7 +52,7 @@ it('reserves every native pathname against transports', () => {
     expect(() => createHttpHandler(base.build(), { transports: [transport(path)] })).toThrow('reserved');
   }
 });
-it('rejects ambiguous declaration paths without normalizing incoming paths', async () => {
+it('rejects malformed declaration paths without normalizing incoming paths', async () => {
   for (const path of ['/v1/records/', '/v1//records']) {
     expect(() =>
       base

@@ -228,7 +228,7 @@ export interface TokenPolicy<E = unknown> {
   scheme?: TokenScheme;
 }
 
-/** The hosts only `cf dev`, or a test, reaches a Worker as: the internet never reaches a deployed Worker so. */
+/** The hosts only `vp dev`, or a test, reaches a Worker as: the internet never reaches a deployed Worker so. */
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**

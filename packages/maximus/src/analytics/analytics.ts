@@ -65,8 +65,9 @@ async function pseudonym(organizationId: string, actorId: string): Promise<strin
 /**
  * An observer that records one allowlisted event for each operation call: who called which operation, over
  * which surface, how it ended and how long it took. No input, output, credential or message ever reaches
- * it, and an event that does not match `ExecutionEventSchema` (a service name it refuses, say) is never
- * recorded: the observer fails, and diagnostics report it.
+ * it. `.build()` and `defineErrors` refuse a service name, an operation name or a failure code the event
+ * could not carry; an event that still does not match `ExecutionEventSchema` is never recorded: the
+ * observer fails, and diagnostics report it.
  */
 export function analytics<E>(options: AnalyticsOptions<E>): Observer<E> {
   return {

@@ -54,7 +54,7 @@ function application(tokens: TokenPolicy<Env>) {
     .build();
 }
 
-/** The development token's binding, as `.dev.vars` sets it for `cf dev`. */
+/** The development token's binding, as `.dev.vars` sets it for `vp dev`. */
 const development = { binding: 'DEVELOPMENT_TOKEN' };
 const tokens: TokenPolicy<Env> = {
   issuer: 'https://issuer.example.test/',

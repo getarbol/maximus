@@ -76,6 +76,8 @@ const InputIssuesSchema = Type.Object(
   },
   { additionalProperties: false }
 );
+/** A failure code: uppercase words joined by underscores, as clients branch on it and observations carry it. */
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,80}$/;
 /** The standard failures as a catalog defines them; INVALID_INPUT carries its field issues. */
 const STANDARD = {
   ...STANDARD_FAILURES,
@@ -220,6 +222,11 @@ export function defineErrors<const D extends Record<string, ErrorDefinition>>(
   const definitions = { ...STANDARD, ...own };
   const byCode = new Map<string, ErrorDefinition>();
   for (const definition of Object.values<ErrorDefinition>(definitions)) {
+    if (!ERROR_CODE.test(definition.code)) {
+      throw new TypeError(
+        `An error code is uppercase words joined by underscores, such as RECORD_NOT_FOUND: ${definition.code}`
+      );
+    }
     if (byCode.has(definition.code) || definition.status < 400 || definition.status > 599) {
       throw new TypeError('Error definitions require unique codes and failure statuses.');
     }

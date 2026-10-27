@@ -171,7 +171,7 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       // A route that says no more than its title documents none.
       ...(op.description ? { description: op.description } : {}),
       // Alternatives: OpenAPI admits a request that satisfies any one security requirement.
-      security: operationSecurity(name, op, manifest.tokens),
+      security: operationSecurity(op, manifest.tokens),
       tags: [op.group ?? name],
       'x-required-scopes': [...operationScopes(op)],
       ...(operationScopes(op).length > 1 ? { 'x-scope-match': op.scopeMatch ?? 'any' } : {}),
@@ -324,7 +324,6 @@ function failureResponses(
  * bearer tokens. With both schemes, users present OAuth tokens and services the application's own.
  */
 function operationSecurity(
-  name: string,
   op: OperationShape,
   tokens: Pick<TokenPolicy, 'scheme'>
 ): Record<string, string[]>[] {
@@ -337,13 +336,12 @@ function operationSecurity(
     security = operationScopes(op).map((scope) => ({ oauth2: [scope] }));
   }
   if (tokens.scheme?.type === 'oauth+bearer') {
-    if (!op.actorKinds?.length) {
-      throw new TypeError(`Operation "${name}": dual authentication requires explicit actor eligibility.`);
-    }
-    if (!op.actorKinds.includes('user')) {
+    // `.build()` refuses an operation that names no eligible actors under dual authentication.
+    const actors = op.actorKinds ?? [];
+    if (!actors.includes('user')) {
       security = [];
     }
-    if (op.actorKinds.includes('service')) {
+    if (actors.includes('service')) {
       security.push({ bearer: [] });
     }
   }

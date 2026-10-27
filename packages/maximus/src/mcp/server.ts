@@ -15,8 +15,6 @@ import { readSkill, registerSkills, SKILLS_EXTENSION, skillTool } from './skills
 
 /** Operation tools on one `tools/list` page; the skill tool, when served, comes before them on the first. */
 const PAGE_SIZE = 50;
-/** The JSON-RPC error of a request beyond the caller's rate limit: an implementation-defined server error. */
-const RATE_LIMITED = -32_000;
 
 /** An operation that declares an MCP tool. */
 type ToolOperation = OperationShape & { mcp: NonNullable<OperationShape['mcp']> };
@@ -140,6 +138,22 @@ function fieldChoices(schemas: readonly JsonSchema[]): JsonSchema {
   return { anyOf: distinct };
 }
 
+/**
+ * How many JSON-RPC messages a body carries: each message of a batch, which only 2025-03-26 clients send,
+ * or one. A body that is no batch is the SDK's to read and refuse.
+ */
+function carriedMessages(body: string): number {
+  if (!body.trimStart().startsWith('[')) {
+    return 1;
+  }
+  try {
+    const batch: unknown = JSON.parse(body);
+    return Array.isArray(batch) ? Math.max(batch.length, 1) : 1;
+  } catch {
+    return 1;
+  }
+}
+
 /** Answers one MCP request of an admitted caller. */
 export async function handleMcp({
   request,
@@ -150,32 +164,26 @@ export async function handleMcp({
   contractText,
   url,
   invoke,
-  admitRequest,
-  bodyBytes,
+  admitCarried,
+  refused,
+  body,
   bodyLimit,
 }: TransportContext): Promise<Response> {
+  // Every message of a batch passes the rate limit as a request of its own, whatever it asks, before any
+  // of them runs: a batch over the caller's limit is refused whole, never run in part.
+  const refusal = await admitCarried(carriedMessages(body) - 1);
+  if (refusal) {
+    return refusal;
+  }
+  const bodyBytes = new TextEncoder().encode(body).byteLength;
   /** The cursor of the page after the one that ends with an operation, valid for this version only. */
   const pageCursor = (name: string) => `${application.version}:${name}`;
   /**
-   * Counts one more request of this HTTP request against the caller's rate limit, as a request of its own
-   * (a JSON-RPC batch carries several), and refuses it once the limit does.
+   * Runs one of the server's own handlers: a protocol error answers as thrown, and any other failure is
+   * reported by its safe description and answers a generic internal error, never its message.
    */
-  const count = async () => {
-    if (!(await admitRequest())) {
-      const failure = standardErrors.rateLimited.create();
-      throw new ProtocolError(RATE_LIMITED, failure.message, failure);
-    }
-  };
-  /**
-   * Runs one of the server's own handlers as a counted request, unless `invoke` counts it: a protocol
-   * error answers as thrown, and any other failure is reported by its safe description and answers a
-   * generic internal error, never its message.
-   */
-  const answer = async <R>(work: () => R | Promise<R>, counted = true): Promise<R> => {
+  const answer = async <R>(work: () => R | Promise<R>): Promise<R> => {
     try {
-      if (counted) {
-        await count();
-      }
       return await work();
     } catch (error) {
       if (error instanceof ProtocolError) {
@@ -210,23 +218,29 @@ export async function handleMcp({
           operationMatchesScopes(entry[1], authenticated.scopes) &&
           (!entry[1].actorKinds || entry[1].actorKinds.includes(authenticated.actorKind))
       );
-      // The SDK validates JSON-RPC; Maximus owns the business input/output schemas once. `invoke`
-      // counts an operation's call against the rate limit, and the skill tool's is counted here.
+      // The SDK validates JSON-RPC; Maximus owns the business input/output schemas once.
       server.server.setRequestHandler('tools/call', (call) =>
         answer(async () => {
           if (skillToolName && call.params.name === skillToolName) {
-            await count();
             return readSkill(skills, call.params.arguments ?? {});
           }
           const selected = visible.find(([, op]) => op.mcp.name === call.params.name);
           if (!selected) {
+            // The caller learns only that it has no such tool; the record names a tool it may not call.
+            const hidden = operations.find(([, op]) => op.mcp?.name === call.params.name);
+            refused(
+              hidden ? standardErrors.forbidden.create() : standardErrors.notFound.create(),
+              hidden?.[0]
+            );
             throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Tool not found');
           }
           const [name, op] = selected;
           if (bodyBytes > bodyLimit(op)) {
+            const failure = standardErrors.tooLarge.create();
+            refused(failure, name);
             return {
               isError: true,
-              content: [{ type: 'text' as const, text: JSON.stringify(standardErrors.tooLarge.create()) }],
+              content: [{ type: 'text' as const, text: JSON.stringify(failure) }],
             };
           }
           const result = await invoke(name, op, call.params.arguments ?? {});
@@ -239,7 +253,7 @@ export async function handleMcp({
                 isError: true,
                 content: [{ type: 'text' as const, text: JSON.stringify(result.error) }],
               };
-        }, false)
+        })
       );
       // Catalog discovery shares the same permission-filtered operation set as execution.
       server.server.setRequestHandler('tools/list', (listing) =>

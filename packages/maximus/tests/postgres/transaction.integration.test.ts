@@ -1,6 +1,7 @@
 /**
  * Tenant-scoped transactions against a real Postgres: explicit tenant predicates without RLS, composite
- * tenant keys, atomic commits, claims and time budgets reset between tenants.
+ * tenant keys whose violations never carry the key, atomic commits, claims and time budgets reset between
+ * tenants.
  */
 import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, inject, it } from 'vite-plus/test';
@@ -71,7 +72,7 @@ it('isolates owner reads with explicit tenant predicates on reused pooled connec
   expect((await runtime.query('SELECT DISTINCT org_id FROM contacts')).rows).toHaveLength(2);
 });
 
-it('enforces composite tenant foreign keys and rejects runtime DDL', async () => {
+it('enforces composite tenant foreign keys without reporting the missing key, and rejects runtime DDL', async () => {
   const result = await withTenantTransaction(runtime, { organizationId: B }, options, async (db, tenant) =>
     db.query('INSERT INTO intents(org_id,id,contact_id) VALUES($1,$2,$3)', [
       tenant.organizationId,
@@ -80,6 +81,8 @@ it('enforces composite tenant foreign keys and rejects runtime DDL', async () =>
     ])
   );
   expect(result).toMatchObject({ ok: false, error: { code: 'DATABASE_CONFLICT', sqlState: '23503' } });
+  // The server's detail names the key it did not find; the failure carries its SQLSTATE alone.
+  expect(JSON.stringify(result)).not.toContain('only-a');
   await expect(runtime.query('CREATE TABLE unauthorized(id text)')).rejects.toMatchObject({ code: '42501' });
 });
 

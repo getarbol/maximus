@@ -12,8 +12,11 @@ import { hasUncompiledCodecs } from './input-schemas.ts';
 import { pathParameterSchemas } from './internal/http-routes.ts';
 import { MAX_BODY_BYTES_CEILING, STANDARD_CODES, operationScopes } from './manifest.ts';
 import type { AppManifest, McpConfiguration, McpGuide, McpSkill, OperationShape } from './manifest.ts';
+import { createOpenApi } from './openapi.ts';
+import { hasSchemaReferences } from './schema-bundle.ts';
 import { isNamespacedScope } from './scopes.ts';
 import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
+import type { TokenPolicy } from './tokens.ts';
 
 /** Names a Worker entrypoint already uses, or that would break a class or a promise. */
 const RESERVED_NAMES = new Set([
@@ -72,6 +75,10 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
   if (!/^[a-z][a-z0-9-]{1,63}$/.test(manifest.namespace)) {
     throw new TypeError('A scope namespace is required.');
   }
+  // The name identifies the service in every observation, analytics event and MCP server listing.
+  if (!/^[a-z][a-z0-9-]{1,63}$/.test(manifest.name)) {
+    throw new TypeError('An application name is a lowercase kebab-case word of 2 to 64 characters.');
+  }
   checkDeclaredFailures(manifest.operations, manifest.errors);
   const claimed = { routes: new Set<string>(), tools: new Set<string>() };
   for (const [name, op] of Object.entries(manifest.operations)) {
@@ -79,6 +86,7 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
   }
   // Compiling the router refuses ambiguous or overlapping path templates.
   createHttpRouteResolver(Object.values(manifest.operations));
+  checkSchemaReferences(manifest);
   checkGuides(manifest.mcp?.guides ?? []);
   checkSkills(manifest.mcp?.skills ?? []);
   checkSkillTool(manifest.mcp, claimed.tools);
@@ -131,10 +139,18 @@ function checkDeclaredFailures(
 function checkOperation(
   name: string,
   op: OperationShape,
-  application: { namespace: string; rpc: { callers: readonly string[] } },
+  application: {
+    namespace: string;
+    rpc: { callers: readonly string[] };
+    tokens: Pick<TokenPolicy, 'scheme'>;
+  },
   claimed: { routes: Set<string>; tools: Set<string> }
 ): void {
   checkOperationContract(name, op, application.namespace);
+  // Under dual authentication, an operation's actors decide which of the two schemes admits a caller.
+  if (application.tokens.scheme?.type === 'oauth+bearer' && !op.actorKinds) {
+    throw new TypeError(`Operation "${name}": dual authentication requires explicit actor eligibility.`);
+  }
   checkHttpExposure(name, op, claimed.routes);
   if (
     op.conditionalScopes &&
@@ -185,9 +201,9 @@ function checkOperationContract(name: string, op: OperationShape, namespace: str
   ) {
     throw new TypeError(`Operation "${name}": actorKinds must explicitly name eligible users or services.`);
   }
-  if (!/^[a-z][a-zA-Z0-9]*$/.test(name) || RESERVED_NAMES.has(name)) {
+  if (!/^[a-z][a-zA-Z0-9]{0,99}$/.test(name) || RESERVED_NAMES.has(name)) {
     throw new TypeError(
-      `Operation "${name}": use a camelCase name that is not a reserved Worker method. Use safe operation names, namespaced scopes and strict object schemas.`
+      `Operation "${name}": use a camelCase name of up to 100 characters that is not a reserved Worker method. Use safe operation names, namespaced scopes and strict object schemas.`
     );
   }
   const scopes = operationScopes(op);
@@ -263,6 +279,24 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
       throw new TypeError(`Operation "${name}": use unique versioned routes; mutations cannot use GET.`);
     }
     routes.add(route);
+  }
+}
+
+/**
+ * A schema reference (TypeBox `Ref` or `Recursive`) resolves when the OpenAPI document bundles the schemas,
+ * to the one definition its name has. An application whose schemas refer to a name is bundled now, so a
+ * reference that names no single definition is refused before the service starts rather than when the
+ * document is first requested; schemas without references have nothing to resolve.
+ */
+function checkSchemaReferences<Env, C, Ops extends Record<string, OperationShape>>(
+  manifest: AppManifest<Env, C, Ops>
+): void {
+  const schemas = [
+    ...Object.values(manifest.operations).flatMap((op) => [op.input, op.output]),
+    ...Object.values(manifest.errors.definitions).map((definition) => definition.dataSchema),
+  ];
+  if (schemas.some(hasSchemaReferences)) {
+    createOpenApi(manifest);
   }
 }
 

@@ -199,16 +199,31 @@ export function recordAdmission<E>(
   }
 }
 /**
- * Whether telemetry is on for this env: it is unless `enabled` is false, or a function that returns false or
- * has no env to read.
+ * Whether telemetry is on for this env: it is unless `enabled` is false, or a function that returns false,
+ * has no env to read or throws.
  */
 export function telemetryEnabled<E>(
   config: Pick<TelemetryConfig<E>, 'enabled'> | undefined,
   env: E | undefined
 ): boolean {
-  return typeof config?.enabled === 'function'
-    ? env !== undefined && config.enabled(env)
-    : config?.enabled !== false;
+  if (typeof config?.enabled !== 'function') {
+    return config?.enabled !== false;
+  }
+  if (env === undefined) {
+    return false;
+  }
+  try {
+    return config.enabled(env);
+  } catch {
+    // A switch that fails, such as one that reads a binding the env lacks, turns telemetry off rather than
+    // failing the request; the log says so, without the failure's text.
+    try {
+      console.error(JSON.stringify({ event: 'maximus.telemetry.switch_failed' }));
+    } catch {
+      /* Diagnostics are best effort. */
+    }
+    return false;
+  }
 }
 /** Describes errors by their built-in names only. */
 const diagnostics = createDiagnostics();

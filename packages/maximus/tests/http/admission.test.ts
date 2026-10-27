@@ -1,7 +1,8 @@
 /**
- * Admission of an operation call over HTTP: exact origins, the token, the rate limit under a digest of the
- * caller, then the bounded body and its media type, each refusal answered before the operation runs and
- * without echoing the input; and what an admitted call hands its operation.
+ * Admission of an operation call over HTTP: exact origins, the token and its scopes, the rate limit under a
+ * digest of the caller, then the body, bounded by the operation's limit, and its media type, each refusal
+ * answered before the operation runs and without echoing the input; and what an admitted call hands its
+ * operation.
  */
 import { expect, it, vi } from 'vite-plus/test';
 
@@ -55,8 +56,8 @@ const lock = vi.fn(async (_context: unknown, input: { recordId: string }) => {
   }
   return input.recordId === 'missing' ? err(errors.recordMissing.create()) : ok(input);
 });
-/** A records service whose one route locks a record. */
-function application() {
+/** A records service whose one route locks a record, with the body limit given or the application's. */
+function application(maxBodyBytes?: number) {
   return maximus<Env>(configuration)
     .operation(
       'lockRecord',
@@ -68,6 +69,7 @@ function application() {
         input: record,
         output: record,
         http: { method: 'POST', path: '/v1/records/lock' },
+        maxBodyBytes,
       },
       lock
     )
@@ -128,6 +130,42 @@ it('refuses at construction a middleware entry that is not a function', () => {
   );
 });
 
+it('admits an operation that requires all of its scopes only for a token that holds every one', async () => {
+  const audit = vi.fn(async () => ok({}));
+  const app = maximus<Env>(configuration)
+    .operation(
+      'auditRecords',
+      {
+        scope: ['records:records:read', 'records:audit:read'],
+        scopeMatch: 'all',
+        title: 'Audit records',
+        description: 'Read the audit trail of the organization records.',
+        effect: 'read',
+        input: empty,
+        output: empty,
+        http: { method: 'GET', path: '/v1/records/audit' },
+      },
+      audit
+    )
+    .build();
+  const both = 'records:records:read records:audit:read';
+  // A person whose token names no client carries no authority into execution, so admission alone checks.
+  const person = { sub: 'person', org_id: ORGANIZATION };
+  for (const [granted, status] of [
+    [{ ...claims, scope: 'records:records:read' }, 403],
+    [{ ...claims, scope: both }, 200],
+    [{ ...person, scope: both, permissions: ['records:records:read'] }, 403],
+    [{ ...person, scope: both, permissions: both.split(' ') }, 200],
+  ] as const) {
+    const response = await createHttpHandler(app, { verify: async () => granted })(
+      new Request(`${ORIGIN}/v1/records/audit`, { headers: { authorization: 'Bearer a.b.c' } }),
+      unlimited
+    );
+    expect(response.status, JSON.stringify(granted)).toBe(status);
+  }
+  expect(audit).toHaveBeenCalledTimes(2);
+});
+
 it('rate limits each call under a digest of the organization and actor, with the catalog Retry-After', async () => {
   lock.mockClear();
   const limit = vi.fn(async () => ({ success: false }));
@@ -144,6 +182,62 @@ it('rate limits each call under a digest of the organization and actor, with the
   );
   const key = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
   expect(limit).toHaveBeenCalledExactlyOnceWith({ key });
+  expect(lock).not.toHaveBeenCalled();
+});
+
+it('answers INTERNAL_ERROR, before the operation runs, when the rate limit binding is missing or fails', async () => {
+  lock.mockClear();
+  const handle = createHttpHandler(
+    { ...application(), rateLimit: { binding: 'LIMIT' as const } },
+    { verify: async () => claims }
+  );
+  const failing: Env = {
+    LIMIT: {
+      limit: async () => {
+        throw new Error('rate limiter at 10.0.0.7 unavailable');
+      },
+    },
+  };
+  // A deployment without the binding, and a binding that fails.
+  for (const env of [{} as Env, failing]) {
+    const response = await handle(post('{"recordId":"r1"}'), env);
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(JSON.parse(text)).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    expect(text).not.toContain('10.0.0.7');
+  }
+  expect(lock).not.toHaveBeenCalled();
+});
+
+it('refuses a call by its token, its scope or its rate limit without reading its body, however large', async () => {
+  lock.mockClear();
+  /** A call to `lockRecord` that sends a 1 MiB record id, with the headers given. */
+  const large = (headers: Record<string, string> = {}) =>
+    new Request(`${ORIGIN}/v1/records/lock`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ recordId: 'r'.repeat(1_048_576) }),
+    });
+  const token = { authorization: 'Bearer a.b.c' };
+  const writer = createHttpHandler(application(), { verify: async () => claims });
+  const reader = createHttpHandler(application(), {
+    verify: async () => ({ ...claims, scope: 'records:records:read' }),
+  });
+  const limited = createHttpHandler(
+    { ...application(), rateLimit: { binding: 'LIMIT' as const } },
+    { verify: async () => claims }
+  );
+  const exhausted: Env = { LIMIT: { limit: async () => ({ success: false }) } };
+  for (const [status, handle, request, env] of [
+    [401, writer, large(), unlimited],
+    [403, reader, large(token), unlimited],
+    [429, limited, large(token), exhausted],
+  ] as const) {
+    expect((await handle(request, env)).status).toBe(status);
+    expect(request.bodyUsed, String(status)).toBe(false);
+  }
+  // Admitted, the same body is read and refused as too large.
+  expect((await writer(large(token), unlimited)).status).toBe(413);
   expect(lock).not.toHaveBeenCalled();
 });
 
@@ -174,6 +268,22 @@ it('refuses a body that is not UTF-8, not JSON or of another media type before t
   // The media type is read without its parameters and its case.
   const parameters = await handle(post('{"recordId":"r1"}', 'Application/JSON; charset=utf-8'), unlimited);
   expect(await parameters.json()).toMatchObject({ success: true, data: { recordId: 'r1' } });
+});
+
+it("holds a JSON body to the operation's own limit, raised above or lowered below the application's", async () => {
+  lock.mockClear();
+  /** A call to `lockRecord` whose record id takes the bytes given. */
+  const sized = (bytes: number) => post(JSON.stringify({ recordId: 'r'.repeat(bytes) }));
+  // 40 KiB is beyond the application's 32 KiB, and 2 KiB within it.
+  for (const [maxBodyBytes, bytes, status] of [
+    [undefined, 40 * 1024, 413],
+    [64 * 1024, 40 * 1024, 200],
+    [1024, 2 * 1024, 413],
+  ] as const) {
+    const handle = createHttpHandler(application(maxBodyBytes), { verify: async () => claims });
+    expect((await handle(sized(bytes), unlimited)).status, `${maxBodyBytes} ${bytes}`).toBe(status);
+  }
+  expect(lock).toHaveBeenCalledOnce();
 });
 
 it("hands the operation the verified client but never the token under the application's own bearer scheme", async () => {

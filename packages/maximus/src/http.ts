@@ -87,17 +87,23 @@ export interface TransportContext {
   url: (path: string) => string;
   /**
    * Runs one of `operations` as the verified caller and answers its Result; another operation fails with
-   * `NOT_FOUND`, and each later call is rate limited as its own request.
+   * `NOT_FOUND`.
    */
   invoke: (name: string, operation: OperationShape, input: unknown) => Promise<Result<unknown, Failure>>;
   /**
-   * Counts one more request this HTTP request carries, such as a JSON-RPC request of a batch, against the
-   * caller's rate limit as a request of its own: false when the limit refuses it. Admission counted the
-   * first, and `invoke` counts each of its calls itself.
+   * Admits the requests this HTTP request carries beyond its first, such as the rest of a JSON-RPC batch,
+   * each against the caller's rate limit as a request of its own, before any of them runs. Answers the
+   * refusal to send when the limit refuses one, as admission answers a request over the limit; admission
+   * counted the first.
    */
-  admitRequest: () => Promise<boolean>;
-  /** Bytes of the request body the transport received. */
-  bodyBytes: number;
+  admitCarried: (requests: number) => Promise<Response | undefined>;
+  /**
+   * Records a refusal the transport answers itself, such as a call to a tool the caller cannot see, as
+   * admission records the refusals HTTP answers: its code, and the operation when it names one.
+   */
+  refused: (failure: Failure, operation?: string) => void;
+  /** The request body the transport received, as text; admission read it within the transport's limit. */
+  body: string;
   /** The body limit HTTP applies to an operation; a transport holds each invocation to it. */
   bodyLimit: (operation: OperationShape) => number;
 }
@@ -560,15 +566,17 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             signal: request.signal,
           });
         }
-        /** How many requests this one has carried; admission rate limited the first with the request. */
-        let carried = 0;
         /**
-         * Counts one more request this one carries. A transport may carry several (a JSON-RPC batch over
-         * MCP): every one after the first passes the rate limit as a request of its own would.
+         * Admits the requests a transport's request carries beyond the first (a JSON-RPC batch over MCP),
+         * each passing the rate limit as a request of its own would, before any of them runs.
          */
-        async function admitRequest(): Promise<boolean> {
-          carried += 1;
-          return carried === 1 || (await withinRateLimit(scopedEnv, authenticated));
+        async function admitCarried(requests: number): Promise<Response | undefined> {
+          for (let admitted = 0; admitted < requests; admitted += 1) {
+            if (!(await withinRateLimit(scopedEnv, authenticated))) {
+              return reject(standardErrors.rateLimited.create());
+            }
+          }
+          return undefined;
         }
         /**
          * Runs one operation through the shared execution path as the admitted caller, and records the call.
@@ -584,19 +592,6 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           // token names no client and so carries no authority for execution to check.
           if (transport && !operationMatchesScopes(op, authenticated.scopes)) {
             return { ok: false as const, error: standardErrors.forbidden.create() };
-          }
-          const admissionStarted = performance.now();
-          if (!(await admitRequest())) {
-            const error = standardErrors.rateLimited.create();
-            recordAdmission(manifest, scopedEnv, background, {
-              principal: actor,
-              operation: name,
-              surface,
-              requestId,
-              started: admissionStarted,
-              errorCode: error.code,
-            });
-            return { ok: false as const, error };
           }
           if (telemetryEnabled(manifest.telemetry, scopedEnv)) {
             hooks.annotate?.(name, requestId);
@@ -639,8 +634,18 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             contractText,
             url: (path) => `${manifest.origin}${paths.mount(path)}`,
             invoke,
-            admitRequest,
-            bodyBytes: new TextEncoder().encode(bodyText).byteLength,
+            admitCarried,
+            refused: (error, name) => {
+              recordAdmission(manifest, scopedEnv, background, {
+                principal: actor,
+                operation: name ?? null,
+                surface,
+                requestId,
+                started: performance.now(),
+                errorCode: error.code,
+              });
+            },
+            body: bodyText,
             bodyLimit: (op) => op.maxBodyBytes ?? fallbackBodyBytes,
           });
         }
@@ -714,7 +719,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         response = await dispatch(0);
       }
     } catch (error) {
-      reportUnexpected(error, plain ? 'route' : 'http', requestId);
+      reportUnexpected(error, plain ? 'route' : surface, requestId);
       response = plain
         ? failure(standardErrors.internal.create(), requestId, resolutionContext())
         : reject(standardErrors.internal.create());

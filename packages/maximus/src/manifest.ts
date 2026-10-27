@@ -61,7 +61,7 @@ export interface Invocation<Env> {
 /** One scope, or several of which any one admits the caller. */
 export type OperationScope = string | readonly [string, ...string[]];
 
-/** Whether an operation belongs in public contracts (OpenAPI, typed clients, discovery metadata). */
+/** Whether an operation belongs in public contracts: the OpenAPI document and the discovery metadata. */
 export function isPublicOperation(declaration: { visibility?: 'public' | 'internal' }): boolean {
   return declaration.visibility !== 'internal';
 }
@@ -99,9 +99,9 @@ export interface Exposure {
   /**
    * `internal`: an operation for the service's own staff. It stays routed and
    * scope-checked like any other, but it is absent from the public OpenAPI
-   * document, from the protected-resource `scopes_supported` and from the
-   * typed client; MCP lists it only to tokens that carry its scope. Hiding is
-   * not authorization: the scope is what admits the caller.
+   * document and from the protected-resource `scopes_supported`; MCP lists it
+   * only to tokens that carry its scope. Hiding is not authorization: the
+   * scope is what admits the caller.
    */
   visibility?: 'public' | 'internal';
   /**
@@ -131,8 +131,9 @@ export interface OperationShape extends Exposure {
   conditionalScopes?: readonly string[];
   /**
    * The domain failure codes the operation may answer, besides the standard ones every operation may.
-   * Declared, they are all its documents list, and any other domain failure it returns becomes
-   * INTERNAL_ERROR and is reported. Omitted, every failure of the catalog is listed and allowed.
+   * Declared, they are all its documents list, and any other domain failure it returns, from its context,
+   * middleware or handler, becomes INTERNAL_ERROR and is reported. Omitted, every failure of the catalog is
+   * listed and allowed.
    */
   failures?: readonly string[];
   /** A short human name: the OpenAPI `summary` and the MCP tool's title. */

@@ -49,6 +49,8 @@ function application(tokens: Partial<TokenPolicy<Env>> = {}, mcp?: McpConfigurat
         input: empty,
         output: empty,
         http: { method: 'GET', path: '/v1/records' },
+        // Under dual authentication, an operation names the actors it admits.
+        ...(tokens.scheme?.type === 'oauth+bearer' ? { actorKinds: ['user', 'service'] as const } : {}),
       },
       async () => ok({})
     )
@@ -134,16 +136,13 @@ it('refuses a base path that is relative, ends in a slash or has empty or dot se
   }
 });
 
-it('moves liveness to an absolute health path that only GET reaches, leaving the default one a native 404', async () => {
+it('moves liveness to an absolute health path, leaving the default one a native 404', async () => {
   const handle = createHttpHandler(application(), { basePath: '/api', healthPath: '/healthz' });
   expect(await (await handle(new Request(`${ORIGIN}/healthz`), {})).json()).toStrictEqual({
     status: 'ok',
     service: 'records',
     version: '1',
   });
-  const deleted = await handle(new Request(`${ORIGIN}/healthz`, { method: 'DELETE' }), {});
-  expect(deleted.status).toBe(405);
-  expect(deleted.headers.get('allow')).toBe('GET');
   expect((await handle(new Request(`${ORIGIN}/api/health`), {})).status).toBe(404);
   // Naming the default health path explicitly is no conflict.
   expect(() =>

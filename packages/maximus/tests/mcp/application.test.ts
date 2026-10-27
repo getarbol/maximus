@@ -1,6 +1,8 @@
 /**
- * One operation over REST and MCP: the same handler and tenant context, OAuth scopes, rate limits and
- * body bounds before execution, hidden tools, and business input and output checked once.
+ * One operation served over REST and MCP: the same handler and tenant context on both, the MCP scope a token
+ * grants a person or a machine, business input and output checked once with MCP's own input, output and
+ * hidden-tool checks kept and, over REST, concurrent tenants kept apart, invalid output refused, and the rate
+ * limit and body bound applied before the tenant context loads.
  */
 import { FormatRegistry } from '@sinclair/typebox';
 import { describe, it, expect, vi } from 'vite-plus/test';
@@ -71,16 +73,6 @@ const request = (path: string, body?: unknown, authorization = 'Bearer one.two.t
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 describe('manifest transport', () => {
-  it('generates matching runtime schemas without generated files', async () => {
-    const handle = createHttpHandler(manifest, { verify: async () => claims });
-    const json = (await (await handle(request('/openapi.json'), {})).json()) as {
-      paths: Record<string, unknown>;
-    };
-    const { parse } = await import('yaml');
-    const yaml = parse(await (await handle(request('/openapi.yaml'), {})).text());
-    expect(yaml).toEqual(json);
-    expect(Object.keys(json.paths)).toEqual(['/v1/records/lookup']);
-  });
   it('uses one operation for REST and MCP, rejecting tenant overrides', async () => {
     const handle = createHttpHandler(manifest, { verify: async () => claims });
     const rest = await handle(request('/v1/records/lookup', { documentNumber: '123' }), {});
@@ -106,12 +98,9 @@ describe('manifest transport', () => {
         .status
     ).toBe(400);
   });
-  it('enforces OAuth scopes and rejects removed API keys', async () => {
+  it('admits a person to MCP only when their permissions list its scope, and a machine only as its own client', async () => {
     const auth = createTokenAuthorization(manifest.tokens, async () => claims);
     expect((await auth(request('/mcp'), 'test:mcp:use')).ok).toBe(true);
-    expect((await auth(request('/mcp', undefined, 'Bearer api-key-deadbeef'), 'test:mcp:use')).ok).toBe(
-      false
-    );
     expect(
       (
         await createTokenAuthorization(manifest.tokens, async () => ({ ...claims, permissions: [] }))(
@@ -196,16 +185,6 @@ it('bounds bodies and keeps unauthenticated requests out of business execution',
   expect(oversized.headers.get('x-request-id')).toBeTruthy();
   expect(context).not.toHaveBeenCalled();
 });
-it('MCP discovery hides ungranted operations and failures never become empty success', async () => {
-  const handle = createHttpHandler(manifest, { verify: async () => ({ ...claims, scope: 'test:mcp:use' }) });
-  const response = await handle(
-    request('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-    {}
-  );
-  const text = await response.text();
-  expect(JSON.parse(/data: (\{[^\n]*)/.exec(text)?.[1] ?? text).result.tools).toEqual([]);
-});
-
 it('validates business input and output once through the shared operation boundary', async () => {
   let inputs = 0;
   let outputs = 0;

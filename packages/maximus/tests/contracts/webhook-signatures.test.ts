@@ -1,9 +1,10 @@
 /**
  * Webhook signatures at their edges: byte bodies and secrets (a view signs only its own bytes), base64url,
- * unpadded and malformed signatures, timestamps at and beyond the tolerance in either direction, the clock
- * defaulting to now, stray header parts, rotated and foreign signature labels, Standard Webhooks ids and
- * secrets, every comparison made by Web Crypto and none before a header is admitted, and refusals that carry
- * only their reason.
+ * unpadded, prefixed and malformed signatures, timestamps at and beyond the tolerance in either direction,
+ * the clock defaulting to now, stray header parts, rotated and foreign signature labels and as many as a
+ * rotation needs, Standard Webhooks ids, secrets and `svix-` headers, every comparison made by Web Crypto and
+ * none before a header is admitted, a missing secret thrown as the deployment's mistake, and refusals that
+ * carry only their reason.
  */
 import { createHmac } from 'node:crypto';
 
@@ -59,13 +60,20 @@ it('verifies a byte body with a byte secret, signing only the bytes a view cover
   ).toBe('ok');
 });
 
-it('accepts base64url and unpadded signatures, and refuses malformed ones without computing an HMAC', async () => {
+it('accepts base64url, unpadded and prefixed signatures, and refuses malformed ones without computing an HMAC', async () => {
   const digest = hmac(body).digest();
   const verify = (signature: string | undefined) =>
     verifyHmacSignature({ body, encoding: 'base64', secret, signature });
   expect(reason(await verify(digest.toString('base64url')))).toBe('ok');
   expect(reason(await verify(digest.toString('base64').replace(/[=]+$/, '')))).toBe('ok');
   expect(reason(await verify(` ${digest.toString('base64')} `))).toBe('ok');
+  // A scheme prefix, as `X-Hub-Signature-256: sha256=<hex>` carries, is removed before the signature is read.
+  const prefixed = `sha256=${digest.toString('hex')}`;
+  expect(
+    reason(
+      await verifyHmacSignature({ body, encoding: 'hex', prefix: 'sha256=', secret, signature: prefixed })
+    )
+  ).toBe('ok');
   const computed = vi.spyOn(crypto.subtle, 'verify');
   try {
     expect(reason(await verify(undefined))).toBe('missing');
@@ -103,6 +111,20 @@ it('refuses a timestamped header that is absent, or without a timestamp or a val
   }
   // Parts without a key are skipped, so stray separators hide no valid signature.
   expect(reason(await verify(`,=junk,t=${T},garbage,v1=${stamped(T)},`))).toBe('ok');
+  // A rotation sends two or three signatures: a header with more is refused before any HMAC is computed.
+  const decoys = (count: number) => Array.from({ length: count }, () => `v1=${'0'.repeat(64)}`);
+  expect(reason(await verify([`t=${T}`, ...decoys(MAX_SIGNATURES - 1), `v1=${stamped(T)}`].join(',')))).toBe(
+    'ok'
+  );
+  const computed = vi.spyOn(crypto.subtle, 'verify');
+  try {
+    expect(reason(await verify([`t=${T}`, ...decoys(MAX_SIGNATURES), `v1=${stamped(T)}`].join(',')))).toBe(
+      'malformed'
+    );
+    expect(computed).not.toHaveBeenCalled();
+  } finally {
+    computed.mockRestore();
+  }
 });
 
 it('refuses a timestamp beyond the tolerance in either direction before any HMAC, and admits one at its edge', async () => {
@@ -144,11 +166,11 @@ it('signs the timestamp with the body, so no other timestamp or body matches, an
   } finally {
     computed.mockRestore();
   }
-  // Rotation: any accepted label may carry the matching signature.
+  // Rotation: any accepted label may carry the matching signature, and a match answers the signed time.
   const rotated = `t=${T},v0=${'0'.repeat(64)},v1=${stamped(T)}`;
   expect(
-    reason(await verifyTimestampedSignature({ body, header: rotated, labels: ['v0', 'v1'], now, secret }))
-  ).toBe('ok');
+    await verifyTimestampedSignature({ body, header: rotated, labels: ['v0', 'v1'], now, secret })
+  ).toEqual({ ok: true, value: { timestamp: T } });
 });
 
 it('reads the clock when no clock is given', async () => {
@@ -222,8 +244,37 @@ it('refuses a Standard Webhooks delivery beyond the tolerance either way, and re
 
 it('takes the secret with or without its whsec_ prefix, and refuses one that is not base64', async () => {
   expect(reason(await deliver(delivery(), { secret: key.toString('base64') }))).toBe('ok');
-  for (const malformed of ['whsec_***', 'whsec_', '%%%']) {
+  for (const malformed of ['whsec_***', '%%%']) {
     expect(reason(await deliver(delivery(), { secret: malformed })), malformed).toBe('malformed');
+  }
+});
+
+it('reads the svix- spelling of each Standard Webhooks header', async () => {
+  const svix = Object.fromEntries(
+    Object.entries(delivery()).map(([name, value]) => [name.replace('webhook-', 'svix-'), value])
+  );
+  expect(await deliver(svix)).toEqual({ ok: true, value: { id, timestamp: T } });
+});
+
+it('throws for a missing or empty secret, which anyone could sign with, before reading any header', async () => {
+  const missing = new TypeError('A webhook secret is required; check the binding that holds it.');
+  const computed = vi.spyOn(crypto.subtle, 'verify');
+  try {
+    // A binding the deployment lacks reads as undefined, whatever its declared type.
+    for (const empty of ['', new Uint8Array(0), undefined as unknown as string]) {
+      await expect(
+        verifyHmacSignature({ body, encoding: 'hex', secret: empty, signature: hmac(body, '').digest('hex') })
+      ).rejects.toThrow(missing);
+      await expect(
+        verifyTimestampedSignature({ body, header: null, labels: ['v1'], now, secret: empty })
+      ).rejects.toThrow(missing);
+    }
+    for (const empty of ['', 'whsec_', undefined as unknown as string]) {
+      await expect(deliver(delivery(), { secret: empty })).rejects.toThrow(missing);
+    }
+    expect(computed).not.toHaveBeenCalled();
+  } finally {
+    computed.mockRestore();
   }
 });
 

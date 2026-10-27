@@ -113,9 +113,9 @@ result with `isError: true` whose text is the failure JSON, so a model can read 
 }
 ```
 
-An unexpected failure of the server itself, such as a rate limit binding that throws, answers the
-JSON-RPC internal error (`-32603`) with the message `Internal error`, never the failure's own text, and
-is reported as `maximus.unexpected`. A client's mistake, such as an unsupported protocol revision, is
+An unexpected failure of the server itself, such as one while it writes its OpenAPI document, answers
+the JSON-RPC internal error (`-32603`) with the message `Internal error`, never the failure's own text,
+and is reported as `maximus.unexpected`. A client's mistake, such as an unsupported protocol revision, is
 answered and not reported.
 
 Tool lists are paginated: 50 operation tools per page, with a cursor bound to the application's
@@ -191,10 +191,15 @@ tools the caller may call (or the application limit), refusing a larger body wit
 parsed, and holds each call to its own operation's limit; a larger call answers the
 `REQUEST_TOO_LARGE` tool error.
 
-A JSON-RPC batch, which only 2025-03-26 clients send, is one request for the body limit, and every
-request after its first, a resource read as much as a tool call, passes the rate limit like a request
-of its own. A refused tool call answers the `RATE_LIMITED` tool error; any other refused request
-answers the JSON-RPC error `-32000`, whose `data` is the `RATE_LIMITED` failure.
+A JSON-RPC batch, which only 2025-03-26 clients send, is one request for the body limit. For the rate
+limit, every message in it is a request of its own, a ping or a listing as much as a tool call, and the
+whole batch is admitted before any of it runs: a batch the caller's limit cannot admit answers `429`
+with the `RATE_LIMITED` failure, as a single request over the limit does, and no part of it runs.
+
+A refusal the server answers itself is observed as admission observations are over HTTP: a tool the
+caller's scopes or actor kind hide as `FORBIDDEN` with its operation, a tool that does not exist as
+`NOT_FOUND`, and a call larger than its operation admits as `REQUEST_TOO_LARGE`. The client still learns
+only that the tool was not found, or the tool error.
 
 ## Mounting at the root
 

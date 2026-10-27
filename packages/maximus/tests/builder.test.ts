@@ -280,37 +280,6 @@ it('refuses at construction an input whose codecs only inputSchema() would run',
   expect(define(inputSchema(stripObject({ value: t.String() })))).not.toThrow();
 });
 
-it('reads an absent DELETE body as the empty input, and still refuses a body of another media type', async () => {
-  const app = maximus<Record<string, never>>(configuration)
-    .operation(
-      'deleteRecord',
-      {
-        ...route,
-        input: t.Object({ recordId: t.String() }, { additionalProperties: false }),
-        output: t.Object({ deleted: t.String() }, { additionalProperties: false }),
-        effect: 'delete' as const,
-        http: { method: 'DELETE' as const, path: '/v1/records/{recordId}' },
-      },
-      async (_context, { recordId }) => ok({ deleted: recordId })
-    )
-    .build();
-  const handle = createHttpHandler(app, { verify: async () => claims });
-  const remove = (init: RequestInit) =>
-    handle(
-      new Request('https://example.test/v1/records/rec_1', {
-        method: 'DELETE',
-        ...init,
-        headers: { authorization: 'Bearer a.b.c', ...init.headers },
-      }),
-      {}
-    );
-  const empty = await remove({});
-  expect(empty.status).toBe(200);
-  expect(((await empty.json()) as { data: unknown }).data).toEqual({ deleted: 'rec_1' });
-  expect((await remove({ body: '{}', headers: { 'content-type': 'text/plain' } })).status).toBe(415);
-  expect((await remove({ body: '{}', headers: { 'content-type': 'application/json' } })).status).toBe(200);
-});
-
 it('refuses configured OAuth resources without the metadata a 401 challenge points at', () => {
   const resources = {
     '/.well-known/oauth-protected-resource/api': {

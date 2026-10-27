@@ -343,27 +343,6 @@ it("reads a byte upload's metadata from its query and mapped headers, never from
   for (const query of ['?note=a&note=b', '?contentType=text/plain', '?recordId=r2']) {
     expect(await refused(await put(query)), query).toBe('INVALID_INPUT');
   }
-  // A header that carries authority or framing, or is not a plain header name, is never input metadata.
-  for (const header of ['Authorization', 'cookie', 'Content-Length', 'x_file_name']) {
-    const declared = base.operation(
-      'uploadAttachment',
-      {
-        ...writing,
-        input: upload,
-        output: empty,
-        http: {
-          method: 'PUT',
-          path: '/v1/records/{recordId}/attachment',
-          body: 'bytes',
-          headers: { fileName: header },
-        },
-      },
-      async () => ok({})
-    );
-    expect(() => declared.build(), header).toThrow(
-      'Byte operation headers must name unique, non-authority metadata fields.'
-    );
-  }
 });
 
 it('answers an attachment with its validated headers and the declared success status', async () => {

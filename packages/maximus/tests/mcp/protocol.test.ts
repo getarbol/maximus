@@ -1,14 +1,16 @@
 /**
  * What the MCP server declares and how it bounds calls, on both protocol eras: lists without change
  * notifications, the application's title, a `subscriptions/listen` stream that closes at once, tool calls as
- * large as their operation admits and bodies no larger than the caller's own tools admit, every request of a
- * JSON-RPC batch rate limited like a request of its own, the OpenAPI document serialized once, and failures
- * reported only when they are the server's own, never with their text.
+ * large as their operation admits and bodies no larger than the caller's own tools admit, every message of a
+ * JSON-RPC batch admitted against the rate limit before any of it runs, a 2026-07-28 tool call named in its
+ * headers, calls and refusals observed without their arguments, the OpenAPI document serialized once, and
+ * failures reported only when they are the server's own, never with their text.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, ok, t } from '../../src/index.ts';
+import type { AdmissionObservation, ExecutionObservation } from '../../src/index.ts';
 import { toYaml } from '../../src/internal/yaml.ts';
 import type * as Yaml from '../../src/internal/yaml.ts';
 import { defineApp, operation } from '../../src/internals.ts';
@@ -102,8 +104,16 @@ function legacyRequest(body: unknown) {
   });
 }
 
-/** Posts one request as a 2026-07-28 client does: the standard headers and the per-request `_meta`. */
-function modernRequest(method: string, params: Record<string, unknown> = {}, revision = '2026-07-28') {
+/**
+ * Posts one request as a 2026-07-28 client does: the standard headers, any the method adds, and the
+ * per-request `_meta`.
+ */
+function modernRequest(
+  method: string,
+  params: Record<string, unknown> = {},
+  revision = '2026-07-28',
+  headers: Record<string, string> = {}
+) {
   return new Request('https://example.test/mcp', {
     method: 'POST',
     headers: {
@@ -112,6 +122,7 @@ function modernRequest(method: string, params: Record<string, unknown> = {}, rev
       accept: 'application/json, text/event-stream',
       'mcp-protocol-version': revision,
       'mcp-method': method,
+      ...headers,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -215,7 +226,12 @@ it("sizes the body a caller may send by the tools it may call, never by another'
   expect(await refused.json()).toMatchObject({ error: { code: 'REQUEST_TOO_LARGE' } });
 });
 
-it('rate limits every call of a JSON-RPC batch like a request of its own', async () => {
+/** A 2025-era `tools/call` message of a batch. */
+function toolCall(id: number, name: string, args: Record<string, unknown>) {
+  return { jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } };
+}
+
+it('admits every message of a JSON-RPC batch against the rate limit before any of them runs', async () => {
   // One call is the request itself: admission checks the limit once.
   const single = limiter();
   const one = await call(
@@ -225,47 +241,113 @@ it('rate limits every call of a JSON-RPC batch like a request of its own', async
   );
   expect(one.result.structuredContent).toStrictEqual({ recordId: 'r0' });
   expect(single).toHaveBeenCalledOnce();
-  // Admission and the second call pass; the third call is refused before it runs.
-  const limit = limiter(2);
-  const batch = ['r1', 'r2', 'r3'].map((recordId, index) => ({
-    jsonrpc: '2.0',
-    id: index + 1,
-    method: 'tools/call',
-    params: { name: 'read_record', arguments: { recordId } },
-  }));
+  // Each message counts as a request of its own, a ping or a listing as much as a tool call.
+  const batch = [
+    toolCall(1, 'read_record', { recordId: 'r1' }),
+    { jsonrpc: '2.0', id: 2, method: 'ping' },
+    { jsonrpc: '2.0', id: 3, method: 'resources/list' },
+    { jsonrpc: '2.0', id: 4, method: 'tools/list' },
+  ];
+  const ample = limiter();
+  expect(await messages(await handle(legacyRequest(batch), { LIMIT: { limit: ample } }))).toHaveLength(4);
+  expect(ample).toHaveBeenCalledTimes(4);
+  // A batch over the caller's limit is refused whole, as a request over it is: no part of it runs.
   execute.mockClear();
-  const results = (await messages(await handle(legacyRequest(batch), { LIMIT: { limit } }))).map(
-    (answer) => answer.result
-  );
-  expect(limit).toHaveBeenCalledTimes(3);
-  expect(execute).toHaveBeenCalledTimes(2);
-  expect(results.filter((result) => !result.isError)).toHaveLength(2);
-  const refused = results.filter((result) => result.isError);
-  expect(refused).toHaveLength(1);
-  expect(JSON.parse(refused[0].content[0].text)).toMatchObject({ code: 'RATE_LIMITED', retryable: true });
+  const refused = await handle(legacyRequest(batch), { LIMIT: { limit: limiter(3) } });
+  expect(refused.status).toBe(429);
+  expect(await refused.json()).toMatchObject({ error: { code: 'RATE_LIMITED', retryable: true } });
+  expect(execute).not.toHaveBeenCalled();
 });
 
-it('rate limits every request of a JSON-RPC batch, and serializes the OpenAPI document once', async () => {
+it('runs a 2026-07-28 tool call only when its mcp-name header names the tool it calls', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    const params = { name: 'read_record', arguments: { recordId: 'r1' } };
+    const env = { LIMIT: { limit: limiter() } };
+    const [answered] = await messages(
+      await handle(modernRequest('tools/call', params, undefined, { 'mcp-name': 'read_record' }), env)
+    );
+    expect(answered.result).toMatchObject({ resultType: 'complete', structuredContent: { recordId: 'r1' } });
+    // A missing or different name is the client's mistake: refused before the call, and not reported.
+    for (const headers of [{}, { 'mcp-name': 'import_records' }] as Record<string, string>[]) {
+      expect((await handle(modernRequest('tools/call', params, undefined, headers), env)).status).toBe(400);
+    }
+    expect(log).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+it('observes calls and refusals by operation and failure code, never by their arguments', async () => {
+  const execution = vi.fn(async (_event: ExecutionObservation) => undefined);
+  const admission = vi.fn(async (_event: AdmissionObservation) => undefined);
+  const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const tasks: Promise<unknown>[] = [];
+  const background = {
+    waitUntil: (task: Promise<unknown>) => {
+      tasks.push(task);
+    },
+  };
+  /** The service, observed, for a token with these scopes. */
+  const observed = (scope: string) =>
+    createHttpHandler(
+      { ...manifest, telemetry: { observers: [{ execution, admission }] } },
+      { transports: [mcp()], verify: async () => ({ ...claims, scope }) }
+    );
+  const everything = observed(claims.scope);
+  const reader = observed('protocol:records:read protocol:mcp:use');
+  const send = async (service: typeof handle, body: unknown, admitted = Number.POSITIVE_INFINITY) =>
+    messages(await service(legacyRequest(body), { LIMIT: { limit: limiter(admitted) } }, background));
+  try {
+    // A call that runs, its argument a patient's name.
+    await send(everything, toolCall(1, 'read_record', { recordId: 'Patient Jane Doe' }));
+    // A tool the reader's scopes hide, a tool that does not exist, and a call its operation's limit refuses.
+    await send(reader, toolCall(2, 'import_records', { csv: 'Patient Jane Doe' }));
+    await send(reader, toolCall(3, 'erase_records', { recordId: 'Patient Jane Doe' }));
+    await send(everything, toolCall(4, 'read_record', { recordId: 'x'.repeat(40_000) }));
+    // A batch over the caller's limit.
+    await send(
+      everything,
+      [
+        toolCall(5, 'read_record', { recordId: 'Patient Jane Doe' }),
+        toolCall(6, 'read_record', { recordId: 'r6' }),
+      ],
+      1
+    );
+    await Promise.all(tasks);
+    expect(execution.mock.calls.map(([event]) => event)).toMatchObject([
+      { operation: 'readRecord', surface: 'mcp', outcome: 'success', errorCode: null },
+    ]);
+    expect(
+      admission.mock.calls.map(([event]) => [event.operation, event.errorCode, event.surface])
+    ).toStrictEqual([
+      ['importRecords', 'FORBIDDEN', 'mcp'],
+      [null, 'NOT_FOUND', 'mcp'],
+      ['readRecord', 'REQUEST_TOO_LARGE', 'mcp'],
+      [null, 'RATE_LIMITED', 'mcp'],
+    ]);
+    expect(JSON.stringify([execution.mock.calls, admission.mock.calls, warned.mock.calls])).not.toContain(
+      'Jane Doe'
+    );
+  } finally {
+    warned.mockRestore();
+  }
+});
+
+it('serializes the OpenAPI document once, however many requests and surfaces read it', async () => {
   const fresh = createHttpHandler(manifest, { transports: [mcp()], verify: async () => claims });
   vi.mocked(toYaml).mockClear();
-  // Admission and the second read pass; the third read is refused, however cheap it would be.
-  const limit = limiter(2);
-  const reads = [1, 2, 3].map((id) => ({
+  const reads = [1, 2].map((id) => ({
     jsonrpc: '2.0',
     id,
     method: 'resources/read',
     params: { uri: 'https://example.test/openapi.yaml' },
   }));
-  const answers = await messages(await fresh(legacyRequest(reads), { LIMIT: { limit } }));
-  expect(limit).toHaveBeenCalledTimes(3);
-  const read = answers.filter((answer) => answer.result).map((answer) => answer.result.contents[0].text);
-  expect(read).toHaveLength(2);
-  expect(answers.filter((answer) => answer.error).map((answer) => answer.error)).toMatchObject([
-    { code: -32_000, data: { code: 'RATE_LIMITED', retryable: true } },
-  ]);
+  const answers = await messages(await fresh(legacyRequest(reads), { LIMIT: { limit: limiter() } }));
+  const read = answers.map((answer) => answer.result.contents[0].text);
   // HTTP serves the same text: one serialization answers every read.
   const served = await (
-    await fresh(new Request('https://example.test/openapi.yaml'), { LIMIT: { limit } })
+    await fresh(new Request('https://example.test/openapi.yaml'), { LIMIT: { limit: limiter() } })
   ).text();
   expect(read).toStrictEqual([served, served]);
   expect(toYaml).toHaveBeenCalledOnce();
@@ -280,7 +362,25 @@ it("reports only the server's own failures, and never sends their text to the cl
     });
     expect(refused.status).toBe(400);
     expect(log).not.toHaveBeenCalled();
-    // A rate limit binding that fails at the batch's second call, with a detail the client must not see.
+    // The server failing to write its own document answers a generic internal error, never its text.
+    const fresh = createHttpHandler(manifest, { transports: [mcp()], verify: async () => claims });
+    vi.mocked(toYaml).mockImplementationOnce(() => {
+      throw new Error('serializer failed at 10.0.0.7');
+    });
+    const [failed] = await messages(
+      await fresh(
+        legacyRequest({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'resources/read',
+          params: { uri: 'https://example.test/openapi.yaml' },
+        }),
+        { LIMIT: { limit: limiter() } }
+      )
+    );
+    expect(failed.error).toMatchObject({ code: ProtocolErrorCode.InternalError, message: 'Internal error' });
+    // A rate limit binding that fails while a batch is admitted fails the request, and nothing in it runs.
+    execute.mockClear();
     let checks = 0;
     const failing = vi.fn(async () => {
       checks += 1;
@@ -289,23 +389,21 @@ it("reports only the server's own failures, and never sends their text to the cl
       }
       return { success: true };
     });
-    const batch = ['r1', 'r2'].map((recordId, index) => ({
-      jsonrpc: '2.0',
-      id: index + 1,
-      method: 'tools/call',
-      params: { name: 'read_record', arguments: { recordId } },
-    }));
-    const answers = await messages(await handle(legacyRequest(batch), { LIMIT: { limit: failing } }));
-    expect(answers.find((answer) => answer.id === 1)?.result.structuredContent).toStrictEqual({
-      recordId: 'r1',
-    });
-    expect(answers.find((answer) => answer.id === 2)?.error).toMatchObject({
-      code: ProtocolErrorCode.InternalError,
-      message: 'Internal error',
-    });
-    expect(JSON.stringify(answers)).not.toContain('10.0.0.7');
+    const batch = [
+      toolCall(1, 'read_record', { recordId: 'r1' }),
+      toolCall(2, 'read_record', { recordId: 'r2' }),
+    ];
+    const offline = await handle(legacyRequest(batch), { LIMIT: { limit: failing } });
+    expect(offline.status).toBe(500);
+    const answered = await offline.text();
+    expect(JSON.parse(answered)).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    expect(execute).not.toHaveBeenCalled();
+    expect(`${JSON.stringify(failed)}${answered}`).not.toContain('10.0.0.7');
     const reports = log.mock.calls.map(([line]) => JSON.parse(String(line)));
-    expect(reports).toMatchObject([{ event: 'maximus.unexpected', surface: 'mcp' }]);
+    expect(reports).toMatchObject([
+      { event: 'maximus.unexpected', surface: 'mcp' },
+      { event: 'maximus.unexpected', surface: 'mcp' },
+    ]);
     expect(JSON.stringify(reports)).not.toContain('10.0.0.7');
   } finally {
     log.mockRestore();

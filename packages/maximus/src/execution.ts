@@ -61,11 +61,26 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       ...(background ? { background } : {}),
       ...(trustedAuthority ? { authority: trustedAuthority } : {}),
     };
+    /**
+     * A failure the call answers, from its context or its handler: one of the catalog and, when the operation
+     * declares its failures, a declared or standard one. Any other is the server's error.
+     */
+    const declared = (answered: Failure): Failure => {
+      const failure = manifest.errors.validate(answered);
+      if (
+        operation.failures &&
+        !STANDARD_CODES.has(failure.code) &&
+        !operation.failures.includes(failure.code)
+      ) {
+        throw new TypeError(`Undeclared failure ${failure.code}`);
+      }
+      return failure;
+    };
     const context = operation.pipeline
       ? await operation.pipeline.context(invocation as never)
       : await manifest.context(invocation);
     if (!context.ok) {
-      return err(manifest.errors.validate(context.error));
+      return err(declared(context.error));
     }
     const chain = operation.pipeline?.middleware ?? manifest.middleware ?? [];
     let latest = -1;
@@ -97,15 +112,7 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       throw new TypeError('Invalid operation result');
     }
     if (!result.ok) {
-      const failure = manifest.errors.validate(result.error);
-      if (
-        operation.failures &&
-        !STANDARD_CODES.has(failure.code) &&
-        !operation.failures.includes(failure.code)
-      ) {
-        throw new TypeError(`Undeclared failure ${failure.code}`);
-      }
-      return err(failure);
+      return err(declared(result.error));
     }
     const maxOutputBytes = operationOutputLimit(manifest, operation);
     if (isAttachmentSchema(operation.output)) {

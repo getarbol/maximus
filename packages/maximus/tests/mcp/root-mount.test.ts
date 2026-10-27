@@ -1,7 +1,9 @@
 /**
  * MCP mounted at the root of a dedicated host: real Streamable HTTP initialization, the 401 challenge
- * and its metadata, and the origin's tools behind the same all-of scope checks for listing and calls.
+ * and its metadata, and the origin's tools behind the same all-of scope and actor checks for listing and
+ * calls.
  */
+import { ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vite-plus/test';
 
 import { createHttpHandler, defineErrors, maximus, ok, t } from '../../src/index.ts';
@@ -39,12 +41,13 @@ function application() {
     .operation('hidden', { ...definition, mcp: { name: 'hidden_records', idempotent: true } }, execute)
     .build();
 }
-function handler(scopes = fullScopes) {
+/** The service as `subject` calls it with `scopes`: a person, or the approved client's machine. */
+function handler(scopes = fullScopes, subject = 'person') {
   return createHttpHandler(application(), {
     transports: [mcp({ path: '/' })],
     origins: ['https://mcp.example.test'],
     verify: async () => ({
-      sub: 'person',
+      sub: subject,
       azp: 'approved',
       org_id: 'org_1234567890abcdef',
       scope: scopes.join(' '),
@@ -124,4 +127,15 @@ it('serves every declared tool on the origin, with the same all-of checks for di
       .structuredContent
   ).toEqual({});
   expect(execute).toHaveBeenCalledTimes(1);
+});
+
+it('hides the tools only people may call from a machine, in listing and in calls', async () => {
+  execute.mockClear();
+  // The machine holds every scope the person does: only its actor kind keeps it out.
+  const machine = handler(fullScopes, 'approved@clients');
+  expect((await body(await machine(request('tools/list', {}), {}))).result.tools).toEqual([]);
+  expect(
+    (await body(await machine(request('tools/call', { name: 'read_records', arguments: {} }), {}))).error
+  ).toMatchObject({ code: ProtocolErrorCode.InvalidParams, message: 'Tool not found' });
+  expect(execute).not.toHaveBeenCalled();
 });
