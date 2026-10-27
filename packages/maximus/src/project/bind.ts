@@ -1,15 +1,21 @@
 /**
- * Binds file declarations to the application: a route takes its path and method from its filename and a tool
- * its name from its file. What a declaration leaves out is derived here, once: its operation name, effect,
- * scope, title and tool hints.
+ * Binds file declarations to the application: a route takes its path and method from its filename, a tool
+ * its name from its file, and `context.ts` prepares every call. What a route or tool leaves out is derived
+ * here, once: its operation name, effect, scope, title and tool hints.
  */
 import type { TSchema } from '@sinclair/typebox';
 
 import type { ApplicationBuilder, KnownOperationFields } from '../builder.ts';
 import type { ErrorCatalog } from '../errors.ts';
-import { Failed, isHandlerDeclaration, isToolDeclaration } from '../handler.ts';
-import type { HandlerDeclaration, HandlerOptions, ToolDeclaration, ToolOptions } from '../handler.ts';
-import type { Exposure, OperationDefinition, OperationHandler } from '../manifest.ts';
+import { Failed, isContextDeclaration, isHandlerDeclaration, isToolDeclaration } from '../handler.ts';
+import type {
+  ContextDeclaration,
+  HandlerDeclaration,
+  HandlerOptions,
+  ToolDeclaration,
+  ToolOptions,
+} from '../handler.ts';
+import type { Exposure, Invocation, OperationDefinition, OperationHandler } from '../manifest.ts';
 import { err, ok } from '../result.ts';
 
 /** A route's HTTP method. */
@@ -106,13 +112,12 @@ function routeResource(path: string): string | undefined {
 }
 
 /**
- * Runs a declaration's handler as an operation: its output answers a success and `fail(code)` the catalog's
- * failure. An unknown code, or data its code refuses, throws: the execution path, which checks the declared
- * failures and the output once for every operation, reports it as `INTERNAL_ERROR`.
+ * The `fail` a declaration receives: the catalog's failure for a code, with the data the code declares. An
+ * unknown code, or data its code refuses, throws, which the execution path reports as `INTERNAL_ERROR`.
  */
-function execute(errors: ErrorCatalog, handler: (args: never) => unknown) {
+function catalogFail(errors: ErrorCatalog) {
   const names = new Map(Object.entries(errors.definitions).map(([name, { code }]) => [code, name]));
-  const fail = (code: string, data?: unknown) => {
+  return (code: string, data?: unknown) => {
     const factory: unknown = Reflect.get(errors, names.get(code) ?? '');
     if (
       typeof factory !== 'object' ||
@@ -124,10 +129,38 @@ function execute(errors: ErrorCatalog, handler: (args: never) => unknown) {
     }
     return new Failed(factory.create(data));
   };
+}
+
+/**
+ * Runs a declaration's handler as an operation: its output answers a success and `fail(code)` the catalog's
+ * failure. The execution path checks the declared failures and the output once, as for every operation.
+ */
+function execute(errors: ErrorCatalog, handler: (args: never) => unknown) {
+  const fail = catalogFail(errors);
   return async (context: object, input: unknown) => {
     const answer = await (handler as (args: object) => unknown)({ ...context, input, fail });
     return Failed.is(answer) ? err(answer.failure) : ok(answer);
   };
+}
+
+/**
+ * Prepares every call's context with `context.ts`'s declaration, after admission: what it returns joins the
+ * context, and `fail(code)` answers the call. The base must not declare operations yet.
+ */
+export function bindContext<E, D extends object>(
+  base: ApplicationBuilder<E, Invocation<E>, Record<never, never>>,
+  declaration: ContextDeclaration<D, E>
+) {
+  if (!isContextDeclaration(declaration)) {
+    throw new TypeError("context.ts's default export must come from defineContext.");
+  }
+  const fail = catalogFail(base.definition.errors);
+  type Prepared = Parameters<typeof declaration.prepare>[0];
+  return base.derive(async (invocation) => {
+    // `fail` answers any catalog code, which `Fail` narrows to the registered ones in the declaration's type.
+    const answer = await declaration.prepare({ ...invocation, fail } as Prepared);
+    return Failed.is(answer) ? err(answer.failure) : ok(answer);
+  });
 }
 
 /**

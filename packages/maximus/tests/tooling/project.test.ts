@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import { prepareProject } from '../../src/tooling/internal/prepare-project.ts';
+import type { ProjectOptions } from '../../src/tooling/internal/prepare-project.ts';
 
 const directories: string[] = [];
 
@@ -232,4 +233,102 @@ test('a root errors module types failures, and the generated base checks the app
   rmSync(join(root, 'errors.mjs'));
   writeFileSync(join(root, 'errors.ts'), "import { app } from './.maximus/app.ts'; export default app;");
   expect(() => prepareProject(root)).toThrow('generated-module cycle');
+});
+
+/** What vite.config.ts states for a tasks service, as the Vite plugin passes it. */
+const configured: ProjectOptions = {
+  application: {
+    name: 'tasks',
+    namespace: 'tasks',
+    title: 'Tasks',
+    version: '1.0.0',
+    origin: 'https://tasks.example.test',
+    tokens: {
+      issuer: 'https://issuer.example.test/',
+      audience: 'https://tasks.example.test',
+      development: { binding: 'DEVELOPMENT_TOKEN' },
+    },
+    rpc: { callers: [] },
+  },
+  worker: { http: { basePath: '/api', healthPath: '/health' } },
+  env: {
+    production: { TASKS: { type: 'kv' } },
+    development: { TASKS: { type: 'kv' }, DEVELOPMENT_TOKEN: { type: 'secret' } },
+  },
+};
+
+/** A project with no maximus.config.ts and no src/ entries: vite.config.ts configures it. */
+function single(files: Record<string, string> = {}): string {
+  const root = project(files);
+  rmSync(join(root, 'src'), { recursive: true });
+  return root;
+}
+
+test('a project configured in vite.config.ts carries its configuration and infers Env from its bindings', () => {
+  const root = single({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  expect(prepareProject(root, 'development', configured)).toMatchObject({ layout: 'options' });
+  const generated = (name: string) => readFileSync(join(root, '.maximus', name), 'utf-8');
+  expect(generated('config.ts')).toContain(
+    `export const application = ${JSON.stringify(configured.application)} as const;`
+  );
+  expect(generated('config.ts')).toContain('export const worker: WorkerOptions<Env> = {"http":');
+  expect(generated('env.d.ts')).toContain(
+    `InferEnv<\n  { env: {"TASKS":{"type":"kv"}} } | { env: {"TASKS":{"type":"kv"},"DEVELOPMENT_TOKEN":{"type":"secret"}} }\n>`
+  );
+  expect(generated('env.d.ts')).toContain('interface Env extends Cloudflare.Env {}');
+  expect(generated('base.ts')).toContain(
+    'const configured = maximus<Env>({ ...application, errors: standardErrors });'
+  );
+  expect(generated('base.ts')).toContain('export const base = useProjectMiddleware(configured, middleware);');
+  expect(generated('register.d.ts')).toContain('    env: Env;');
+  expect(generated('worker.ts')).toContain("import { worker as options } from './config.ts';");
+  expect(generated('worker.ts')).toContain('WorkerRuntime<Env, typeof app.operations>');
+});
+
+test('errors.ts, auth.ts and context.ts complete the application vite.config.ts configures', () => {
+  const root = single({
+    'errors.ts': 'export default {};',
+    'auth.ts': 'throw new Error("must not execute"); export default {};',
+    'context.ts': 'export default {};',
+  });
+  prepareProject(root, 'production', configured);
+  const base = readFileSync(join(root, '.maximus/base.ts'), 'utf-8');
+  expect(base).toContain("import { bindContext, useProjectMiddleware } from '@arbol-ai/maximus/config';");
+  expect(base).toContain(
+    'const configured = maximus<Env>({ ...application, tokens: { ...application.tokens, ...auth }, errors });'
+  );
+  expect(base).toContain(
+    'export const base = useProjectMiddleware(bindContext(configured, context), middleware);'
+  );
+  writeFileSync(join(root, 'context.ts'), "import { base } from './.maximus/base.ts'; export default base;");
+  expect(() => prepareProject(root, 'production', configured)).toThrow('generated-module cycle');
+});
+
+test('the application is configured once, and code that completes it needs vite.config.ts', () => {
+  const both = single({ 'maximus.config.ts': 'export default {};' });
+  expect(() => prepareProject(both, 'production', configured)).toThrow(
+    'Configure the application once: in vite.config.ts or in maximus.config.ts, not both.'
+  );
+  const legacy = project({ 'src/application.ts': '', 'src/worker.ts': '' });
+  expect(() => prepareProject(legacy, 'production', configured)).toThrow('src/application.ts, not both');
+  for (const name of ['auth', 'context']) {
+    const unconfigured = project({ [`${name}.ts`]: 'export default {};' });
+    expect(() => prepareProject(unconfigured), name).toThrow(
+      `${name}.ts completes the application vite.config.ts configures`
+    );
+  }
+  expect(() => prepareProject(single())).toThrow(
+    'Configure the application in vite.config.ts with maximus()'
+  );
+});
+
+test("a cron module's literal schedule is reported for its trigger, and a computed one is not", () => {
+  const root = single({
+    'crons/daily.ts': "export const cron = '0 8 * * *'; export default () => {};",
+    'crons/hourly.ts': "const every = '0 * * * *'; export const cron = every; export default () => {};",
+  });
+  expect(prepareProject(root, 'production', configured).crons).toEqual([
+    { file: join(root, 'crons/daily.ts'), cron: '0 8 * * *' },
+    { file: join(root, 'crons/hourly.ts'), cron: undefined },
+  ]);
 });

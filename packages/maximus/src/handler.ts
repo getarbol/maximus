@@ -1,8 +1,9 @@
 /**
  * Declarations a project binds to its application: `defineHandler` for a route whose path and method come
- * from its filename, and `defineTool` for a tool only MCP serves, named by its file. Each is a plain value;
- * binding derives what it leaves out (its name, scope, effect and title) and runs it through the same
- * execution path as every other operation.
+ * from its filename, `defineTool` for a tool only MCP serves, named by its file, and `defineContext` and
+ * `defineAuth` for the context every handler receives and the tokens the application verifies itself. Each
+ * is a plain value; binding derives what a route or tool leaves out (its name, scope, effect and title) and
+ * runs it through the same execution path as every other operation.
  */
 import { KindGuard, Type } from '@sinclair/typebox';
 import type { Static, TObject, TProperties, TSchema } from '@sinclair/typebox';
@@ -13,19 +14,26 @@ import type { CreateArguments, ErrorDefinition, Failure, standardErrors } from '
 import type { Exposure, Invocation, OperationShape } from './manifest.ts';
 import type { StaticDecode } from './schema-types.ts';
 import type { STANDARD_FAILURES } from './standard-failures.ts';
+import type { TokenPolicy } from './tokens.ts';
 
 declare global {
   /**
    * What a project registers about its application, so every handler is typed without importing it:
-   * `base`, the builder its routes bind to, and `errors`, its error catalog. `maximus prepare` writes the
-   * registration in `.maximus/register.d.ts`; without one, handlers receive the bare invocation and fail
-   * with standard failures. Global, so it merges however the package's declarations are bundled.
+   * `base`, the builder its routes bind to, `errors`, its error catalog, and `env`, its Worker's bindings.
+   * `maximus prepare` writes the registration in `.maximus/register.d.ts`; without one, handlers receive
+   * the bare invocation and fail with standard failures. Global, so it merges however the package's
+   * declarations are bundled.
    */
   interface MaximusRegister {}
 }
 
-/** A registered member, or its fallback when the project registers none. */
-type Registered<K extends string, Fallback> = MaximusRegister extends Record<K, infer T> ? T : Fallback;
+/**
+ * A registered member, or its fallback when the project registers none. Only that member is read: the base
+ * depends on `context.ts`, whose types read the registered bindings.
+ */
+type Registered<K extends string, Fallback> = K extends keyof MaximusRegister ? MaximusRegister[K] : Fallback;
+/** The registered Worker's bindings. */
+type RegisteredEnv = Registered<'env', unknown>;
 /** The context every handler receives: what the registered base prepares. */
 type RegisteredContext =
   Registered<'base', never> extends ApplicationBuilder<infer _E, infer C, infer _O> ? C : Invocation<unknown>;
@@ -316,4 +324,54 @@ export function isHandlerDeclaration(value: unknown): boolean {
 /** Whether a module's default export came from `defineTool`. */
 export function isToolDeclaration(value: unknown): boolean {
   return typeof value === 'object' && value !== null && tools.has(value);
+}
+
+/** What preparing a call's context receives: the verified invocation and `fail`. */
+export type ContextArguments<E = RegisteredEnv> = Invocation<E> & {
+  /** Answers the call with a failure of the catalog instead of preparing its context. */
+  readonly fail: Fail<DomainCode | StandardCode>;
+};
+/** Every declaration `defineContext` returned. */
+const contexts = new WeakSet<object>();
+/** The context every handler receives, as `defineContext` declares it; `E` is the registered bindings. */
+export interface ContextDeclaration<D, E = RegisteredEnv> {
+  /** Prepares one call's context from its invocation. */
+  readonly prepare: (args: ContextArguments<E>) => D | Failed | Promise<D | Failed>;
+}
+
+/**
+ * Declares, as `context.ts`'s default export, what every handler receives besides the invocation: it runs
+ * once per call after admission and returns the values handlers destructure, such as a store scoped to
+ * `principal.organizationId`, or `fail(code)` to answer the call instead.
+ */
+export function defineContext<D extends object>(
+  prepare: (args: ContextArguments) => D | Failed | Promise<D | Failed>
+): ContextDeclaration<D> {
+  const declaration = Object.freeze({ prepare });
+  contexts.add(declaration);
+  return declaration;
+}
+/**
+ * The context a `context.ts` declaration prepares: the invocation and its values. Operation middleware is
+ * typed with it, `defineOperationMiddleware<PreparedContext<typeof context>>`, importing the type alone.
+ */
+export type PreparedContext<T> =
+  T extends ContextDeclaration<infer D, infer E> ? Invocation<E> & Exclude<D, Failed> : never;
+/** Whether `context.ts`'s default export came from `defineContext`. */
+export function isContextDeclaration(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && contexts.has(value);
+}
+
+/** The token fields an application states in code, as `auth.ts` declares them; the rest are configuration. */
+export type AuthOptions<E = RegisteredEnv> = Pick<
+  TokenPolicy<E>,
+  'resolve' | 'resourceMetadataUrl' | 'resources'
+>;
+/**
+ * Declares, as `auth.ts`'s default export, how the application verifies tokens itself: `resolve`, for a
+ * token its configuration's issuer does not issue, and its OAuth resources. Verify every token
+ * cryptographically and parse its principal strictly; the issuer, audience and scheme stay in configuration.
+ */
+export function defineAuth<const A extends AuthOptions>(auth: A): A {
+  return Object.freeze(auth);
 }

@@ -118,9 +118,9 @@ a consumer must do, if anything. Keep one logical change per commit.
 
 Maintainers release by merging a version change to `main`: the **Publish Maximus** workflow runs on
 every push to `main` and publishes when npm does not have the package version yet (it can also be
-started by hand). Maximus is one package,
-`@arbol-ai/maximus` on npm; a breaking change moves the major version. It is published from its
-packed tarball with npm provenance, never with `workspace:` or `file:` dependencies, and published
+started by hand). Maximus is `@arbol-ai/maximus` and its Vite plugin `@arbol-ai/vite-plugin` on npm,
+released together at one version; a breaking change moves the major version. Each is published from
+its packed tarball with npm provenance, never with `workspace:` or `file:` dependencies, and published
 versions never change. Installing from the registry and verifying a real deployment are separate
 gates after publication.
 

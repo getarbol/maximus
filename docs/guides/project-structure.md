@@ -4,16 +4,19 @@ Maximus is API first: each operation owns one contract, scope, effect and Result
 HTTP/OpenAPI, MCP and native Worker RPC. The project layout adds filesystem discovery to that pipeline.
 
 `maximus init my-service --name my-service --layout project` creates a Vite+ project with no `src/`
-requirement. Existing service layouts and default-export route factories remain supported.
+requirement and one configuration file, `vite.config.ts`. Existing service layouts, `maximus.config.ts`
+and default-export route factories remain supported.
 
 ```text
-maximus.config.ts          Application, authentication and Worker transport policy
+vite.config.ts             The only configuration: maximus() states the application and its Worker
 errors.ts                  Optional error catalog; every handler's fail is typed by its codes
+context.ts                 Optional: what every handler receives, prepared once per call
+auth.ts                    Optional: tokens the application verifies itself
 routes/v1/greeting.get.ts   One defineHandler per route and method: GET /api/v1/greeting
 mcp/tools/summarize.ts     Optional MCP-only tools, named by their file
 middleware/10-response.ts   Ordered HTTP request middleware
 pages/index.ts             Optional public response at /
-crons/daily.ts             Optional scheduled handler and cron expression
+crons/daily.ts             Optional scheduled handler and its literal cron expression
 queues/notifications.ts    Optional physical queue consumer
 email/help@example.com.ts  Optional exact-recipient email handler
 durable-objects/session.ts Optional class, exported as Session
@@ -21,16 +24,83 @@ db/                       Application-owned schemas and migrations
 src/                      Optional shared domain code; no framework entrypoints required
 public/                   Assets, when explicitly configured
 tests/                    Explicitly run tests; never discovered as routes
-.maximus/                 Generated composition, ignored by Git
-cloudflare.config.ts      Infrastructure; names .maximus/entry.ts as its entrypoint
-vite.config.ts            maximusProject() before cloudflare()
+.maximus/                 Generated composition and types, ignored by Git
 ```
 
-## Configuration and routes
+## Configuration
 
-`maximus.config.ts` is a runtime-neutral module. Configure the application once:
+`maximus()` from `@arbol-ai/vite-plugin` is the whole configuration: what the application is, and the
+Worker that serves it, with Cloudflare's own names for the Worker's settings.
 
 ```ts
+// vite.config.ts
+import { maximus } from '@arbol-ai/vite-plugin';
+import { bindings } from 'cf/config';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://tasks.example.com',
+      tokens: { issuer: 'https://identity.example.com/' },
+      compatibilityDate: '2026-10-26',
+      env: { TASKS: bindings.kv() },
+    }),
+  ],
+});
+```
+
+| Option                                        | Default                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `name`                                        | The package's name without its scope: the Worker, the MCP server                                                      |
+| `namespace`, `title`                          | The name                                                                                                              |
+| `version`                                     | The package's version                                                                                                 |
+| `origin`                                      | Required: the public HTTPS origin                                                                                     |
+| `tokens`                                      | `audience` is the origin; `development` is `DEVELOPMENT_TOKEN`, `false` for none                                      |
+| `rpc`, `http`                                 | No RPC callers; the API under `/api`, the health check at `/health`                                                   |
+| `maxBodyBytes`, `maxOutputBytes`, `rateLimit` | The application's defaults                                                                                            |
+| `compatibilityDate`                           | Required                                                                                                              |
+| `env`                                         | The bindings, from `cf/config`'s `bindings`                                                                           |
+| Any other Worker setting                      | As Cloudflare names it: `compatibilityFlags`, `triggers`, `observability`, `placement`, `limits`, `domains`, `assets` |
+
+Maximus owns the Worker's entry (`.maximus/entry.ts`), always adds `nodejs_compat`, enables logs and
+traces unless `observability` says otherwise, and declares the development token's binding in the
+development build alone, so no deployed Worker carries it. A cron module's literal `export const cron`
+becomes its trigger. `Env` is generated in `.maximus/env.d.ts` from `env`, by Cloudflare's own inference,
+so a binding the code uses but the configuration does not declare is a type error, not a 500 in
+production. Queue consumers, email routing and Durable Object migrations stay explicit: declare them in
+`triggers` and the Worker's other settings. `maximus()` also brings the Maximus lint and format presets
+unless `vite.config.ts` sets `lint` or `fmt` itself.
+
+The configuration is data. The code that completes the application lives in optional root modules, each
+a default export: `errors.ts` (`defineErrors`), `context.ts` (`defineContext`) and `auth.ts`
+(`defineAuth`, with `resolve` for tokens the configured issuer does not issue).
+
+```ts
+// context.ts: what every handler receives besides its input
+import { defineContext } from '@arbol-ai/maximus';
+
+import { taskStore } from './src/tasks.ts';
+
+export default defineContext(({ env, principal }) => ({
+  tasks: taskStore(env.TASKS, principal.organizationId),
+}));
+```
+
+The context runs once per call, after admission, on HTTP, MCP and RPC alike; it may return
+`fail(code)` to answer the call instead. These modules never import generated modules or routes.
+`maximus prepare` loads `vite.config.ts` with Vite, as every `vp` command does, and prepares the project
+through its plugin; application modules are only parsed, never executed on the build host.
+
+### With maximus.config.ts
+
+The 7.4 layout keeps working: `maximus.config.ts` configures the application and `cloudflare.config.ts`
+the Worker, with `maximusProject()` and `cloudflare()` in `vite.config.ts`. `maximus()` without an `origin`
+also works with `maximus.config.ts`, replacing only `cloudflare.config.ts`. Configure the application in
+one place: `maximus()` refuses `cloudflare.config.ts`, and an `origin` refuses `maximus.config.ts`.
+
+```ts
+// maximus.config.ts (7.4)
 import { defineErrors } from '@arbol-ai/maximus';
 import { defineConfig } from '@arbol-ai/maximus/config';
 
@@ -47,12 +117,13 @@ export default defineConfig<Env>({
 });
 ```
 
-For derived context, pass `{ application: maximus<Env>({...}).derive(...), worker: {...} }` instead.
-The builder must not already declare operations. Do not import generated modules or route modules
-into configuration: generated composition imports configuration, and the reverse would create a cycle.
-Cloudflare resource bindings, triggers, migrations and secrets stay in `cloudflare.config.ts`.
-The starter defines `#maximus/*` package imports for the generated modules, so route imports do not
-change with directory depth. Relative imports remain supported.
+There, pass `{ application: maximus<Env>({...}).derive(...), worker: {...} }` for derived context, and do
+not import generated modules or route modules into configuration. Name the Worker's entry by path in
+`cloudflare.config.ts` (`entrypoint: './.maximus/entry.ts'`): importing it makes the Worker's types depend
+on the `Env` inferred from that same file. The starter's `#maximus/*` package imports keep 7.4 route
+imports independent of directory depth.
+
+## Routes
 
 A route is a file whose name gives its path and method, and whose default export is a `defineHandler`
 declaration. `input` and `output` take a schema or the fields of a strict object; the handler receives one
@@ -189,16 +260,19 @@ Configuration's `worker.http.middleware` runs before discovered request middlewa
 For policy that runs after authentication, scope checks and context preparation on HTTP, MCP and RPC:
 
 ```ts
+import type { PreparedContext } from '@arbol-ai/maximus';
 import { defineOperationMiddleware } from '@arbol-ai/maximus/config';
-import type { ProjectContext } from '@arbol-ai/maximus/config';
 
-import type config from '../maximus.config';
+import type context from '../context.ts';
 
-export default defineOperationMiddleware<ProjectContext<typeof config>>(async (context, proceed) => {
-  // context.principal is verified; scope every tenant operation by its organizationId.
+export default defineOperationMiddleware<PreparedContext<typeof context>>(async ({ principal }, proceed) => {
+  // principal is verified; scope every tenant operation by its organizationId.
   return proceed();
 });
 ```
+
+Without `context.ts`, type it `Invocation<Env>`; with `maximus.config.ts`, `ProjectContext<typeof config>`
+from `@arbol-ai/maximus/config`, importing the configuration's type.
 
 Bare middleware functions from the 7.3 layout keep their operation phase. Middleware may import
 configuration types, but must not import the generated base or routes at runtime. Configured base
@@ -252,12 +326,12 @@ background work. Use the native background context for independent work instead.
 
 ## Reconciliation and compatibility
 
-`maximus prepare` generates `.maximus/base.ts`, `routes.ts`, `register.d.ts`, `app.ts`, `middleware.ts`, `worker.ts` and the stable `entry.ts`.
+`maximus prepare` generates `.maximus/base.ts`, `routes.ts`, `register.d.ts`, `app.ts`, `middleware.ts`, `worker.ts` and the stable `entry.ts`, and, for a project configured in `vite.config.ts`, `config.ts` and `env.d.ts`.
 The generated Worker exports its default handler, typed `Service` RPC entry and discovered Durable
 Objects. No application module or configuration executes on the build host: Oxc reads route exports,
 and generated code uses literal imports and chained builder calls without widening operation types.
 
-`maximusProject()` runs preparation during Vite configuration and every build. Development reconciles
+`maximus()` (or `maximusProject()` in the 7.4 layout) runs preparation during Vite configuration and every build. Development reconciles
 added, removed and changed files, including changes to method exports inside a file. Build watch
 tracks discovered modules and existing convention directories; restart it after creating a convention
 directory that was absent when watch started.
@@ -267,7 +341,7 @@ Deleting a route or method removes it from the generated composition. This recon
 not cloud infrastructure; builds never provision or delete stores, run SQL or change credentials.
 
 Use `maximus prepare --mode development` for development editor types; the default is production.
-`bun run verify` runs preparation, Cloudflare types, TypeScript, lint/format and Vite+ build. A standalone
+`bun run verify` runs preparation, TypeScript, lint/format and Vite+ build. A standalone
 `vp build` reconciles and bundles; TypeScript and lint remain the explicit `verify` checks.
 
 Without root configuration, Maximus continues to use `src/application.ts`'s `base` and
@@ -284,7 +358,9 @@ Projects with multiple root configuration files are rejected rather than picking
 | `.maximus/middleware.ts` | Import discovered modules and separate request/operation phases            |
 | `.maximus/base.ts`       | Attach operation policy to the configured base; preserve its derived types |
 | `.maximus/routes.ts`     | Export the project's typed `defineRoute` helper, for 7.4 route modules     |
-| `.maximus/register.d.ts` | Register the base and error catalog that type every handler                |
+| `.maximus/register.d.ts` | Register the base, error catalog and bindings that type every handler      |
+| `.maximus/config.ts`     | The configuration `vite.config.ts` states, as data the Worker carries      |
+| `.maximus/env.d.ts`      | `Env`, inferred from the bindings `vite.config.ts` declares                |
 | `.maximus/app.ts`        | Bind every discovered route and tool and build the typed manifest          |
 | `.maximus/worker.ts`     | Compose HTTP/MCP/RPC, pages, events and Durable Object exports             |
 | `.maximus/entry.ts`      | Stable Cloudflare entry that re-exports the generated Worker               |
@@ -320,7 +396,7 @@ tests/
 ```
 
 The project starter does not install an application test suite or invent a passing test command.
-Its `bun run verify` performs preparation, Cloudflare type generation, TypeScript, lint/format and
+Its `bun run verify` performs preparation, TypeScript, lint/format and
 the production build. Its automatic deployment workflow runs those checks. Tests require a separate
 human request and configured runner; a successful build is not evidence that tests passed.
 
@@ -379,7 +455,8 @@ const daily: ExportedHandlerScheduledHandler<Env> = async (controller, env, cont
 export default daily;
 ```
 
-Declare the matching cron trigger in `cloudflare.config.ts`; discovery never provisions it.
+In a project configured in `vite.config.ts`, the literal `cron` becomes the Worker's trigger; a computed one
+is refused. With `cloudflare.config.ts`, declare the matching trigger there.
 Modules sharing a schedule all run and their failures propagate. Unmatched schedules use an explicit
 `options.handlers.scheduled` fallback or fail.
 
@@ -395,7 +472,8 @@ Email Routing configuration remains separate. Queue and email modules must be to
 
 `durable-objects/session-store.ts` defaults to a class extending Cloudflare's `DurableObject<Env>`.
 The generated Worker exports it as `SessionStore`, wrapped in the existing diagnostics adapter.
-Declare bindings and migrations with that exact class name in `cloudflare.config.ts`. Never rename
+Declare its export, binding and migrations with that exact class name in the Worker's settings (`exports`
+and `env` in `maximus()`, or `cloudflare.config.ts`). Never rename
 a deployed file/class casually: Cloudflare storage identity and migrations belong to the application.
 `Service` is reserved for the generated native RPC entrypoint.
 

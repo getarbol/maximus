@@ -8,6 +8,23 @@ dates of the release commits.
 
 ## Unreleased
 
+- `@arbol-ai/vite-plugin` makes `vite.config.ts` a project's only configuration: `maximus()` states the
+  application (origin, token issuer, RPC callers, limits) and its Worker with Cloudflare's names
+  (compatibility date, bindings in `env`, triggers and every other setting), with no `maximus.config.ts`
+  or `cloudflare.config.ts`. It prepares the project on every build and source change, generates `Env` in
+  `.maximus/env.d.ts` from the bindings by Cloudflare's own inference, declares the development token in
+  development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
+  trigger and brings the lint and format presets a configuration lacks. It is released with
+  `@arbol-ai/maximus` at the same version.
+- `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
+  may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot. With
+  `errors.ts`, they complete an application `vite.config.ts` configures. `PreparedContext` types
+  operation middleware with what `context.ts` prepares.
+- `maximus prepare` prepares a project configured in `vite.config.ts` through its plugin, which Vite loads
+  as every `vp` command does.
+- The project starter is `vite.config.ts`, routes, a page and a middleware: its token policy names an
+  OAuth issuer, which MCP clients discover, and its types come from `@cloudflare/workers-types` and the
+  generated `Env`.
 - `defineHandler` declares a route as a plain value: `input` and `output` take schemas or the fields of
   strict objects, and the handler receives one object (`{ input, principal, env, fail, …context }`) and
   returns its output or `fail(code)`, typed by the declared failures and their data. Binding derives

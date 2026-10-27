@@ -55,7 +55,9 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
         templateName === 'service' &&
         (relative(template, source).startsWith('tests/') ||
           relative(template, source).startsWith('src/') ||
-          file.name === 'vitest.config.ts.template')
+          file.name === 'vitest.config.ts.template' ||
+          // A project's vite.config.ts configures its Worker.
+          file.name === 'cloudflare.config.ts.template')
       ) {
         continue;
       }
@@ -68,8 +70,8 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
       writeFileSync(target, text, { flag: templateName === 'project' ? 'w' : 'wx' });
     }
   }
-  // The development token `cf dev` accepts from localhost, readable only by its owner. The starter's
-  // .gitignore keeps `.dev.vars` out of Git, and its cloudflare.config.ts declares it for `cf dev` alone.
+  // The development token `vp dev` accepts from localhost, readable only by its owner. The starter's
+  // .gitignore keeps `.dev.vars` out of Git, and only its development build declares the binding.
   writeFileSync(resolve(root, '.dev.vars'), `DEVELOPMENT_TOKEN=${randomBytes(32).toString('hex')}\n`, {
     flag: 'wx',
     mode: 0o600,
@@ -84,7 +86,7 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
     layout,
     next:
       layout === 'project'
-        ? 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in maximus.config.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.'
+        ? 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in vite.config.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.'
         : 'Run bun install and bun run dev, and call it with the DEVELOPMENT_TOKEN in .dev.vars. Before the first deployment, set origin, audience and issuer in src/app.ts, run bun run verify, sign in with cf auth login and run bun run deploy.',
   };
 }

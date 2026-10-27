@@ -3,7 +3,8 @@ name: __PROJECT_NAME__-development
 description: Extend the __PROJECT_NAME__ Maximus backend using its optional file conventions.
 ---
 
-Read CLAUDE.md and the installed Maximus skill. Configure the application in maximus.config.ts.
+Read CLAUDE.md and the installed Maximus skill. Configure the application and its Worker with maximus() in
+vite.config.ts; errors.ts, context.ts and auth.ts complete it in code.
 Add one file per route and method to routes/v1/ (tasks/index.get.ts, tasks/[taskId].delete.ts), each
 default-exporting defineHandler from @arbol-ai/maximus with strict input/output schemas; declare a scope or
 effect only where the method's default is wrong, and MCP/RPC exposure explicitly. MCP-only tools are

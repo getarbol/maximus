@@ -22,7 +22,7 @@ const USAGE = [
   'Usage: maximus init <new-directory> --name <name> [--layout service|project]',
   '       maximus prepare [directory] [--mode production|development]',
   'Creates a Vite+ service. Use its dev, build, verify and deploy package scripts.',
-  'Project layout generates entries from maximus.config.ts, routes/ and middleware/.',
+  'Project layout generates entries from vite.config.ts or maximus.config.ts, routes/, mcp/ and middleware/.',
 ].join('\n');
 if (values.help) {
   console.info(USAGE);
@@ -32,8 +32,8 @@ if (values.help) {
 /** Runs the command the arguments name. */
 async function run(): Promise<void> {
   if (command === 'prepare') {
-    const { prepareProject } = await import('./internal/prepare-project.ts');
-    console.info(JSON.stringify(prepareProject(target ?? '.', values.mode)));
+    const { prepareConfiguredProject } = await import('./internal/prepare-configured.ts');
+    console.info(JSON.stringify(await prepareConfiguredProject(target ?? '.', values.mode)));
     return;
   }
   if (command !== 'init') {

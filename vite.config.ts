@@ -3,7 +3,7 @@ import { defineConfig } from 'vite-plus';
 import fmt from './packages/maximus/config/oxfmt.mjs';
 import preset from './packages/maximus/config/oxlint.mjs';
 
-/** The package source whose tests must keep at least this share of lines, branches, functions and statements. */
+/** The packages' source, whose tests must keep at least this share of lines, branches, functions and statements. */
 const MINIMUM_COVERAGE = 90;
 
 export default defineConfig({
@@ -14,7 +14,7 @@ export default defineConfig({
     overrides: [
       {
         // The CLIs run in Node: its fetch honors redirect: 'error', and they read their own environment.
-        files: ['packages/maximus/src/tooling/**'],
+        files: ['packages/maximus/src/tooling/**', 'packages/vite-plugin/src/**'],
         rules: { 'maximus/no-fetch-redirect-error': 'off', 'no-restricted-properties': 'off' },
       },
     ],
@@ -27,8 +27,8 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['packages/maximus/tests/**/*.test.ts'],
-          exclude: ['packages/maximus/tests/**/*.integration.test.ts'],
+          include: ['packages/*/tests/**/*.test.ts'],
+          exclude: ['packages/*/tests/**/*.integration.test.ts'],
         },
       },
       {
@@ -48,7 +48,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      include: ['packages/maximus/src/**/*.ts'],
+      include: ['packages/*/src/**/*.ts'],
       thresholds: {
         lines: MINIMUM_COVERAGE,
         branches: MINIMUM_COVERAGE,

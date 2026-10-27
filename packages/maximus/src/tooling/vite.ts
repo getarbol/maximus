@@ -5,15 +5,35 @@ import { relative, resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
 import { prepareProject } from './internal/prepare-project.ts';
+import type { ProjectOptions } from './internal/prepare-project.ts';
 import { PROJECT_DIRECTORIES } from './internal/project-files.ts';
 
-/** Prepare before every build and before Vite invalidates source modules during development. */
-export function maximusProject(): Plugin {
+export type { ProjectOptions } from './internal/prepare-project.ts';
+
+/**
+ * What a plugin that configures the project in `vite.config.ts` derives for a root and a Vite mode; nothing
+ * when `maximus.config.ts` or the 7.3 `src/` entries configure it.
+ */
+export type ProjectOptionsSource = (root: string, mode: string) => ProjectOptions | undefined;
+/** What the plugin offers the `maximus prepare` command, which loads `vite.config.ts` to find it. */
+export interface ProjectApi {
+  /** Prepares the project at `root` for a mode, as a build would. */
+  prepare: (root: string, mode: string) => ReturnType<typeof prepareProject>;
+}
+
+/**
+ * Prepare before every build and before Vite invalidates source modules during development. `project`
+ * derives what `vite.config.ts` configures, for a project with neither `maximus.config.ts` nor `src/`
+ * entries.
+ */
+export function maximusProject(project?: ProjectOptionsSource): Plugin<ProjectApi> & { api: ProjectApi } {
   let root = process.cwd();
   let mode = 'production';
   let previous: ReturnType<typeof prepareProject> | undefined;
+  const prepare = (directory: string, preparing: string) =>
+    prepareProject(directory, preparing, project?.(resolve(directory), preparing));
   const reconcile = () => {
-    const current = prepareProject(root, mode);
+    const current = prepare(root, mode);
     const restart =
       previous !== undefined &&
       (previous.config !== current.config ||
@@ -25,13 +45,15 @@ export function maximusProject(): Plugin {
     const path = relative(root, file).split(/[\\/]/);
     return (
       PROJECT_DIRECTORIES.some((name) => name === path[0]) ||
-      (path.length === 1 && /^(?:maximus\.config|errors)\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
+      (path.length === 1 &&
+        /^(?:maximus\.config|errors|auth|context)\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
       (path[0] === 'src' && ['application.ts', 'worker.ts'].includes(path[1] ?? ''))
     );
   };
   return {
     name: 'maximus-project',
     enforce: 'pre',
+    api: { prepare },
     config(config, environment) {
       root = resolve(config.root ?? root);
       ({ mode } = environment);

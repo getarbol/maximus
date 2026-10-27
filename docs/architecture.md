@@ -24,7 +24,8 @@ maintained RFC validators, so the framework runs in workerd without `eval`.
 ## One package, entries in one direction
 
 Maximus is one package, `@arbol-ai/maximus`, so a service adds one dependency and every part moves
-on one version. Separation lives in its entries instead:
+on one version; a Vite+ project adds its build plugin, `@arbol-ai/vite-plugin`, released at that same
+version. Separation lives in the package's entries instead:
 
 ```mermaid
 flowchart LR
@@ -154,7 +155,8 @@ before adding a capability, and keep transport validation and capability negotia
 
 ## Versioning
 
-Maximus is one package with one version (4.0 merged the former `@arbol-ai/maximus-*` packages);
+Maximus is one package with one version (4.0 merged the former `@arbol-ai/maximus-*` packages), and its
+Vite plugin shares that version;
 breaking changes move the major version (3.0.0 renamed every wire identifier). Published
 releases are immutable. Deployed Durable Object class names, migration tags and durable keys are
 part of a service's contract: reorganizing code must not reset stored state. See

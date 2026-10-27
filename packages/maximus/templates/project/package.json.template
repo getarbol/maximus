@@ -10,7 +10,7 @@
     "prepare": "maximus prepare",
     "prepare:project": "maximus prepare",
     "dev": "vp dev",
-    "typecheck": "maximus prepare && cf workers types && tsc",
+    "typecheck": "maximus prepare && tsc",
     "check": "vp check",
     "fix": "vp check --fix",
     "build": "vp build",
@@ -21,7 +21,8 @@
     "@arbol-ai/maximus": "__MAXIMUS_VERSION__"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "2.0.0-beta.v.3",
+    "@arbol-ai/vite-plugin": "__MAXIMUS_VERSION__",
+    "@cloudflare/workers-types": "5.20261018.1",
     "@types/node": "26.6.5",
     "cf": "1.0.0-beta.22",
     "oxfmt": "0.74.0",

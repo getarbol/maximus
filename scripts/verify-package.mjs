@@ -1,5 +1,5 @@
 /**
- * The release checks of the packed package: every export and the bin are present, the size cap, no private
+ * The release checks of the packed packages: every export and the bin are present, the size cap, no private
  * files or workspace protocols, publint's rules, a clean install without optional peers, declarations that
  * type-check without the DOM library, Node and browser entries, Postgres with pg, and `maximus init`
  * service and project starters that pass their own `verify` (types, lint and format, Vite+ build) on the
@@ -267,10 +267,50 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
     ],
     { stdio: 'pipe' }
   );
+  // Its single vite.config.ts needs the Vite plugin, released at the same version and packed the same way.
+  const plugin = resolve('packages/vite-plugin');
+  const pluginManifest = JSON.parse(readFileSync(join(plugin, 'package.json'), 'utf-8'));
+  assert.equal(pluginManifest.version, manifest.version, 'The packages share one version');
+  assert.equal(pluginManifest.peerDependencies['@arbol-ai/maximus'], manifest.version);
+  execFileSync('bun', ['pm', 'pack', '--destination', directory], { cwd: plugin, stdio: 'pipe' });
+  const pluginArchive = join(directory, `arbol-ai-vite-plugin-${pluginManifest.version}.tgz`);
+  const packedPlugin = JSON.parse(
+    execFileSync('tar', ['-xOzf', pluginArchive, 'package/package.json'], { encoding: 'utf-8' })
+  );
+  for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const [name, range] of Object.entries(packedPlugin[section] ?? {})) {
+      assert(!/^(?:workspace|file|link):/.test(range), `The plugin's ${section}.${name} is ${range}`);
+    }
+  }
+  const pluginBytes = readFileSync(pluginArchive);
+  const pluginLinted = await publint({
+    pack: {
+      tarball: pluginBytes.buffer.slice(
+        pluginBytes.byteOffset,
+        pluginBytes.byteOffset + pluginBytes.byteLength
+      ),
+    },
+    strict: true,
+  });
+  assert.deepEqual(
+    pluginLinted.messages.map((message) => formatMessage(message, pluginLinted.pkg, { color: false })),
+    [],
+    'publint of the plugin'
+  );
   const projectPath = join(project, 'package.json');
   const projectManifest = JSON.parse(readFileSync(projectPath, 'utf-8'));
   assert.equal(projectManifest.dependencies['@arbol-ai/maximus'], manifest.version);
+  assert.equal(projectManifest.devDependencies['@arbol-ai/vite-plugin'], manifest.version);
+  assert(
+    !existsSync(join(project, 'cloudflare.config.ts')),
+    'The project starter has a cloudflare.config.ts'
+  );
+  assert(!existsSync(join(project, 'maximus.config.ts')), 'The project starter has a maximus.config.ts');
   projectManifest.dependencies['@arbol-ai/maximus'] = `file:${archive}`;
+  projectManifest.devDependencies['@arbol-ai/vite-plugin'] = `file:${pluginArchive}`;
+  // The plugin's own dependency on Maximus resolves to this release, not to one from the registry.
+  // First, as the formatter sorts the overrides.
+  projectManifest.overrides = { '@arbol-ai/maximus': `file:${archive}`, ...projectManifest.overrides };
   writeFileSync(projectPath, `${JSON.stringify(projectManifest, null, 2)}\n`);
   execFileSync('bun', ['install', '--ignore-scripts'], { cwd: project, stdio: 'pipe' });
   execFileSync('bun', ['run', 'verify'], { cwd: project, stdio: 'inherit' });
@@ -288,7 +328,7 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
     'A deployed project build declares the development token'
   );
   console.info(
-    `Packed package, its entries and both starters passed (${manifest.name}@${manifest.version}).`
+    `Packed packages, their entries and both starters passed (${manifest.name} and ${pluginManifest.name}@${manifest.version}).`
   );
 } finally {
   rmSync(directory, { recursive: true, force: true });

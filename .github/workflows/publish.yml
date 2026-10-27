@@ -1,5 +1,5 @@
 name: Publish Maximus
-# Every push to main publishes the package version when npm does not have it yet; a manual run does the same.
+# Every push to main publishes the packages' version when npm does not have it yet; a manual run does the same.
 on:
   push:
     branches: [main]
@@ -55,11 +55,15 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
-        # The registry can take a few minutes to serve a new package or version.
+        # The registry can take a few minutes to serve a new package or version. Both packages share it.
         run: |
-          for _ in $(seq 1 30); do
-            [ "$(npm view "@arbol-ai/maximus@$VERSION" version 2>/dev/null)" = "$VERSION" ] && exit 0
-            sleep 10
+          for package in @arbol-ai/maximus @arbol-ai/vite-plugin; do
+            for attempt in $(seq 1 30); do
+              [ "$(npm view "$package@$VERSION" version 2>/dev/null)" = "$VERSION" ] && break
+              if [ "$attempt" = 30 ]; then
+                echo "npm does not serve $package@$VERSION yet." >&2
+                exit 1
+              fi
+              sleep 10
+            done
           done
-          echo "npm does not serve @arbol-ai/maximus@$VERSION yet." >&2
-          exit 1

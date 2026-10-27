@@ -12,8 +12,12 @@ context, run your handler, validate what it returns. It is built for teams whose
 by people, by other services and by agents, in many tenants at once.
 
 Create a project with `bunx @arbol-ai/maximus init my-service --name my-service --layout project`.
-It starts with Vite+, root `maximus.config.ts`, named `GET`/`POST` route declarations, ordered
-middleware, generated Worker entries and automatic deployment on main. `src/` is optional. See [Project structure](docs/guides/project-structure.md) for optional file conventions.
+It starts with Vite+ and one configuration, `vite.config.ts`, whose `maximus()` from
+`@arbol-ai/vite-plugin` states the application and its Worker. Each route is a file,
+`routes/v1/greeting.get.ts`, default-exporting one `defineHandler`; a route can also be an MCP tool, and
+`mcp/tools/` holds tools only agents call. Middleware is ordered, the Worker entry and `Env` are
+generated, and main deploys automatically. `src/` is optional. See
+[Project structure](docs/guides/project-structure.md) for the file conventions.
 
 The repository root uses Vite+ for checks, formatting, workspace tasks and library/Worker builds.
 `bun run verify` performs non-test validation; tests run only when explicitly requested.

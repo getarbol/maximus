@@ -5,16 +5,17 @@ Read .agents/skills/project/SKILL.md and node_modules/@arbol-ai/maximus/skills/m
 
 ## Structure
 
-This is an API-first Maximus project. Application and transport policy live in maximus.config.ts.
+This is an API-first Maximus project. vite.config.ts is its only configuration: maximus() states the
+application and its Worker, and errors.ts, context.ts and auth.ts complete it in code.
 Each route file default-exports one defineHandler: routes/v1/tasks/[taskId].delete.ts answers
 DELETE /api/v1/tasks/{taskId}. Declare strict schemas; the name, effect and scope derive from the method
 and path unless declared. MCP and RPC exposure use the same contracts; mcp/tools/ holds MCP-only tools.
 The Vite plugin and maximus prepare reconcile generated .maximus/ entries before builds. Never edit them.
-src/ is optional shared domain code. Root configuration never imports generated modules or routes.
+src/ is optional shared domain code. Root modules never import generated modules or routes.
 Middleware files are ordered by name: defineMiddleware wraps HTTP before token admission and has no
 principal; defineOperationMiddleware runs after native admission across HTTP, MCP and RPC. Middleware
 imports configuration types only. Pages return native public Responses and never contain tenant data.
-Bindings, triggers and Durable Object migrations belong in cloudflare.config.ts. Database migrations
+Bindings and triggers belong in maximus() in vite.config.ts; Env is generated from them. Database migrations
 and public asset admission remain explicit; adding files never provisions infrastructure.
 
 ## Boundaries

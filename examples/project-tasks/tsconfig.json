@@ -10,17 +10,7 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node", "@cloudflare/workers-types"]
   },
-  "include": [
-    "routes",
-    "mcp",
-    "src",
-    "errors.ts",
-    "maximus.config.ts",
-    "cloudflare.config.ts",
-    "vite.config.ts",
-    ".maximus/*.ts",
-    ".cloudflare/types"
-  ]
+  "include": ["routes", "mcp", "src", "errors.ts", "context.ts", "vite.config.ts", ".maximus/*.ts"]
 }

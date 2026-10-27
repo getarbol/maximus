@@ -1,9 +1,11 @@
 # Maximus agent guide
 
-Maximus is one package, @arbol-ai/maximus, in a Bun/Vite+ workspace with its examples. The core
-is its root; each optional capability is an entry (/workers, /mcp, /client, …) whose source is
-packages/maximus/src/<entry>/. Read docs/README.md (concepts, guides, reference) and the owned
-.agents/skills/maximus/SKILL.md; examples/ holds runnable services that the workspace typechecks.
+Maximus is @arbol-ai/maximus and its Vite plugin @arbol-ai/vite-plugin, released together at one
+version, in a Bun/Vite+ workspace with its examples. The core is @arbol-ai/maximus's root; each optional
+capability is an entry (/workers, /mcp, /client, …) whose source is packages/maximus/src/<entry>/. The
+plugin, packages/vite-plugin/, composes the project tooling with Cloudflare's Vite plugin. Read
+docs/README.md (concepts, guides, reference) and the owned .agents/skills/maximus/SKILL.md; examples/
+holds runnable services that the workspace typechecks.
 All code and documentation is English. Use CLI/scripts and preserve unrelated changes.
 
 Use native Web fetch routing, TypeBox and TypeScript 7. No Elysia, Eden, Hono, Zod or runtime code
@@ -31,7 +33,7 @@ Observers are optional and independently isolated. Only safe execution metadata 
 No raw input/output, credentials, cookies or clinical data. Providers sanitize error events; disabling
 framework telemetry and disabling native platform collection are separate controls. Never invent trace IDs.
 
-Tests live beside their entry, in packages/maximus/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
+Tests live beside their entry, in packages/<package>/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
 Run bun run verify (Vite+ builds, workspace TypeScript, lint and format) and production dry bundles
 before release. Tests require an explicit human request, including scripts, hooks and CI. Publish the packed tarball. Never publish workspace: or file: dependencies.
 Registry installation and actual production verification are separate gates; never label mocks live.

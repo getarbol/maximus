@@ -22,8 +22,11 @@ export type {
 export { isPublicOperation, operationScopes, operationMatchesScopes } from './manifest.ts';
 
 // File routes and MCP tools, each a file's default export that the project binds to the application.
-export { defineHandler, defineTool } from './handler.ts';
+export { defineAuth, defineContext, defineHandler, defineTool } from './handler.ts';
 export type {
+  AuthOptions,
+  ContextArguments,
+  ContextDeclaration,
   DomainCode,
   Fail,
   Failed,
@@ -33,6 +36,7 @@ export type {
   HandlerHttp,
   HandlerMcp,
   HandlerOptions,
+  PreparedContext,
   SchemaOf,
   SchemaOrFields,
   ToolDeclaration,

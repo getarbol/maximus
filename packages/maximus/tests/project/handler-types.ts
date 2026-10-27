@@ -4,8 +4,8 @@ import type { AppClientContract, ReadOperationName } from '../../src/client/clie
  * `fail` held to declared codes and their data, the fields a declaration may name, and the names, effects
  * and exposures binding derives for the client and native RPC.
  */
-import { defineHandler, defineTool, t } from '../../src/index.ts';
-import type { Principal } from '../../src/index.ts';
+import { defineAuth, defineContext, defineHandler, defineTool, t } from '../../src/index.ts';
+import type { Failed, PreparedContext, Principal } from '../../src/index.ts';
 import { bindRoute, bindTool } from '../../src/project/config.ts';
 import type { RouteName, ToolMcpName, ToolName } from '../../src/project/config.ts';
 import type { RpcMethods } from '../../src/workers/runtime.ts';
@@ -140,3 +140,32 @@ const named: RouteName<'DELETE', '/v1/task-lists/{list_id}'> = 'deleteV1TaskList
 const toolName: ToolName<'summarize-open-tasks'> = 'summarizeOpenTasks';
 const mcpName: ToolMcpName<'summarize-open-tasks'> = 'summarize_open_tasks';
 void [named, toolName, mcpName];
+
+const prepared = defineContext(({ env, principal: caller, fail }) => {
+  const prefix: string = env.PREFIX;
+  // @ts-expect-error The registered bindings keep their types.
+  const wrong: number = env.PREFIX;
+  // @ts-expect-error A context fails with codes of the catalog.
+  void fail('NOT_A_CODE');
+  void wrong;
+  return caller.organizationId ? { label: prefix } : fail('TASK_NOT_FOUND');
+});
+const label: (args: never) => { label: string } | Failed | Promise<{ label: string } | Failed> =
+  prepared.prepare;
+void label;
+defineAuth({
+  resolve: async (token, resolution) => {
+    const prefix: string | undefined = resolution?.env.PREFIX;
+    void prefix;
+    return { actorId: token, actorKind: 'service', organizationId: 'org_acme', scopes: [] };
+  },
+});
+// @ts-expect-error auth.ts states code; the issuer is configuration.
+defineAuth({ issuer: 'https://issuer.example.test/' });
+
+declare const preparedContext: PreparedContext<typeof prepared>;
+const preparedLabel: string = preparedContext.label;
+const preparedPrefix: string = preparedContext.env.PREFIX;
+// @ts-expect-error A failure is no part of the prepared context.
+void preparedContext.failure;
+void [preparedLabel, preparedPrefix];

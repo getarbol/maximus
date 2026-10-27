@@ -29,8 +29,8 @@ generated.
 
 `--layout project` creates the optional [project structure](../guides/project-structure.md): a public
 Hello World page, a protected greeting operation, generated imports and a deployment workflow. Its
-non-test `verify` checks types, lint and build. Configure origin and authentication in
-`maximus.config.ts`; `src/` is optional and the Worker entry is generated; infrastructure remains in `cloudflare.config.ts`.
+non-test `verify` checks types, lint and build. `vite.config.ts` is its only configuration: configure
+origin, authentication and bindings in its `maximus()`; `src/` is optional and the Worker entry is generated.
 
 ## maximus prepare
 
@@ -38,8 +38,12 @@ non-test `verify` checks types, lint and build. Configure origin and authenticat
 maximus prepare [directory] [--mode production|development]
 ```
 
-Discover project modules and write `.maximus/base.ts`, `.maximus/routes.ts`, `.maximus/app.ts`,
-`.maximus/middleware.ts`, `.maximus/worker.ts` and the stable `.maximus/entry.ts`. Named HTTP exports and legacy factories are supported. The default directory is the current directory, and the default mode is
-production. No application modules execute during discovery. The `maximusProject()` Vite plugin
-from `@arbol-ai/maximus/vite` invokes the same generator on every build and watches additions, removals and changed exports.
-Discovery reads syntax without executing configuration or application code.
+Discover project modules and write `.maximus/base.ts`, `.maximus/routes.ts`, `.maximus/register.d.ts`,
+`.maximus/app.ts`, `.maximus/middleware.ts`, `.maximus/worker.ts` and the stable `.maximus/entry.ts`, and for
+a project configured in `vite.config.ts`, `.maximus/config.ts` and `.maximus/env.d.ts`. Suffixed route
+files, 7.4 method exports and legacy factories are supported. The default directory is the current
+directory, and the default mode is production. A project without `maximus.config.ts` or `src/` entries
+is prepared through the plugin its `vite.config.ts` configures: Vite loads that file, as every `vp`
+command does. `maximus()` from `@arbol-ai/vite-plugin` invokes the same generator on every build and
+watches additions, removals and changed exports. Discovery reads application modules' syntax without
+executing them.

@@ -1,11 +1,18 @@
-import fmt from '@arbol-ai/maximus/oxfmt';
-import lint from '@arbol-ai/maximus/oxlint';
-import { maximusProject } from '@arbol-ai/maximus/vite';
-import { cloudflare } from '@cloudflare/vite-plugin';
+import { maximus } from '@arbol-ai/vite-plugin';
 import { defineConfig } from 'vite-plus';
 
+/**
+ * The only configuration: the application and the Worker that serves it. Add bindings with
+ * `env: { NAME: bindings.kv() }`, from cf/config; Env is generated from them.
+ */
 export default defineConfig({
-  lint: { ...lint, options: { typeAware: false } },
-  fmt,
-  plugins: [maximusProject(), cloudflare()],
+  plugins: [
+    maximus({
+      origin: 'https://__PROJECT_NAME__.example.com',
+      // OAuth access tokens from your authorization server, which MCP clients discover. `vp dev` also
+      // accepts the development token in .dev.vars, from localhost only.
+      tokens: { issuer: 'https://auth.example.com/' },
+      compatibilityDate: '__COMPATIBILITY_DATE__',
+    }),
+  ],
 });

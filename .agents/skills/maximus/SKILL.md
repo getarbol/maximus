@@ -12,7 +12,7 @@ pipeline, never around it.
 
 ## Workflow
 
-1. **Read the service first.** For a project layout, start with `maximus.config.ts` and the project-structure guide; `src/` is optional and routes/middleware are discovered. For explicit composition, find `maximus<Env>(…)` (usually `src/application.ts`), the resource
+1. **Read the service first.** For a project layout, start with `vite.config.ts`'s `maximus()` (or a 7.4 `maximus.config.ts`) and the project-structure guide; `src/` is optional and routes/middleware are discovered. For explicit composition, find `maximus<Env>(…)` (usually `src/application.ts`), the resource
    modules (`src/api/<resource>/operations.ts`), the composition (`src/app.ts`) and the Worker
    (`src/index.ts`). Keep the project's existing folders and named domain functions.
 2. **Declare, don't wire.** Add an operation to its resource module with strict schemas, a namespaced

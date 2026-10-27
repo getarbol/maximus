@@ -120,3 +120,21 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
       ),
   };
 }
+
+/**
+ * The schedule a cron module exports, `export const cron = '0 8 * * *'`, when it is a string literal: what
+ * a project configured in `vite.config.ts` declares as the Worker's cron trigger. Undefined otherwise.
+ */
+export function cronExpression(file: string): string | undefined {
+  for (const node of readProjectModule(file, 'route').program.body) {
+    const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : undefined;
+    if (declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
+      for (const { id, init } of declaration.declarations) {
+        if (id.type === 'Identifier' && id.name === 'cron') {
+          return init?.type === 'Literal' && typeof init.value === 'string' ? init.value : undefined;
+        }
+      }
+    }
+  }
+  return undefined;
+}

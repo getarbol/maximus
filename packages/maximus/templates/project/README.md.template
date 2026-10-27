@@ -1,8 +1,8 @@
 # `__PROJECT_NAME__`
 
 A Maximus backend on Cloudflare Workers, with Vite+ as its default toolchain. `GET /` returns **Hello World**, `/health` reports liveness,
-and `/api/openapi.json` describes the API. `GET /api/v1/greeting` is authenticated. The starter refuses
-production tokens until an identity provider or verified resolver is configured in maximus.config.ts.
+and `/api/openapi.json` describes the API. `GET /api/v1/greeting` is authenticated. `vite.config.ts` is
+the only configuration: replace its token issuer with your authorization server before production callers.
 
 ## Development
 
@@ -30,16 +30,18 @@ uses optional directories. Add only the modules the service needs:
 | public/          | Optional static assets; configure the binding and admitted files before using it.     |
 | .maximus/        | Generated imports; ignored and never edited by hand.                                  |
 
-The Vite plugin reconciles modules on every build and source change.
-Root maximus.config.ts owns application and transport policy; the Cloudflare config names the
-generated .maximus/entry.ts entry. No src/ directory or manual route registration is required. `bun run prepare:project` generates the same imports for editors. Files starting
-with `_` are ignored except `email/_default.ts`; `.dev.ts` and `.prod.ts` select their matching mode.
-Platform bindings, cron triggers, queue subscriptions, email routing and Durable Object migrations
-remain explicit Cloudflare configuration. Adding a handler never provisions infrastructure.
+The Vite plugin reconciles modules on every build and source change. `maximus()` in vite.config.ts
+configures the application and its Worker: origin, tokens, compatibility date and bindings, from which
+`Env` is generated. Optional root modules complete it: `errors.ts` (the error catalog), `context.ts`
+(what every handler receives) and `auth.ts` (tokens the application verifies itself). No src/ directory
+or manual route registration is required. `bun run prepare:project` generates the same imports for
+editors. Files starting with `_` are ignored except `email/_default.ts`; `.dev.ts` and `.prod.ts` select
+their matching mode. A cron module's literal schedule becomes its trigger; queue subscriptions, email
+routing and Durable Object migrations remain explicit. Adding a handler never provisions infrastructure.
 
 ## Deployment
 
-Before deploying, replace the origin and audience in maximus.config.ts with the deployed HTTPS URL.
+Before deploying, replace the origin in vite.config.ts with the deployed HTTPS URL.
 The GitHub workflow checks pull requests and deploys pushes to `main`. Configure repository or
 organization secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The token needs permission to
 deploy this Worker. `bun run deploy` performs the same non-test validation and deployment locally.

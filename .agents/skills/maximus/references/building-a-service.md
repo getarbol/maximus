@@ -1,7 +1,10 @@
 # Building a service
 
 For the API-first project layout, use `maximus init <directory> --name <name> --layout project`.
-Configure the application in `maximus.config.ts`; `src/` is optional domain code. Each route file
+`vite.config.ts` is its only configuration: `maximus()` from `@arbol-ai/vite-plugin` states the origin,
+token issuer, compatibility date and bindings (`env: { NAME: bindings.kv() }` from `cf/config`), and `Env`
+is generated from them. `errors.ts`, `context.ts` (`defineContext`) and `auth.ts` (`defineAuth`) complete
+the application in code; 7.4 projects keep `maximus.config.ts`. `src/` is optional domain code. Each route file
 default-exports one `defineHandler` from `@arbol-ai/maximus`: `routes/v1/tasks/[taskId].delete.ts` answers
 `DELETE /v1/tasks/{taskId}`, and the operation name, effect and scope derive from the method and path unless
 declared. The handler receives `{ input, principal, env, fail, …context }` and returns its output or
@@ -9,8 +12,8 @@ declared. The handler receives `{ input, principal, env, fail, …context }` and
 types every handler's failures. The 7.4 `export const GET = defineRoute(…)` modules keep working.
 `defineMiddleware` (also named `defineRequestMiddleware`) wraps HTTP requests; `defineOperationMiddleware` runs after native admission on
 HTTP, MCP and RPC. Middleware files run in filename order. The Vite+ plugin reconciles entries on
-builds and source changes. Configure infrastructure explicitly in `cloudflare.config.ts`, naming
-`.maximus/entry.ts` as its entrypoint by path. Legacy route factories and explicit service composition below
+builds and source changes. A cron module's literal schedule becomes its trigger; queues, email routing
+and Durable Object exports are Worker settings of `maximus()`. Legacy route factories and explicit service composition below
 remain supported. Read `docs/guides/project-structure.md` for configuration, migration and conventions.
 
 ## Packages

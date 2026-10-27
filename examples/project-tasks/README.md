@@ -5,8 +5,9 @@ the method; Maximus derives the operation name, the effect and the scope, and th
 object with its input, the verified principal, the task store and `fail`.
 
 ```text
+vite.config.ts                            The only configuration: the application and its Worker
 errors.ts                                 TASK_NOT_FOUND, typed in every handler's fail
-maximus.config.ts                         Identity, token policy and the task store
+context.ts                                The caller's organization's tasks, in every handler
 routes/v1/tasks/index.get.ts              GET    /api/v1/tasks                 (+ MCP list_tasks)
 routes/v1/tasks/index.post.ts             POST   /api/v1/tasks
 routes/v1/tasks/[taskId].get.ts           GET    /api/v1/tasks/{taskId}
@@ -26,4 +27,5 @@ echo "DEVELOPMENT_TOKEN=$(openssl rand -hex 32)" > .dev.vars
 bun run dev          # on http://localhost:5173; the API is under /api
 ```
 
-`bun run verify` prepares the project, generates the Cloudflare types, type-checks and builds.
+`bun run verify` prepares the project, type-checks it and builds the Worker. `Env` comes from the
+bindings in `vite.config.ts`.

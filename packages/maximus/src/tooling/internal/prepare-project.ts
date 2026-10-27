@@ -2,49 +2,84 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
-import { declarationExports, readProjectModule, routeExports } from './project-exports.ts';
+import type { ApplicationConfiguration } from '../../builder.ts';
+import type { TokenPolicy } from '../../tokens.ts';
+import { cronExpression, declarationExports, readProjectModule, routeExports } from './project-exports.ts';
 import { PROJECT_DIRECTORIES, projectFiles, projectPath } from './project-files.ts';
 
-/** Generate only owned modules; a failed discovery never replaces the previous output. */
-export function prepareProject(directory: string, mode = 'production') {
+/**
+ * A project configured entirely in `vite.config.ts`: the application's configuration besides its code, the
+ * Worker's HTTP paths and the bindings of each mode. Every value is plain data, which the generated modules
+ * carry; the code that configures the application is `errors.ts`, `auth.ts` and `context.ts`.
+ */
+export interface ProjectOptions {
+  /** Identity, origin, token policy, RPC callers and limits. */
+  application: Omit<
+    ApplicationConfiguration<unknown>,
+    'errors' | 'tokens' | 'telemetry' | 'mcp' | 'rateLimit'
+  > & {
+    tokens: Omit<TokenPolicy, 'resolve' | 'resources' | 'resourceMetadataUrl'>;
+    /** The rate limiting binding's name, which the generated application checks against `Env`. */
+    rateLimit?: { binding: string; retryAfter?: number };
+  };
+  /** The API's base path and the health path the Worker serves. */
+  worker: { http: { basePath: string; healthPath: string } };
+  /** The bindings each mode declares, as `cf/config` states them: the generated `Env` is inferred from them. */
+  env: { production: Readonly<Record<string, unknown>>; development: Readonly<Record<string, unknown>> };
+}
+
+/** The one root module of a convention (`maximus.config`, `errors`, …), in any module extension, if any. */
+function rootModule(root: string, name: string): string | undefined {
+  const found = ['ts', 'mts', 'js', 'mjs']
+    .map((extension) => `${name}.${extension}`)
+    .filter((file) => existsSync(join(root, file)));
+  if (found.length > 1) {
+    throw new TypeError(`Keep at most one ${name} module at the project root.`);
+  }
+  const [module] = found;
+  if (module && lstatSync(join(root, module)).isSymbolicLink()) {
+    throw new TypeError(`The ${name} module cannot be a symlink.`);
+  }
+  return module;
+}
+
+/**
+ * Generate only owned modules; a failed discovery never replaces the previous output. `project` holds what
+ * `vite.config.ts` configures when neither `maximus.config.ts` nor the 7.3 `src/` entries do.
+ */
+export function prepareProject(directory: string, mode = 'production', project?: ProjectOptions) {
   const root = resolve(directory);
-  const configs = [
-    'maximus.config.ts',
-    'maximus.config.mts',
-    'maximus.config.js',
-    'maximus.config.mjs',
-  ].filter((name) => existsSync(join(root, name)));
-  if (configs.length > 1) {
-    throw new TypeError('Keep exactly one maximus.config module at the project root.');
+  const config = rootModule(root, 'maximus.config');
+  const legacy =
+    !config && existsSync(join(root, 'src/application.ts')) && existsSync(join(root, 'src/worker.ts'));
+  if (project && (config || legacy)) {
+    throw new TypeError(
+      `Configure the application once: in vite.config.ts or in ${config ?? 'src/application.ts'}, not both.`
+    );
   }
-  const [config] = configs;
-  if (config && lstatSync(join(root, config)).isSymbolicLink()) {
-    throw new TypeError('The Maximus configuration cannot be a symlink.');
-  }
-  for (const required of config ? [] : ['src/application.ts', 'src/worker.ts']) {
+  for (const required of config || project ? [] : ['src/application.ts', 'src/worker.ts']) {
     if (!existsSync(join(root, required))) {
       throw new TypeError(
-        `Add maximus.config.ts, or keep the legacy ${required}. Create a project with maximus init --layout project.`
+        `Configure the application in vite.config.ts with maximus(), or keep the legacy ${required}. Create a project with maximus init --layout project.`
       );
     }
   }
   // A root errors module types every handler's failures; the application must use that same catalog.
-  const catalogs = ['errors.ts', 'errors.mts', 'errors.js', 'errors.mjs'].filter((name) =>
-    existsSync(join(root, name))
-  );
-  if (catalogs.length > 1) {
-    throw new TypeError('Keep at most one errors module at the project root.');
-  }
-  const [catalog] = catalogs;
-  if (catalog && lstatSync(join(root, catalog)).isSymbolicLink()) {
-    throw new TypeError('The errors module cannot be a symlink.');
+  const catalog = rootModule(root, 'errors');
+  // vite.config.ts states configuration as data; the code that completes it has its own modules.
+  const auth = project && rootModule(root, 'auth');
+  const context = project && rootModule(root, 'context');
+  for (const name of ['auth', 'context']) {
+    if (!project && rootModule(root, name)) {
+      throw new TypeError(`${name}.ts completes the application vite.config.ts configures; move it there.`);
+    }
   }
   const output = join(root, '.maximus');
   if (existsSync(output) && lstatSync(output).isSymbolicLink()) {
     throw new TypeError('The generated .maximus directory cannot be a symlink.');
   }
   const files = Object.fromEntries(PROJECT_DIRECTORIES.map((name) => [name, projectFiles(root, name, mode)]));
-  for (const module of [config, catalog]) {
+  for (const module of [config, catalog, auth, context]) {
     if (module) {
       readProjectModule(join(root, module), 'config');
     }
@@ -116,7 +151,17 @@ export function prepareProject(directory: string, mode = 'production') {
     return `.mount(bindTool(base, tools_${index}, ${JSON.stringify(tool)}))`;
   });
   const application = `${header}import { ${[...binders, 'checkProjectPipeline'].join(', ')} } from '@arbol-ai/maximus/config';\nimport { base } from './base.ts';\n${imports.join('\n')}\nexport const app = checkProjectPipeline(base, base${mounts.join('')}${tools.join('')}.build());\n`;
-  const registration = `${header}import type { base } from './base.ts';\n${catalog ? `import type errors from '../${catalog}';\n` : ''}\ndeclare global {\n  interface MaximusRegister {\n    base: typeof base;\n${catalog ? '    errors: typeof errors;\n' : ''}  }\n}\n`;
+  // The bindings, from a source no registered module depends on: `context.ts` and `auth.ts` are typed by
+  // them without depending on the base they configure.
+  let environment = "Parameters<typeof base.definition.context>[0]['env']";
+  let environmentImports = '';
+  if (project) {
+    environment = 'Env';
+  } else if (config) {
+    environment = 'ProjectEnv<typeof config>';
+    environmentImports = `import type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type config from '../${config}';\n`;
+  }
+  const registration = `${header}import type { base } from './base.ts';\n${environmentImports}${catalog ? `import type errors from '../${catalog}';\n` : ''}\ndeclare global {\n  interface MaximusRegister {\n    base: typeof base;\n${catalog ? '    errors: typeof errors;\n' : ''}    env: ${environment};\n  }\n}\n`;
   imports.length = 0;
   const middleware = register('middleware');
   const middlewareSource = `${header}import { collectMiddleware } from '@arbol-ai/maximus/config';\n${imports.join('\n')}\nexport const { middleware, requestMiddleware } = collectMiddleware([${middleware.map(({ identifier }) => identifier).join(', ')}] as const);\n`;
@@ -124,9 +169,17 @@ export function prepareProject(directory: string, mode = 'production') {
   const catalogCheck = catalog
     ? `import errors from '../${catalog}';\nif (${configured}.definition.errors !== errors) {\n  throw new TypeError('The application must use the error catalog ${catalog} exports.');\n}\n`
     : '';
-  const baseSource = config
-    ? `${header}import config from '../${config}';\nimport { useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { middleware } from './middleware.ts';\n${catalogCheck}export const base: typeof config.application = useProjectMiddleware(config.application, middleware);\n`
-    : `${header}import { base as application } from '../src/application.ts';\n${catalogCheck}export const base = application;\n`;
+  let baseSource: string;
+  if (project) {
+    // The application vite.config.ts configures, completed by the optional errors, auth and context modules.
+    const tokens = auth ? ', tokens: { ...application.tokens, ...auth }' : '';
+    const prepared = context ? 'bindContext(configured, context)' : 'configured';
+    baseSource = `${header}import { maximus${catalog ? '' : ', standardErrors'} } from '@arbol-ai/maximus';\nimport { ${context ? 'bindContext, ' : ''}useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { application } from './config.ts';\nimport { middleware } from './middleware.ts';\n${catalog ? `import errors from '../${catalog}';\n` : ''}${auth ? `import auth from '../${auth}';\n` : ''}${context ? `import context from '../${context}';\n` : ''}const configured = maximus<Env>({ ...application${tokens}, errors${catalog ? '' : ': standardErrors'} });\nexport const base = useProjectMiddleware(${prepared}, middleware);\n`;
+  } else if (config) {
+    baseSource = `${header}import config from '../${config}';\nimport { useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { middleware } from './middleware.ts';\n${catalogCheck}export const base: typeof config.application = useProjectMiddleware(config.application, middleware);\n`;
+  } else {
+    baseSource = `${header}import { base as application } from '../src/application.ts';\n${catalogCheck}export const base = application;\n`;
+  }
   const routeSource = `${header}import { createRoute } from '@arbol-ai/maximus/config';\nimport { base } from './base.ts';\nexport const defineRoute = createRoute(base);\n`;
   imports.length = 0;
   const pages = register('pages');
@@ -170,16 +223,28 @@ export function prepareProject(directory: string, mode = 'production') {
     classes.add(className);
     return `export const ${className} = worker.durableObject(${identifier});`;
   });
-  const optionsImport = config
-    ? `import config from '../${config}';\nconst options = config.worker;`
-    : "import { options } from '../src/worker.ts';";
+  let optionsImport = "import { options } from '../src/worker.ts';";
+  if (project) {
+    optionsImport = "import { worker as options } from './config.ts';";
+  } else if (config) {
+    optionsImport = `import config from '../${config}';\nconst options = config.worker;`;
+  }
   // A declared tool needs the MCP transport; a configured one is kept, never doubled.
   const transports = servesMcp
     ? "import { mcp } from '@arbol-ai/maximus/mcp';\nconst transports = options.transports?.some(({ protocol }) => protocol === 'mcp') ? options.transports : [...(options.transports ?? []), mcp()];\n"
     : 'const transports = options.transports;\n';
-  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\n${transports}const worker: WorkerRuntime<${config ? 'ProjectEnv<typeof config>' : "Parameters<typeof base.definition.context>[0]['env']"}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, transports, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
+  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\n${transports}const worker: WorkerRuntime<${environment}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, transports, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
   mkdirSync(output, { recursive: true });
+  // What vite.config.ts states, as data the Worker carries, and the bindings `Env` is inferred from by
+  // Cloudflare's own inference: a JSON value is also its own literal type.
+  const options = project
+    ? {
+        'config.ts': `${header}import type { WorkerOptions } from '@arbol-ai/maximus/workers';\n\nexport const application = ${JSON.stringify(project.application)} as const;\nexport const worker: WorkerOptions<Env> = ${JSON.stringify(project.worker)};\n`,
+        'env.d.ts': `${header}type Bindings = import('cf/config').InferEnv<\n  { env: ${JSON.stringify(project.env.production)} } | { env: ${JSON.stringify(project.env.development)} }\n>;\n\ndeclare global {\n  namespace Cloudflare {\n    interface Env extends Bindings {}\n  }\n  interface Env extends Cloudflare.Env {}\n}\n\nexport {};\n`,
+      }
+    : {};
   const generated = {
+    ...options,
     'middleware.ts': middlewareSource,
     'base.ts': baseSource,
     'routes.ts': routeSource,
@@ -209,13 +274,22 @@ export function prepareProject(directory: string, mode = 'production') {
       renameSync(temporary, target);
     }
   }
+  let layout = 'legacy';
+  if (project) {
+    layout = 'options';
+  } else if (config) {
+    layout = 'config';
+  }
   return {
     directory: root,
     mode,
-    layout: config ? 'config' : 'legacy',
+    layout,
     changed,
     config,
     durableObjects: files['durable-objects']?.map(({ file }) => file) ?? [],
+    // Each cron module's schedule, when it states it as a literal: the triggers a project configured in
+    // vite.config.ts declares.
+    crons: (files.crons ?? []).map(({ file }) => ({ file, cron: cronExpression(file) })),
     files: Object.values(files)
       .flat()
       .map(({ file }) => file),

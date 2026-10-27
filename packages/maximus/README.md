@@ -3,7 +3,8 @@
 Maximus defines an organization-scoped service once and serves it on Cloudflare Workers over HTTP
 with its OpenAPI 3.1 contract, as MCP tools and as Worker RPC methods. It is one package: the root is
 the core (the fluent builder, TypeBox schemas, tokens and scopes, the error catalog, middleware, the
-native HTTP handler and OpenAPI), and each other capability is an entry.
+native HTTP handler and OpenAPI), and each other capability is an entry. In a Vite+ project,
+`@arbol-ai/vite-plugin` makes `vite.config.ts` its only configuration.
 
 ```sh
 bun add @arbol-ai/maximus

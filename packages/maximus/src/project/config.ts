@@ -6,7 +6,7 @@ import type { Invocation, OperationMiddleware, OperationShape, AppManifest } fro
 import type { WorkerOptions } from '../workers/runtime.ts';
 
 export { createRoute } from './route.ts';
-export { bindRoute, bindTool, routeName, toolName } from './bind.ts';
+export { bindContext, bindRoute, bindTool, routeName, toolName } from './bind.ts';
 export type { RouteName, ToolMcpName, ToolName } from './bind.ts';
 
 /** Configuration owns the shared builder and transport policy, never discovered application modules. */

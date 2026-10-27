@@ -40,5 +40,6 @@ declare global {
   interface MaximusRegister {
     base: typeof base;
     errors: typeof errors;
+    env: Env;
   }
 }
