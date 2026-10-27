@@ -162,6 +162,11 @@ defineAuth({
 });
 // @ts-expect-error auth.ts states code; the issuer is configuration.
 defineAuth({ issuer: 'https://issuer.example.test/' });
+defineAuth({
+  resolve: async () => ({ actorId: 'worker', actorKind: 'service', organizationId: 'org_acme', scopes: [] }),
+  // @ts-expect-error Beside resolve, the issuer is still configuration.
+  issuer: 'https://issuer.example.test/',
+});
 
 declare const preparedContext: PreparedContext<typeof prepared>;
 const preparedLabel: string = preparedContext.label;

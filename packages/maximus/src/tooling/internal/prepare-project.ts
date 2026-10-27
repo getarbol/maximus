@@ -193,9 +193,10 @@ export function prepareProject(directory: string, mode = 'production', project?:
   let baseSource: string;
   if (project) {
     // The application vite.config.ts configures, completed by the optional errors, auth and context modules.
-    const tokens = auth ? ', tokens: { ...application.tokens, ...auth }' : '';
+    // defineAuth again: whatever auth.ts exports, only its code joins the configured token policy.
+    const tokens = auth ? ', tokens: { ...application.tokens, ...defineAuth(auth) }' : '';
     const prepared = context ? 'bindContext(configured, context)' : 'configured';
-    baseSource = `${header}import { maximus${catalog ? '' : ', standardErrors'} } from '@arbol-ai/maximus';\nimport { ${context ? 'bindContext, ' : ''}useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { application } from './config.ts';\nimport { middleware } from './middleware.ts';\n${described ? "import { mcp } from './mcp.ts';\n" : ''}${catalog ? `import errors from '../${catalog}';\n` : ''}${auth ? `import auth from '../${auth}';\n` : ''}${context ? `import context from '../${context}';\n` : ''}const configured = maximus<Env>({ ...application${tokens}, errors${catalog ? '' : ': standardErrors'}${described ? ', mcp' : ''} });\nexport const base = useProjectMiddleware(${prepared}, middleware);\n`;
+    baseSource = `${header}import { ${auth ? 'defineAuth, ' : ''}maximus${catalog ? '' : ', standardErrors'} } from '@arbol-ai/maximus';\nimport { ${context ? 'bindContext, ' : ''}useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { application } from './config.ts';\nimport { middleware } from './middleware.ts';\n${described ? "import { mcp } from './mcp.ts';\n" : ''}${catalog ? `import errors from '../${catalog}';\n` : ''}${auth ? `import auth from '../${auth}';\n` : ''}${context ? `import context from '../${context}';\n` : ''}const configured = maximus<Env>({ ...application${tokens}, errors${catalog ? '' : ': standardErrors'}${described ? ', mcp' : ''} });\nexport const base = useProjectMiddleware(${prepared}, middleware);\n`;
   } else if (config) {
     baseSource = `${header}import config from '../${config}';\nimport { useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { middleware } from './middleware.ts';\n${catalogCheck}export const base: typeof config.application = useProjectMiddleware(config.application, middleware);\n`;
   } else {

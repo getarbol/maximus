@@ -44,9 +44,13 @@ export interface WorkerAssetsOptions<E> {
 
 /** An absolute asset path of unreserved characters, without a query or a fragment. */
 const ASSET_PATH = /^\/(?:[a-zA-Z0-9._~-]+(?:\/[a-zA-Z0-9._~-]+)*)?$/;
+/** Whether a path is an absolute asset path: unreserved characters, nothing encoded, no dot segments. */
+function isAssetPath(path: string): boolean {
+  return ASSET_PATH.test(path) && !path.split('/').some((segment) => segment === '.' || segment === '..');
+}
 /** The path, refused at construction when it is not an absolute asset path or has dot segments. */
 function requireAssetPath(path: string): string {
-  if (!ASSET_PATH.test(path) || path.split('/').some((segment) => segment === '.' || segment === '..')) {
+  if (!isAssetPath(path)) {
     throw new TypeError(`Asset path must be absolute without query, fragments or dot segments: ${path}`);
   }
   return path;
@@ -87,9 +91,11 @@ export function createAssetHandler<E>(options: WorkerAssetsOptions<E>): HttpRout
     const url = new URL(request.url);
     const isPage = pages.has(url.pathname) || patterns.some((pattern) => pattern.test(url.pathname));
     const isFile = files.has(url.pathname);
-    const isImmutable = immutablePrefixes.some(
-      (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`)
-    );
+    // A prefix matches only a plain path: an encoded slash or dot segment never reaches the binding as
+    // an immutable file.
+    const isImmutable =
+      isAssetPath(url.pathname) &&
+      immutablePrefixes.some((prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`));
     const binding = env[bindingName];
     if (!(isPage || isFile || isImmutable)) {
       if (options.development && isAssetBinding(binding)) {

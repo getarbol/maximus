@@ -38,7 +38,7 @@ test('the service takes its name and version from package.json, and the rest fro
       title: 'tasks',
       version: '2.1.0',
       origin: 'https://tasks.example.test',
-      tokens: { audience: 'https://tasks.example.test', development: { binding: 'DEVELOPMENT_TOKEN' } },
+      tokens: { audience: 'https://tasks.example.test' },
       rpc: { callers: [] },
     },
     worker: { http: { basePath: '/api', healthPath: '/health' } },
@@ -83,16 +83,19 @@ test('without an origin, maximus.config.ts still configures the application', ()
 
 test('the development token is declared in development alone, under its own binding, or not at all', () => {
   const kv = { TASKS: bindings.kv() };
-  const custom = projectOptions(root(), {
+  const options: MaximusOptions = {
     ...minimal,
     tokens: { development: { binding: 'LOCAL_TOKEN', organizationId: 'org_local' } },
     env: { ...kv, DISABLED: false, MISSING: null },
-  });
+  };
+  const custom = projectOptions(root(), options, 'development');
   expect(custom?.env).toEqual({ production: kv, development: { ...kv, LOCAL_TOKEN: { type: 'secret' } } });
   expect(custom?.application.tokens.development).toEqual({
     binding: 'LOCAL_TOKEN',
     organizationId: 'org_local',
   });
+  // A production build carries neither the binding nor the policy that would accept its token.
+  expect(projectOptions(root(), options, 'production')?.application.tokens).not.toHaveProperty('development');
   const none = projectOptions(root(), { ...minimal, tokens: { development: false }, env: kv });
   expect(none?.env).toEqual({ production: kv, development: kv });
   expect(none?.application.tokens).not.toHaveProperty('development');
@@ -178,5 +181,12 @@ test('a web app refuses a binding of its own named ASSETS', () => {
   writeFileSync(join(app, 'index.html'), '<!doctype html>');
   expect(() => projectOptions(app, { ...minimal, env: { ASSETS: bindings.r2() } })).toThrow(
     'ASSETS serves the web app index.html starts: Maximus declares it.'
+  );
+});
+
+test('assets are maximus()’s own, even from a JavaScript configuration that sets them', () => {
+  const options = { ...minimal, assets: { directory: './public' } } as MaximusOptions;
+  expect(() => workerConfig(root(), 'production', options, [])).toThrow(
+    'maximus() configures the assets: index.html at the root makes the project a web app.'
   );
 });

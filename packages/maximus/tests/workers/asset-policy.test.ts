@@ -134,6 +134,17 @@ it('keeps an immutable prefix to its own slash-delimited namespace, and never ca
   ]);
 });
 
+it('never answers an encoded or dot-segment path below an immutable prefix as an immutable asset', async () => {
+  fetchAsset.mockClear();
+  const handle = serve({ binding: 'ASSETS', immutablePrefixes: ['/assets'] });
+  for (const path of ['/assets/..%2Findex.html', '/assets/%2e%2e/index.html', '/assets/app%20copy.js']) {
+    const refused = await handle(get(path), env);
+    expect(refused.status, path).toBe(404);
+    expect(refused.headers.get('cache-control'), path).not.toContain('immutable');
+  }
+  expect(fetchAsset).not.toHaveBeenCalled();
+});
+
 it('answers HEAD with the headers of the asset but no body, and releases the body it fetched', async () => {
   const cancel = vi.fn();
   const fetchWithBody = vi.fn(

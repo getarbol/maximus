@@ -89,6 +89,15 @@ it('refuses a context.ts default export that defineContext did not declare', () 
   );
 });
 
+it('refuses configuration in auth.ts, which would override the token policy vite.config.ts states', () => {
+  const resolve = async () => err(standardErrors.unauthorized.create());
+  const options = { resolve, issuer: 'https://issuer.elsewhere.test/', development: { binding: 'OTHER' } };
+  // @ts-expect-error The issuer and the development token are configuration, beside resolve as well.
+  expect(() => defineAuth(options)).toThrow(
+    'auth.ts states how tokens are verified in code; configure issuer, development in vite.config.ts.'
+  );
+});
+
 it('verifies the tokens auth.ts resolves itself, as the configuration completes it', async () => {
   const auth = defineAuth({
     resolve: async (token) =>

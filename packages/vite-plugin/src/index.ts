@@ -49,7 +49,7 @@ async function presets(config: object): Promise<Record<string, unknown>> {
  * Cloudflare's Vite plugin.
  */
 export function maximus(options: MaximusOptions): Plugin[] {
-  const project = maximusProject((root) => projectOptions(root, options));
+  const project = maximusProject((root, mode) => projectOptions(root, options, mode));
   let worker: WorkerConfig | undefined;
   const configure: Plugin = {
     name: 'maximus',

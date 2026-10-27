@@ -352,7 +352,7 @@ test('errors.ts, auth.ts and context.ts complete the application vite.config.ts 
   const base = readFileSync(join(root, '.maximus/base.ts'), 'utf-8');
   expect(base).toContain("import { bindContext, useProjectMiddleware } from '@arbol-ai/maximus/config';");
   expect(base).toContain(
-    'const configured = maximus<Env>({ ...application, tokens: { ...application.tokens, ...auth }, errors });'
+    'const configured = maximus<Env>({ ...application, tokens: { ...application.tokens, ...defineAuth(auth) }, errors });'
   );
   expect(base).toContain(
     'export const base = useProjectMiddleware(bindContext(configured, context), middleware);'

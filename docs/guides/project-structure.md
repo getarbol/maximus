@@ -53,27 +53,36 @@ export default defineConfig({
 });
 ```
 
-| Option                                        | Default                                                                                                               |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `name`                                        | The package's name without its scope: the Worker, the MCP server                                                      |
-| `namespace`, `title`                          | The name                                                                                                              |
-| `version`                                     | The package's version                                                                                                 |
-| `origin`                                      | Required: the public HTTPS origin                                                                                     |
-| `tokens`                                      | `audience` is the origin; `development` is `DEVELOPMENT_TOKEN`, `false` for none                                      |
-| `rpc`, `http`                                 | No RPC callers; the API under `/api`, the health check at `/health`                                                   |
-| `maxBodyBytes`, `maxOutputBytes`, `rateLimit` | The application's defaults                                                                                            |
-| `compatibilityDate`                           | Required                                                                                                              |
-| `env`                                         | The bindings, from `cf/config`'s `bindings`                                                                           |
-| Any other Worker setting                      | As Cloudflare names it: `compatibilityFlags`, `triggers`, `observability`, `placement`, `limits`, `domains`, `assets` |
+| Option                                        | Default                                                                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                        | The package's name without its scope: the Worker, the MCP server                                                          |
+| `namespace`, `title`                          | The name                                                                                                                  |
+| `version`                                     | The package's version                                                                                                     |
+| `origin`                                      | Required: the public HTTPS origin                                                                                         |
+| `tokens`                                      | `audience` is the origin; `development` is `DEVELOPMENT_TOKEN`, `false` for none                                          |
+| `rpc`, `http`                                 | No RPC callers; the API under `/api`, the health check at `/health`                                                       |
+| `maxBodyBytes`, `maxOutputBytes`, `rateLimit` | The application's defaults                                                                                                |
+| `compatibilityDate`                           | Required                                                                                                                  |
+| `env`                                         | The bindings, from `cf/config`'s `bindings`                                                                               |
+| Any other Worker setting                      | As Cloudflare names it: `compatibilityFlags`, `triggers`, `observability`, `placement`, `limits`, `domains`, `workersDev` |
 
-Maximus owns the Worker's entry (`.maximus/entry.ts`), always adds `nodejs_compat`, enables logs and
-traces unless `observability` says otherwise, and declares the development token's binding in the
-development build alone, so no deployed Worker carries it. A cron module's literal `export const cron`
-becomes its trigger. `Env` is generated in `.maximus/env.d.ts` from `env`, by Cloudflare's own inference,
-so a binding the code uses but the configuration does not declare is a type error, not a 500 in
-production. Queue consumers, email routing and Durable Object migrations stay explicit: declare them in
-`triggers` and the Worker's other settings. `maximus()` also brings the Maximus lint and format presets
-unless `vite.config.ts` sets `lint` or `fmt` itself.
+Maximus owns the Worker's entry (`.maximus/entry.ts`) and its assets (see [A web app](#a-web-app)), and
+always adds `nodejs_compat`. Only the development build declares the development token's binding and
+the policy that accepts it, so no deployed Worker carries either. A cron module's literal
+`export const cron` becomes its trigger. `Env` is generated in `.maximus/env.d.ts` from `env`, by
+Cloudflare's own inference, so a binding the code uses but the configuration does not declare is a type
+error, not a 500 in production. Queue consumers, email routing and Durable Object migrations stay
+explicit: declare them in `triggers` and the Worker's other settings. `maximus()` also brings the Maximus
+lint and format presets unless `vite.config.ts` sets `lint` or `fmt` itself.
+
+Two defaults concern what the platform collects and where the Worker answers, apart from Maximus's own
+telemetry:
+
+- **Workers Logs and traces are on**, with invocation logs and query strings redacted. Invocation logs
+  record request metadata such as the method and the URL's path. When a path can carry personal or
+  clinical identifiers, set `observability` yourself, for example with `invocationLogs: false`.
+- **The `workers.dev` URL answers too** (`workersDev: true`), so a first deploy is reachable. Once the
+  service has its own domain in `domains`, set `workersDev: false`.
 
 The configuration is data. The code that completes the application lives in optional root modules, each
 a default export: `errors.ts` (`defineErrors`), `context.ts` (`defineContext`) and `auth.ts`

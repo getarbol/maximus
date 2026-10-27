@@ -201,6 +201,11 @@ export function bindRoute<
   if (mcp && !description.trim()) {
     throw new TypeError(`${method} ${path}: a route that is an MCP tool describes what it does.`);
   }
+  if (method === 'DELETE' && effect === 'read') {
+    throw new TypeError(
+      `${method} ${path}: a DELETE route deletes; its effect is delete or write, never read.`
+    );
+  }
   type Bound = BoundRoute<X, M, P>;
   type Name = BoundRouteName<X, M, P>;
   const definition = {

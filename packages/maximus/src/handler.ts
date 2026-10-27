@@ -367,11 +367,22 @@ export type AuthOptions<E = RegisteredEnv> = Pick<
   TokenPolicy<E>,
   'resolve' | 'resourceMetadataUrl' | 'resources'
 >;
+/** The fields `auth.ts` states: code. The issuer, audience, scheme and every other field are configuration. */
+const AUTH_FIELDS: ReadonlySet<string> = new Set(['resolve', 'resourceMetadataUrl', 'resources']);
 /**
  * Declares, as `auth.ts`'s default export, how the application verifies tokens itself: `resolve`, for a
  * token its configuration's issuer does not issue, and its OAuth resources. Verify every token
- * cryptographically and parse its principal strictly; the issuer, audience and scheme stay in configuration.
+ * cryptographically and parse its principal strictly; the issuer, audience and scheme stay in configuration,
+ * and any of them here is refused rather than allowed to override it.
  */
-export function defineAuth<const A extends AuthOptions>(auth: A): A {
+export function defineAuth<const A extends AuthOptions>(
+  auth: A & Record<Exclude<keyof A, keyof AuthOptions>, never>
+): A {
+  const configured = Object.keys(auth).filter((field) => !AUTH_FIELDS.has(field));
+  if (configured.length) {
+    throw new TypeError(
+      `auth.ts states how tokens are verified in code; configure ${configured.join(', ')} in vite.config.ts.`
+    );
+  }
   return Object.freeze(auth);
 }

@@ -12,8 +12,8 @@ dates of the release commits.
   application (origin, token issuer, RPC callers, limits) and its Worker with Cloudflare's names
   (compatibility date, bindings in `env`, triggers and every other setting), with no `maximus.config.ts`
   or `cloudflare.config.ts`. It prepares the project on every build and source change, generates `Env` in
-  `.maximus/env.d.ts` from the bindings by Cloudflare's own inference, declares the development token in
-  development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
+  `.maximus/env.d.ts` from the bindings by Cloudflare's own inference, declares the development token and the
+  policy that accepts it in development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
   trigger and brings the lint and format presets a configuration lacks. It is released with
   `@arbol-ai/maximus` at the same version.
 - A project configured in `vite.config.ts` describes its MCP server in Markdown: `mcp/instructions.md`
@@ -31,7 +31,8 @@ dates of the release commits.
   that would move the build. `examples/project-tasks` has a React app
   that calls the API with the typed client.
 - `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
-  may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot. With
+  may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot, and refuses
+  the issuer, audience or any other field that would override the configured policy. With
   `errors.ts`, they complete an application `vite.config.ts` configures. `PreparedContext` types
   operation middleware with what `context.ts` prepares.
 - `maximus prepare` prepares a project configured in `vite.config.ts` through its plugin, which Vite loads
@@ -44,7 +45,8 @@ dates of the release commits.
   returns its output or `fail(code)`, typed by the declared failures and their data. Binding derives
   what a route leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its
   effect from the method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's
-  idempotent hint. `defineTool` declares a tool only MCP serves. A project registers its base and error
+  idempotent hint; a `DELETE` route that declares `effect: 'read'` is refused. `defineTool` declares a
+  tool only MCP serves. A project registers its base and error
   catalog in the global `MaximusRegister`, which types every handler's context and failures.
 - The OpenAPI document leaves out an operation's empty description.
 - The project layout discovers `routes/**/<name>.<method>.ts` files, each default-exporting one
@@ -72,6 +74,9 @@ dates of the release commits.
 - Project discovery keeps an email recipient whose domain ends in `.dev`, `.prod`, `.test` or `.spec`:
   `email/support@company.dev.ts` handles `support@company.dev` in every mode, where it was read as the
   development handler of `support@company`, and `email/help@example.test.ts` was skipped as a test.
+- `createAssetHandler` answers a path below an immutable prefix as an immutable asset only when it is a
+  plain path: an encoded slash, an encoded character or a dot segment there is a 404, never a file the
+  binding resolves elsewhere and a browser caches for a year.
 - `maximus` reports an unknown option, or one without its value, in one sentence like its other
   refusals, instead of a stack trace.
 - Project discovery sees the MCP tool of a route declared as a `const` it default-exports, which it

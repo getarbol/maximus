@@ -75,8 +75,13 @@ const OBSERVABILITY: WorkerConfig['observability'] = {
 /** A Worker and scope namespace name: lowercase letters, digits and single hyphens, 2 to 63 characters. */
 const SERVICE_NAME = /^(?=.{2,63}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
-/** The application's options and the Worker's settings, apart. */
+/** The application's options and the Worker's settings, apart. `assets` is maximus()'s own. */
 function split(options: MaximusOptions) {
+  if ('assets' in options) {
+    throw new TypeError(
+      'maximus() configures the assets: index.html at the root makes the project a web app.'
+    );
+  }
   const {
     name,
     namespace,
@@ -187,8 +192,15 @@ function workerEnv(root: string, options: MaximusOptions, mode: string): Record<
   };
 }
 
-/** What the generated modules carry: the application this file configures, or none for `maximus.config.ts`. */
-export function projectOptions(root: string, options: MaximusOptions): ProjectOptions | undefined {
+/**
+ * What the generated modules carry in a mode: the application this file configures, with the development
+ * token's policy in development alone, or none for `maximus.config.ts`.
+ */
+export function projectOptions(
+  root: string,
+  options: MaximusOptions,
+  mode = 'production'
+): ProjectOptions | undefined {
   const { application } = split(options);
   if (application.origin === undefined) {
     return undefined;
@@ -203,7 +215,7 @@ export function projectOptions(root: string, options: MaximusOptions): ProjectOp
       title: application.title ?? name,
       version,
       origin: application.origin,
-      tokens: { ...tokens, audience, ...(development ? { development } : {}) },
+      tokens: { ...tokens, audience, ...(development && mode === 'development' ? { development } : {}) },
       rpc: application.rpc ?? { callers: [] },
       ...(application.maxBodyBytes === undefined ? {} : { maxBodyBytes: application.maxBodyBytes }),
       ...(application.maxOutputBytes === undefined ? {} : { maxOutputBytes: application.maxOutputBytes }),

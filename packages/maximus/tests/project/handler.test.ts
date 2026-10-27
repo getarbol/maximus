@@ -240,6 +240,13 @@ describe('binding refuses', () => {
     );
   });
 
+  it('a DELETE route that declares it only reads, which would take a read scope', () => {
+    const removal = defineHandler({ output: {}, effect: 'read', handler: () => ({}) });
+    expect(() => bindRoute(base, removal, '/v1/tasks/{taskId}', 'DELETE')).toThrow(
+      'DELETE /v1/tasks/{taskId}: a DELETE route deletes; its effect is delete or write, never read.'
+    );
+  });
+
   it('an MCP route without a description, even when its types are bypassed', () => {
     const silent = defineHandler({
       output: {},
