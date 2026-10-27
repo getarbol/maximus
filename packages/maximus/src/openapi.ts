@@ -9,6 +9,7 @@ import type { TSchema } from '@sinclair/typebox';
 import { FailureSchema } from './errors.ts';
 import type { ErrorDefinition } from './errors.ts';
 import { operationPathParameters } from './http-paths.ts';
+import { queryKinds } from './internal/http-query.ts';
 import { pathParameterSchemas } from './internal/http-routes.ts';
 import {
   STANDARD_CODES,
@@ -195,7 +196,7 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       'x-max-output-bytes': operationOutputLimit(manifest, op),
       ...(http.body ? { 'x-body': http.body, 'x-input-headers': http.headers ?? {} } : {}),
       ...(http.response ? { 'x-response': http.response } : {}),
-      ...requestContract(op.input, http),
+      ...requestContract(op, http),
       responses: {
         [http.successStatus ?? 200]: successResponse(http, response),
         ...failureResponses(op, manifest.errors.definitions),
@@ -223,7 +224,8 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
  * Where an operation's input travels: its path parameters, then a byte body's query and header
  * metadata, a GET's query, or a JSON body without the fields the path carries.
  */
-function requestContract(input: TSchema, http: NonNullable<OperationShape['http']>): object {
+function requestContract(op: OperationShape, http: NonNullable<OperationShape['http']>): object {
+  const { input } = op;
   const parameterNames = operationPathParameters(http.path);
   const pathNames = new Set(parameterNames);
   const pathParameters = parameterNames.map((parameter) => {
@@ -257,6 +259,7 @@ function requestContract(input: TSchema, http: NonNullable<OperationShape['http'
     };
   }
   if (http.method === 'GET') {
+    const kinds = queryKinds(op);
     return {
       parameters: [
         ...pathParameters,
@@ -264,6 +267,8 @@ function requestContract(input: TSchema, http: NonNullable<OperationShape['http'
           name: field,
           in: 'query',
           required: required.includes(field),
+          // A list travels as one comma-separated value, `tags=a,b`, never as a repeated key.
+          ...(kinds.get(field) === 'list' ? { style: 'form', explode: false } : {}),
           schema,
         })),
       ],

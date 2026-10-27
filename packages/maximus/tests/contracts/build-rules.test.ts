@@ -205,7 +205,7 @@ it('refuses a byte body or an attachment outside its HTTP-only, matching and non
     { ...downloadFile.http, response: 'file' },
   ]) {
     expect(build({ ...uploadFile, http }, 'uploadFile')).toThrow(
-      new TypeError('Unsupported HTTP binary contract.')
+      new TypeError('Operation "uploadFile": unsupported HTTP binary contract.')
     );
   }
   const httpOnly = new TypeError('Operation "uploadFile": byte bodies and attachments are HTTP-only.');
@@ -236,12 +236,16 @@ it('refuses a byte body or an attachment outside its HTTP-only, matching and non
 });
 
 it('refuses header-sourced fields unless a byte operation names unique, non-authority metadata fields', () => {
-  const refused = new TypeError('Byte operation headers must name unique, non-authority metadata fields.');
+  const refusal = (operation: string) =>
+    new TypeError(
+      `Operation "${operation}": byte operation headers must name unique, non-authority metadata fields.`
+    );
+  const refused = refusal('uploadFile');
   const withHeaders = (headers: Record<string, string>, change: object = {}) =>
     build({ ...uploadFile, ...change, http: { ...uploadFile.http, headers } }, 'uploadFile');
   // Only a byte operation reads input from headers.
   expect(build({ ...readRecord, http: { ...readRecord.http, headers: { recordId: 'X-Record' } } })).toThrow(
-    refused
+    refusal('readRecord')
   );
   // A field the input lacks, a path field, and two fields from one header.
   expect(withHeaders({ missing: 'X-Missing' })).toThrow(refused);
@@ -268,7 +272,7 @@ it('refuses header-sourced fields unless a byte operation names unique, non-auth
 it('refuses operation limits outside 1 byte to 16 MiB, a body limit on GET and an unlisted success status', () => {
   for (const maxOutputBytes of [0, 1.5, 16 * MIB + 1]) {
     expect(build({ ...readRecord, maxOutputBytes }), String(maxOutputBytes)).toThrow(
-      new TypeError('Invalid operation output byte limit.')
+      new TypeError('Operation "readRecord": invalid output byte limit.')
     );
   }
   const bodyLimit = new TypeError(
@@ -282,7 +286,7 @@ it('refuses operation limits outside 1 byte to 16 MiB, a body limit on GET and a
   ).toThrow(bodyLimit);
   expect(build({ ...readRecord, maxBodyBytes: 16 * MIB, maxOutputBytes: 16 * MIB })).not.toThrow();
   expect(build({ ...readRecord, http: { ...readRecord.http, successStatus: 204 } })).toThrow(
-    new TypeError('Invalid operation success status.')
+    new TypeError('Operation "readRecord": invalid success status; use 200, 201 or 202.')
   );
   expect(build({ ...readRecord, http: { ...readRecord.http, successStatus: 202 } })).not.toThrow();
 });
@@ -313,9 +317,10 @@ it('refuses a path parameter the input does not hold as a required string, a reu
 });
 
 it('refuses an MCP tool without a safe name or with a name another operation took, and RPC callers the application does not allow', () => {
-  const tools = new TypeError('MCP tools require unique safe names.');
+  const tools = (operation: string) =>
+    new TypeError(`Operation "${operation}": MCP tools require unique safe names.`);
   for (const name of ['Records_read', 'records-read', '1records', `r${'x'.repeat(64)}`, '']) {
-    expect(build({ ...readRecord, mcp: { name, idempotent: true } }), name).toThrow(tools);
+    expect(build({ ...readRecord, mcp: { name, idempotent: true } }), name).toThrow(tools('readRecord'));
   }
   expect(build({ ...readRecord, mcp: { name: `r${'X'.repeat(63)}`, idempotent: true } })).not.toThrow();
   expect(() =>
@@ -335,9 +340,9 @@ it('refuses an MCP tool without a safe name or with a name another operation too
         answer
       )
       .build()
-  ).toThrow(tools);
+  ).toThrow(tools('readArchived'));
   expect(build({ ...readRecord, rpc: { callers: ['billing', 'payroll'] } })).toThrow(
-    new TypeError('Operation RPC callers must be allowed by the application.')
+    new TypeError('Operation "readRecord": RPC callers must be allowed by the application.')
   );
   expect(build({ ...readRecord, rpc: { callers: ['billing'] } })).not.toThrow();
   expect(build({ ...readRecord, rpc: true })).not.toThrow();

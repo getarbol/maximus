@@ -8,7 +8,7 @@ import type { Static } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import { OrganizationIdSchema, UuidSchema } from '../index.ts';
-import type { Failure, Observer, Result } from '../index.ts';
+import type { Observer } from '../index.ts';
 import { telemetryEnabled } from '../telemetry.ts';
 
 /** An analytics event: the allowlisted metadata of one operation call, flattened, with an id of its own. */
@@ -32,16 +32,6 @@ export const ExecutionEventSchema = Type.Object(
 );
 /** An analytics event. */
 export type ExecutionEvent = Static<typeof ExecutionEventSchema>;
-/**
- * A store that records analytics events and answers whether it kept each one; `analytics({ record })` can
- * hand it each event, `record: (env, event) => sink.record(event)`.
- */
-export interface ExecutionSink {
-  /**
-   * Keeps one event; an `ok: false` result means the event was not kept, which counts as a delivery failure.
-   */
-  record: (event: ExecutionEvent) => Promise<Result<null, Failure>>;
-}
 /** What `analytics()` takes: where events go, whether it records, and how events name the actor. */
 export interface AnalyticsOptions<E> {
   /**

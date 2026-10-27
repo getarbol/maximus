@@ -236,7 +236,7 @@ Libraries and entries:
   before it checks a connection out.
 - `createAssetHandler` answers an immutable asset only for a plain path: an encoded slash, an encoded
   character or a dot segment there is a 404.
-- `sameSchema` is removed.
+- `sameSchema` is removed, and so is the `ExecutionSink` type of `@arbol-ai/maximus/analytics`.
 - A custom HTTP transport receives `admitCarried`, `refused` and `body` in its `TransportContext`, where it
   received `admitRequest` and `bodyBytes`.
 

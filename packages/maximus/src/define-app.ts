@@ -164,12 +164,12 @@ function checkOperation(
       ))
   ) {
     throw new TypeError(
-      'Conditional scopes require unique namespaced declarations distinct from the admission scope.'
+      `Operation "${name}": conditional scopes require unique namespaced declarations distinct from the admission scope.`
     );
   }
   if (op.mcp) {
     if (!TOOL_NAME.test(op.mcp.name) || claimed.tools.has(op.mcp.name)) {
-      throw new TypeError('MCP tools require unique safe names.');
+      throw new TypeError(`Operation "${name}": MCP tools require unique safe names.`);
     }
     claimed.tools.add(op.mcp.name);
   }
@@ -178,7 +178,7 @@ function checkOperation(
     op.rpc !== true &&
     op.rpc.callers.some((caller) => !application.rpc.callers.includes(caller))
   ) {
-    throw new TypeError('Operation RPC callers must be allowed by the application.');
+    throw new TypeError(`Operation "${name}": RPC callers must be allowed by the application.`);
   }
 }
 
@@ -237,7 +237,7 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
     (op.http?.body !== undefined && op.http.body !== 'bytes') ||
     (op.http?.response !== undefined && op.http.response !== 'attachment')
   ) {
-    throw new TypeError('Unsupported HTTP binary contract.');
+    throw new TypeError(`Operation "${name}": unsupported HTTP binary contract.`);
   }
   const binary = op.http?.body === 'bytes';
   const attachment = isAttachmentSchema(op.output);
@@ -248,10 +248,10 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
     throw new TypeError(`Operation "${name}": declare matching attachment output and non-GET byte bodies.`);
   }
   if (!validBodyLimit(op.maxOutputBytes)) {
-    throw new TypeError('Invalid operation output byte limit.');
+    throw new TypeError(`Operation "${name}": invalid output byte limit.`);
   }
   if (op.http?.successStatus !== undefined && ![200, 201, 202].includes(op.http.successStatus)) {
-    throw new TypeError('Invalid operation success status.');
+    throw new TypeError(`Operation "${name}": invalid success status; use 200, 201 or 202.`);
   }
   if (op.http?.headers) {
     const pathFields = new Set(operationPathParameters(op.http.path));
@@ -265,7 +265,9 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
           !Object.hasOwn(op.input.properties, field) || pathFields.has(field) || !isInputHeaderName(wire)
       )
     ) {
-      throw new TypeError('Byte operation headers must name unique, non-authority metadata fields.');
+      throw new TypeError(
+        `Operation "${name}": byte operation headers must name unique, non-authority metadata fields.`
+      );
     }
   }
   if (!validBodyLimit(op.maxBodyBytes) || (op.maxBodyBytes !== undefined && op.http?.method === 'GET')) {

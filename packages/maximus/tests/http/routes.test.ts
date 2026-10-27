@@ -26,11 +26,13 @@ it('reads the parameters of a versioned template and refuses any other template'
   expect(operationPathParameters('/v1/records/{recordId}/notes/{noteId}')).toEqual(['recordId', 'noteId']);
   expect(operationPathParameters('/v12/records')).toEqual([]);
   for (const path of ['', '/', '/v1', 'v1/records', '/v0/records', '/records/{recordId}']) {
-    expect(() => operationPathParameters(path), path).toThrow('Operations require a versioned path.');
+    expect(() => operationPathParameters(path), path).toThrow(
+      new TypeError(`Operations require a versioned path, such as /v1/tasks: ${path}`)
+    );
   }
   for (const path of ['/v1/{constructor}', '/v1/records/{prototype}', '/v1/{recordId}/notes/{recordId}']) {
     expect(() => operationPathParameters(path), path).toThrow(
-      'Path parameter names must be unique and safe.'
+      new TypeError(`Path parameter names must be unique and safe: ${path}`)
     );
   }
   for (const path of [
@@ -42,7 +44,9 @@ it('reads the parameters of a versioned template and refuses any other template'
     '/v1/re cords',
   ]) {
     expect(() => operationPathParameters(path), path).toThrow(
-      'Use fixed routes or complete {parameter} segments; empty and malformed segments are forbidden.'
+      new TypeError(
+        `Use fixed routes or complete {parameter} segments; empty and malformed segments are forbidden: ${path}`
+      )
     );
   }
 });
@@ -154,25 +158,31 @@ it('matches exact routes by method and path, and templates one segment at a time
   expect(routes.ownsPath('/v1/records/r1/notes')).toBe(false);
 });
 
-it('refuses an unsupported method, a duplicate route and ambiguous templates at construction', () => {
+it('refuses an unsupported method, a duplicate route and ambiguous templates at construction, naming them', () => {
   const route = (method: 'GET' | 'DELETE', path: string) => ({ http: { method, path } });
   // Only a caller without types can name another method.
   expect(() => createHttpRouteResolver([route('HEAD' as 'GET', '/v1/records')])).toThrow(
-    'Operation routes require a supported HTTP method.'
+    new TypeError('Operation routes require a supported HTTP method: HEAD /v1/records')
   );
   expect(() => createHttpRouteResolver([route('GET', '/v1/records'), route('GET', '/v1/records')])).toThrow(
-    'Duplicate operation route.'
+    new TypeError('Duplicate operation route: GET /v1/records')
   );
   expect(() =>
     createHttpRouteResolver([route('GET', '/v1/records/{recordId}'), route('GET', '/v1/records/{id}')])
-  ).toThrow('Ambiguous operation path templates.');
+  ).toThrow(
+    new TypeError('Ambiguous operation path templates: GET /v1/records/{recordId} and GET /v1/records/{id}')
+  );
   // `/v1/records/archived/history` would match both.
   expect(() =>
     createHttpRouteResolver([
       route('GET', '/v1/records/{recordId}/history'),
       route('GET', '/v1/records/archived/{entryId}'),
     ])
-  ).toThrow('Ambiguous overlapping operation path templates.');
+  ).toThrow(
+    new TypeError(
+      'Ambiguous overlapping operation path templates: GET /v1/records/{recordId}/history and GET /v1/records/archived/{entryId}'
+    )
+  );
   // The same template under two methods is two routes.
   expect(() =>
     createHttpRouteResolver([route('GET', '/v1/records/{recordId}'), route('DELETE', '/v1/records/{id}')])

@@ -25,19 +25,19 @@ export function isInputHeaderName(header: string): boolean {
 export function operationPathParameters(path: string): string[] {
   const segments = path.split('/');
   if (segments[0] !== '' || !/^v[1-9][0-9]*$/.test(segments[1] ?? '') || segments.length < 3) {
-    throw new TypeError('Operations require a versioned path.');
+    throw new TypeError(`Operations require a versioned path, such as /v1/tasks: ${path}`);
   }
   const parameters: string[] = [];
   for (const segment of segments.slice(2)) {
     const parameter = PARAMETER_SEGMENT.exec(segment)?.[1];
     if (parameter) {
       if (UNSAFE_PARAMETERS.has(parameter) || parameters.includes(parameter)) {
-        throw new TypeError('Path parameter names must be unique and safe.');
+        throw new TypeError(`Path parameter names must be unique and safe: ${path}`);
       }
       parameters.push(parameter);
     } else if (!STATIC_SEGMENT.test(segment)) {
       throw new TypeError(
-        'Use fixed routes or complete {parameter} segments; empty and malformed segments are forbidden.'
+        `Use fixed routes or complete {parameter} segments; empty and malformed segments are forbidden: ${path}`
       );
     }
   }
@@ -102,6 +102,10 @@ interface Route<D> {
   /** Each path parameter's name and the zero-based index of its segment, the version segment being 0. */
   parameters: readonly { name: string; position: number }[];
 }
+/** A route as a refusal names it: its method and path template, `GET /v1/notes/{noteId}`. */
+function routeName(route: Route<HttpRouteDefinition>): string {
+  return `${route.definition.http?.method} ${route.definition.http?.path}`;
+}
 /**
  * A node of the template tree, as the declarations build it: fixed children, one parameter child and the
  * route ending here.
@@ -161,7 +165,9 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
       continue;
     }
     if (!HTTP_METHODS.has(definition.http.method)) {
-      throw new TypeError('Operation routes require a supported HTTP method.');
+      throw new TypeError(
+        `Operation routes require a supported HTTP method: ${definition.http.method} ${definition.http.path}`
+      );
     }
     const names = operationPathParameters(definition.http.path);
     const segments = definition.http.path.slice(1).split('/');
@@ -175,7 +181,7 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
     if (names.length === 0) {
       const key = `${definition.http.method} ${definition.http.path}`;
       if (exact.has(key)) {
-        throw new TypeError('Duplicate operation route.');
+        throw new TypeError(`Duplicate operation route: ${key}`);
       }
       exact.set(key, route);
       continue;
@@ -199,7 +205,9 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
       }
     }
     if (node.route) {
-      throw new TypeError('Ambiguous operation path templates.');
+      throw new TypeError(
+        `Ambiguous operation path templates: ${routeName(node.route)} and ${routeName(route)}`
+      );
     }
     node.route = route;
   }
@@ -220,7 +228,9 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
     }
     const routes = distinct.flatMap((node) => (node.route ? [node.route] : []));
     if (routes.length > 1) {
-      throw new TypeError('Ambiguous overlapping operation path templates.');
+      throw new TypeError(
+        `Ambiguous overlapping operation path templates: ${routes.map(routeName).join(' and ')}`
+      );
     }
     const state: State<D> = { fixed: new Map(), route: routes[0] };
     states.set(key, state);

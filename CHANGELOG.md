@@ -55,6 +55,7 @@ Breaking:
   string, before it checks a connection out.
 - `yaml` is no longer a dependency: `/openapi.yaml` and a skill's frontmatter are written by a small writer
   for JSON data.
+- `ExecutionSink`, which nothing used, is removed from `@arbol-ai/maximus/analytics`.
 
 Everything else:
 
@@ -103,6 +104,10 @@ Everything else:
   the application's diagnostics. The MCP listing of a union input includes a record member's key patterns.
 - `createAssetHandler` answers an immutable asset only for a plain path: an encoded slash, an encoded
   character or a dot segment there is a 404.
+- The OpenAPI document gives a list query parameter `style: form` and `explode: false`, so a generated
+  client sends `tags=a,b`, the one form the API reads, rather than repeating the key, which it refuses.
+- Every refusal of `.build()` that concerns one operation names it, and a refusal of a route template names
+  the path or the routes it concerns.
 - `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds a
   method to itself in its constructor constructs.
 - Project discovery sees the MCP tool of a route declared as a `const`, refuses a route whose fields it

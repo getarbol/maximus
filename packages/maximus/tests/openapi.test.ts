@@ -183,6 +183,67 @@ it('documents each public HTTP operation with its scopes, limits and MCP hints',
   expect(operationNamed(document, 'importRecords')).not.toHaveProperty('x-mcp-idempotent');
 });
 
+it('documents a list query field as one comma-separated value, the form the API reads', async () => {
+  const app = maximus<Record<string, never>>({
+    name: 'fixture',
+    namespace: 'fixture',
+    title: 'Fixture',
+    version: '1',
+    origin: 'https://fixture.example.test',
+    tokens: { issuer: ISSUER, audience: 'https://fixture.example.test' },
+    errors,
+    rpc: { callers: [] },
+    telemetry: { enabled: false },
+  })
+    .operation(
+      'searchRecords',
+      {
+        ...words,
+        effect: 'read',
+        scope: 'fixture:records:read',
+        input: t.Object(
+          { tags: t.Optional(t.Array(t.String())), limit: t.Optional(t.Integer()) },
+          { additionalProperties: false }
+        ),
+        output: t.Object({ tags: t.Array(t.String()) }, { additionalProperties: false }),
+        http: { method: 'GET', path: '/v1/records/search' },
+      },
+      async (_context, input) => ok({ tags: input.tags ?? [] })
+    )
+    .build();
+  const operation = (createOpenApi(app) as { paths: Record<string, { get: { parameters: object[] } }> })
+    .paths['/v1/records/search'];
+  // OpenAPI's default for an array would have clients repeat the key; the list's parameter says otherwise.
+  expect(operation?.get.parameters).toStrictEqual([
+    {
+      name: 'tags',
+      in: 'query',
+      required: false,
+      style: 'form',
+      explode: false,
+      schema: { type: 'array', items: { type: 'string' } },
+    },
+    { name: 'limit', in: 'query', required: false, schema: { type: 'integer' } },
+  ]);
+  const handle = createHttpHandler(app, {
+    verify: async () => ({
+      sub: 'client@clients',
+      client_id: 'client',
+      org_id: 'org_1234567890abcdef',
+      scope: 'fixture:records:read',
+    }),
+  });
+  const search = (query: string) =>
+    handle(
+      new Request(`https://fixture.example.test/v1/records/search?${query}`, {
+        headers: { authorization: 'Bearer a.b.c' },
+      }),
+      {}
+    );
+  expect(await (await search('tags=a,b')).json()).toMatchObject({ data: { tags: ['a', 'b'] } });
+  expect((await search('tags=a&tags=b')).status).toBe(400);
+});
+
 it('fills the default limits', () => {
   const defaults = { ...application(), maxBodyBytes: undefined, maxOutputBytes: undefined };
   expect(operationNamed(documentOf(defaults), 'listRecords')).toMatchObject({

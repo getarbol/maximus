@@ -251,7 +251,11 @@ it('validates conditional declarations instead of accepting typos, collisions or
       maximus<Record<string, never>>(configuration)
         .operation('readRecord', { ...definition, conditionalScopes }, async (_context, value) => ok(value))
         .build()
-    ).toThrow('Conditional scopes');
+    ).toThrow(
+      new TypeError(
+        'Operation "readRecord": conditional scopes require unique namespaced declarations distinct from the admission scope.'
+      )
+    );
   }
 });
 
