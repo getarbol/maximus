@@ -41,7 +41,7 @@ async function configure(plugins: Plugin[], config: Record<string, unknown>, mod
 }
 
 test('prepares the project and keeps Cloudflare’s plugin after its own', async () => {
-  const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler({});' });
+  const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});' });
   const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
   expect(plugins.map(({ name }) => name).slice(0, 2)).toEqual(['maximus', 'maximus-project']);
   expect(plugins.some(({ name }) => name === 'vite-plugin-cloudflare')).toBe(true);

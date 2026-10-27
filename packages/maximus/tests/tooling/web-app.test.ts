@@ -140,7 +140,7 @@ test('pages need index.html, and a project without a web app has no asset policy
   expect(() => prepareProject(pages, 'production', options(false))).toThrow(
     'app/routes/ holds the pages of a web app: add its index.html at the project root.'
   );
-  const api = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const api = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   expect(prepareProject(api, 'production', options(false))).toMatchObject({ webApp: false });
   expect(generated(api, 'worker.ts')).not.toContain('assets:');
 });

@@ -51,14 +51,16 @@ Everything else:
 - The project starter is `vite.config.ts`, routes, a page and a middleware: its token policy names an
   OAuth issuer, which MCP clients discover, and its types come from `@cloudflare/workers-types` and the
   generated `Env`.
-- `defineHandler` declares a route as a plain value: `input` and `output` take schemas or the fields of
-  strict objects, and the handler receives one object (`{ input, principal, env, fail, …context }`) and
-  returns its output or `fail(code)`, typed by the declared failures and their data. Binding derives
-  what a route leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its
-  effect from the method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's
-  idempotent hint; a `DELETE` route that declares `effect: 'read'` is refused. `defineTool` declares a
-  tool only MCP serves. A project registers its base and error
-  catalog in the global `MaximusRegister`, which types every handler's context and failures.
+- `defineHandler(handler, contract)` declares a route as a plain value: the handler receives one object
+  (`{ input, principal, env, fail, …context }`) and returns its output or `fail(code)`, typed by the
+  contract's failures and their data; the contract's `input` and `output` take schemas or the fields of
+  strict objects. The contract is optional, so a route without one takes no input and answers the empty
+  object, and it may live in a `const` with `satisfies HandlerOptions`. Binding derives what a route
+  leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its effect from the
+  method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's idempotent hint; a
+  `DELETE` route that declares `effect: 'read'` is refused. `defineTool(handler, contract)` declares a tool
+  only MCP serves. A project registers its base and error catalog in the global `MaximusRegister`, which
+  types every handler's context and failures.
 - The OpenAPI document leaves out an operation's empty description.
 - The project layout discovers `routes/**/<name>.<method>.ts` files, each default-exporting one
   `defineHandler` (`tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`; `.dev` and `.prod`

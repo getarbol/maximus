@@ -97,6 +97,22 @@ type Exported =
   | Extract<Statement, { type: 'ExportDefaultDeclaration' }>['declaration']
   | Extract<Statement, { type: 'VariableDeclaration' }>['declarations'][number]['init'];
 
+/** The initializer of a top-level `const` of the module, exported or not. */
+function constInitializer(body: readonly Statement[], name: string): Exported | undefined {
+  let initializer: Exported | undefined;
+  for (const node of body) {
+    const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    if (declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
+      for (const declarator of declaration.declarations) {
+        if (declarator.id.type === 'Identifier' && declarator.id.name === name) {
+          initializer = declarator.init;
+        }
+      }
+    }
+  }
+  return initializer;
+}
+
 /** What a module default-exports: `export default x`, or the initializer of the local const it names. */
 function defaultExpression(body: readonly Statement[]): Exported | undefined {
   let local: string | undefined;
@@ -117,17 +133,7 @@ function defaultExpression(body: readonly Statement[]): Exported | undefined {
       }
     }
   }
-  for (const node of body) {
-    const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
-    if (local && declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
-      for (const declarator of declaration.declarations) {
-        if (declarator.id.type === 'Identifier' && declarator.id.name === local) {
-          expression = declarator.init;
-        }
-      }
-    }
-  }
-  return expression;
+  return local === undefined ? expression : constInitializer(body, local);
 }
 
 /** An expression without the `as`, `satisfies`, `!` or parentheses around it, which leave its value as it is. */
@@ -145,13 +151,23 @@ function unwrap(expression: Exported | undefined): Exported | undefined {
 }
 
 /**
- * Whether a `defineHandler` call's fields name an MCP tool: true or false as its object literal shows it, or
- * undefined when a spread, a computed key or another argument hides them.
+ * Whether a `defineHandler` call's contract, its second argument, names an MCP tool: false without one, true
+ * or false as its object shows it, written in the call or in a const of the module, or undefined when a
+ * spread, a computed key or another value hides it.
  */
-function declaresMcp(expression: Exported | undefined): boolean | undefined {
+function declaresMcp(expression: Exported | undefined, body: readonly Statement[]): boolean | undefined {
   const call = unwrap(expression);
-  const [first] = call?.type === 'CallExpression' ? call.arguments : [];
-  const argument = first?.type === 'SpreadElement' ? undefined : unwrap(first);
+  if (call?.type !== 'CallExpression') {
+    return undefined;
+  }
+  const [, second] = call.arguments;
+  if (second === undefined) {
+    return false;
+  }
+  let argument = second.type === 'SpreadElement' ? undefined : unwrap(second);
+  if (argument?.type === 'Identifier') {
+    argument = unwrap(constInitializer(body, argument.name));
+  }
   if (argument?.type !== 'ObjectExpression') {
     return undefined;
   }
@@ -192,10 +208,10 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
   if (helper === 'defineTool') {
     return { mcp: true };
   }
-  const mcp = declaresMcp(defaultExpression(parsed.program.body));
+  const mcp = declaresMcp(defaultExpression(parsed.program.body), parsed.program.body);
   if (mcp === undefined) {
     throw new TypeError(
-      `${file} must default-export defineHandler({ ... }) with its fields written in the call, as a const it names or directly: prepare reads from them whether the route is an MCP tool.`
+      `${file} must write its defineHandler contract as an object, in the call or in a const of the module: prepare reads from it whether the route is an MCP tool.`
     );
   }
   return { mcp };

@@ -105,7 +105,7 @@ async function hotUpdate(plugin: Plugin, file: string) {
 }
 
 test('resolving the configuration prepares its root for its mode, with the options it derives there', () => {
-  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   const source = vi.fn(() => options);
   const plugin = maximusProject(source);
   expect(plugin).toMatchObject({ name: 'maximus-project', enforce: 'pre' });
@@ -124,7 +124,7 @@ test('without a root, the plugin prepares the directory Vite was started in', ()
 });
 
 test('its api prepares any root for a mode as a build would', () => {
-  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   const source = vi.fn(() => options);
   expect(maximusProject(source).api.prepare(root, 'production')).toMatchObject({
     directory: root,
@@ -148,7 +148,7 @@ test('a build watches the discovered modules, the configuration module and the c
     join(root, 'routes'),
     join(root, 'routes/v1/notes.ts'),
   ]);
-  const unconfigured = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const unconfigured = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   const optioned = maximusProject(() => options);
   configure(optioned, { root: unconfigured });
   expect(buildStart(optioned)).toEqual([
@@ -273,7 +273,7 @@ test('a discovery failure is thrown to Vite and keeps the previous graph until t
 });
 
 test('index.html coming or going restarts the server, and a page coming or going reloads the app', async () => {
-  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   // What the plugin of vite.config.ts reports: a web app while index.html is at the root.
   const plugin = maximusProject((directory) => ({
     ...options,

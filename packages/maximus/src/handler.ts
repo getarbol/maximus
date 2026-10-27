@@ -1,9 +1,10 @@
 /**
  * Declarations a project binds to its application: `defineHandler` for a route whose path and method come
  * from its filename, `defineTool` for a tool only MCP serves, named by its file, and `defineContext` and
- * `defineAuth` for the context every handler receives and the tokens the application verifies itself. Each
- * is a plain value; binding derives what a route or tool leaves out (its name, scope, effect and title) and
- * runs it through the same execution path as every other operation.
+ * `defineAuth` for the context every handler receives and the tokens the application verifies itself. A
+ * route or tool takes its handler first and its contract after it; each is a plain value, and binding
+ * derives what it leaves out (its name, scope, effect and title) and runs it through the same execution
+ * path as every other operation.
  */
 import { KindGuard, Type } from '@sinclair/typebox';
 import type { Static, TObject, TProperties, TSchema } from '@sinclair/typebox';
@@ -123,10 +124,21 @@ export type HandlerArguments<C, I extends TSchema, X> = Omit<C, 'input'> & {
   readonly fail: Fail<AllowedCode<X>>;
 } & (X extends { http: { body: 'bytes' } } ? { readonly body: BinaryBody } : unknown);
 /** What a handler answers: its output, or a failure from `fail`, at once or as a promise. */
-export type HandlerAnswer<O extends TSchema, X> =
-  | Static<O>
-  | Failed<AllowedCode<X>>
-  | Promise<Static<O> | Failed<AllowedCode<X>>>;
+export type HandlerAnswer<O extends TSchema, X> = Answer<Static<O>, X>;
+/** A value, or a failure from `fail`, at once or as a promise. */
+type Answer<V, X> = V | Failed<AllowedCode<X>> | Promise<V | Failed<AllowedCode<X>>>;
+/** The empty strict object a route answers when it declares no output. */
+type NoOutput = TObject<Record<never, never>>;
+/** The output schema a declaration stands for: the one it declares, or the empty object. */
+type OutputSchema<O> = [O] extends [never] ? NoOutput : SchemaOf<O>;
+/**
+ * What a handler that declares no output returns: nothing, or the empty object. An async handler without a
+ * return statement answers `Promise<void>`, which `undefined` would refuse.
+ */
+// oxlint-disable-next-line typescript/no-invalid-void-type -- a route without output returns nothing.
+type Nothing = Record<string, never> | void;
+/** What a handler returns: its declared output or, when it declares none, nothing at all. */
+type OutputValue<O> = [O] extends [never] ? Nothing : Static<SchemaOf<O>>;
 
 /** The HTTP options a route may set: its path and method come from its filename. */
 export type HandlerHttp = Omit<NonNullable<Exposure['http']>, 'method' | 'path'>;
@@ -139,8 +151,16 @@ export interface HandlerMcp {
   /** Whether the tool reaches outside the service; `true` unless declared. */
   openWorld?: boolean;
 }
-/** The fields a route may declare besides its schemas and handler; each is derived when left out. */
+/**
+ * A route's contract, what `defineHandler` takes after the handler: its schemas and the fields it declares,
+ * each derived or empty when left out. A contract kept in a `const` keeps its types with
+ * `satisfies HandlerOptions`; an annotation would widen them.
+ */
 export interface HandlerOptions {
+  /** The input schema, or its fields; none when the route takes no input. */
+  input?: SchemaOrFields;
+  /** The output schema, or its fields; none when the route answers the empty object. */
+  output?: SchemaOrFields;
   /** A short human name: the OpenAPI `summary` and the MCP tool's title. By default, the method and path. */
   title?: string;
   /** What the route does, for people and agents. A route that is also an MCP tool requires it. */
@@ -189,8 +209,8 @@ const tools = new WeakSet<object>();
  * to must prepare.
  */
 export interface HandlerDeclaration<I extends TSchema, O extends TSchema, X, C = RegisteredContext> {
-  /** The fields the route declares besides its schemas and handler. */
-  readonly options: HandlerOptions;
+  /** The fields the route declares besides its schemas. */
+  readonly options: Omit<HandlerOptions, 'input' | 'output'>;
   /** The input schema; an empty strict object when the route declares none. */
   readonly input: I;
   /** The output schema. */
@@ -199,14 +219,54 @@ export interface HandlerDeclaration<I extends TSchema, O extends TSchema, X, C =
   readonly handler: (args: HandlerArguments<C, I, X>) => HandlerAnswer<O, X>;
 }
 
+/** The fields `defineHandler` types from its contract, as the contract names them. */
+type HandlerContract<I, O, F, H, M, R, E, V, N> = Omit<
+  HandlerOptions,
+  'input' | 'output' | 'failures' | 'http' | 'mcp' | 'rpc' | 'effect' | 'visibility' | 'operationId'
+> & {
+  input?: I;
+  output?: O;
+  failures?: F;
+  http?: H;
+  mcp?: M;
+  rpc?: R;
+  effect?: E;
+  visibility?: V;
+  operationId?: N;
+} & ([M] extends [never] ? unknown : { description: string });
+
+/** Every handler declaration takes its handler first: an object there is a contract written in its place. */
+function requireHandler(handler: unknown, helper: string): void {
+  if (typeof handler !== 'function') {
+    throw new TypeError(
+      `${helper} takes the handler first and its contract after it: ${helper}(async ({ input }) => …, { input, output }).`
+    );
+  }
+}
+
 /**
- * Declares a route as its file's default export. The filename gives its path and method:
- * `routes/v1/tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`. `input` and `output` are schemas
- * or the fields of strict objects. The handler receives one object, `{ input, principal, env, fail,
- * …context }`, and returns its output or `fail(code)`.
+ * The declaration's schemas and handler. A contract without `output` answers the empty object, so its
+ * handler may return nothing.
+ */
+function declare(handler: (args: never) => unknown, contract: HandlerOptions) {
+  const { input, output, ...options } = contract;
+  return Object.freeze({
+    options: Object.freeze(options),
+    input: schemaOf(input),
+    output: schemaOf(output),
+    handler: output === undefined ? async (args: never) => (await handler(args)) ?? {} : handler,
+  });
+}
+
+/**
+ * Declares a route as its file's default export: its handler, then its contract. The filename gives its path
+ * and method: `routes/v1/tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`. The handler receives
+ * one object, `{ input, principal, env, fail, …context }`, and returns its output or `fail(code)`. The
+ * contract's `input` and `output` are schemas or the fields of strict objects; without a contract, the route
+ * takes no input and answers the empty object.
  */
 export function defineHandler<
-  O extends SchemaOrFields,
+  O extends SchemaOrFields = never,
   I extends SchemaOrFields = TObject<Record<never, never>>,
   const F extends readonly DomainCode[] = never,
   const H extends HandlerHttp = never,
@@ -216,40 +276,24 @@ export function defineHandler<
   const V extends NonNullable<Exposure['visibility']> = never,
   const N extends string = never,
 >(
-  definition: Omit<
-    HandlerOptions,
-    'failures' | 'http' | 'mcp' | 'rpc' | 'effect' | 'visibility' | 'operationId'
-  > & {
-    /** The input schema, or its fields; none when the route takes no input. */
-    input?: I;
-    /** The output schema, or its fields. */
-    output: O;
-    failures?: F;
-    http?: H;
-    mcp?: M;
-    rpc?: R;
-    effect?: E;
-    visibility?: V;
-    operationId?: N;
-    /** Answers one call: its output, or `fail(code)`. */
-    handler: (
-      args: HandlerArguments<RegisteredContext, SchemaOf<I>, DeclaredFields<F, H, M, R, E, V, N>>
-    ) => HandlerAnswer<SchemaOf<O>, DeclaredFields<F, H, M, R, E, V, N>>;
-  } & ([M] extends [never] ? unknown : { description: string })
-): HandlerDeclaration<SchemaOf<I>, SchemaOf<O>, DeclaredFields<F, H, M, R, E, V, N>> {
-  const { input, output, handler, ...options } = definition;
-  const declaration = Object.freeze({
-    options: Object.freeze(options),
-    // `schemaOf` builds the schema `SchemaOf` names: the one given, or the strict object of its fields.
-    input: schemaOf(input) as SchemaOf<I>,
-    output: schemaOf(output) as SchemaOf<O>,
-    handler,
-  });
+  /** Answers one call: its output, or `fail(code)`. */
+  handler: (
+    args: HandlerArguments<RegisteredContext, SchemaOf<I>, DeclaredFields<F, H, M, R, E, V, N>>
+  ) => Answer<OutputValue<O>, DeclaredFields<F, H, M, R, E, V, N>>,
+  contract?: HandlerContract<I, O, F, H, M, R, E, V, N>
+): HandlerDeclaration<SchemaOf<I>, OutputSchema<O>, DeclaredFields<F, H, M, R, E, V, N>> {
+  requireHandler(handler, 'defineHandler');
+  // `declare` builds the schemas `SchemaOf` and `OutputSchema` name: the ones given, or strict objects.
+  const declaration = declare(handler, contract ?? {}) as unknown as HandlerDeclaration<
+    SchemaOf<I>,
+    OutputSchema<O>,
+    DeclaredFields<F, H, M, R, E, V, N>
+  >;
   handlers.add(declaration);
   return declaration;
 }
 
-/** The fields a tool may declare besides its schemas and handler. */
+/** A tool's contract, what `defineTool` takes after the handler: its schemas, description, effect and the rest. */
 export interface ToolOptions extends Omit<
   HandlerOptions,
   'description' | 'effect' | 'operationId' | 'http' | 'mcp' | 'visibility'
@@ -266,8 +310,8 @@ export interface ToolOptions extends Omit<
 
 /** A tool as `defineTool` declares it, before binding names it after its file; `X` and `C` as for a route. */
 export interface ToolDeclaration<I extends TSchema, O extends TSchema, X, C = RegisteredContext> {
-  /** The fields the tool declares besides its schemas and handler. */
-  readonly options: ToolOptions;
+  /** The fields the tool declares besides its schemas. */
+  readonly options: Omit<ToolOptions, 'input' | 'output'>;
   /** The input schema; an empty strict object when the tool takes none. */
   readonly input: I;
   /** The output schema. */
@@ -277,42 +321,39 @@ export interface ToolDeclaration<I extends TSchema, O extends TSchema, X, C = Re
 }
 
 /**
- * Declares a tool only MCP serves, as its file's default export: `mcp/tools/summarize-tasks.ts` is the tool
- * `summarize_tasks`. It states its description and effect; its handler works as a route's.
+ * Declares a tool only MCP serves, as its file's default export: its handler, then its contract.
+ * `mcp/tools/summarize-tasks.ts` is the tool `summarize_tasks`. The contract states its description and
+ * effect; its handler works as a route's.
  */
 export function defineTool<
-  O extends SchemaOrFields,
-  const E extends OperationShape['effect'],
+  const E extends OperationShape['effect'] = never,
+  O extends SchemaOrFields = never,
   I extends SchemaOrFields = TObject<Record<never, never>>,
   const F extends readonly DomainCode[] = never,
   const R extends NonNullable<Exposure['rpc']> = never,
 >(
-  definition: Omit<ToolOptions, 'effect' | 'failures' | 'rpc'> & {
-    /** The input schema, or its fields; none when the tool takes no input. */
+  /** Answers one call: its output, or `fail(code)`. */
+  handler: (
+    args: HandlerArguments<
+      RegisteredContext,
+      SchemaOf<I>,
+      DeclaredFields<F, never, never, R, E, never, never>
+    >
+  ) => Answer<OutputValue<O>, DeclaredFields<F, never, never, R, E, never, never>>,
+  contract: Omit<ToolOptions, 'input' | 'output' | 'effect' | 'failures' | 'rpc'> & {
     input?: I;
-    /** The output schema, or its fields. */
-    output: O;
-    effect: E;
+    output?: O;
     failures?: F;
     rpc?: R;
-    /** Answers one call: its output, or `fail(code)`. */
-    handler: (
-      args: HandlerArguments<
-        RegisteredContext,
-        SchemaOf<I>,
-        DeclaredFields<F, never, never, R, E, never, never>
-      >
-    ) => HandlerAnswer<SchemaOf<O>, DeclaredFields<F, never, never, R, E, never, never>>;
-  }
-): ToolDeclaration<SchemaOf<I>, SchemaOf<O>, DeclaredFields<F, never, never, R, E, never, never>> {
-  const { input, output, handler, ...options } = definition;
-  const declaration = Object.freeze({
-    options: Object.freeze(options),
-    // `schemaOf` builds the schema `SchemaOf` names: the one given, or the strict object of its fields.
-    input: schemaOf(input) as SchemaOf<I>,
-    output: schemaOf(output) as SchemaOf<O>,
-    handler,
-  });
+  } & ([E] extends [never] ? { effect: OperationShape['effect'] } : { effect: E })
+): ToolDeclaration<SchemaOf<I>, OutputSchema<O>, DeclaredFields<F, never, never, R, E, never, never>> {
+  requireHandler(handler, 'defineTool');
+  // `declare` builds the schemas `SchemaOf` and `OutputSchema` name: the ones given, or strict objects.
+  const declaration = declare(handler, contract) as unknown as ToolDeclaration<
+    SchemaOf<I>,
+    OutputSchema<O>,
+    DeclaredFields<F, never, never, R, E, never, never>
+  >;
   tools.add(declaration);
   return declaration;
 }

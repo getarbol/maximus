@@ -112,7 +112,7 @@ test('a route may import the generated base and routes helper, and any generated
       "import { defineRoute } from '#maximus/routes';\nexport const GET = defineRoute('listNotes', {}, async () => ({}));",
     'routes/v1/tags.ts': "import { base } from '../../.maximus/base.ts';\nexport default () => base;",
     'routes/v1/tasks.get.ts':
-      "import type { app } from '#maximus/app';\nexport type Operations = typeof app.operations;\nexport default defineHandler({});",
+      "import type { app } from '#maximus/app';\nexport type Operations = typeof app.operations;\nexport default defineHandler(() => {});",
   });
   expect(prepareProject(root).modules).toMatchObject({ routes: 3 });
   const app = generated(root, 'app.ts');
@@ -210,7 +210,7 @@ test('a route module of named methods may export types beside them, and nothing 
 
 test('a declaration default-exported through a binding is still the module’s declaration', () => {
   const root = project({
-    'routes/v1/notes.get.ts': 'const listNotes = defineHandler({});\nexport { listNotes as default };',
+    'routes/v1/notes.get.ts': 'const listNotes = defineHandler(() => {});\nexport { listNotes as default };',
     'mcp/tools/summarize.ts': 'const summarize = defineTool({});\nexport default summarize;',
   });
   prepareProject(root);

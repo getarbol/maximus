@@ -30,15 +30,17 @@ export default defineConfig({
 // routes/v1/tasks/index.get.ts: GET /api/v1/tasks, also the MCP tool list_tasks
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-export default defineHandler({
-  description: "List the organization's tasks.",
-  output: { tasks: t.Array(t.String()) },
-  mcp: { name: 'list_tasks' },
-  handler: async ({ env, principal }) => {
+export default defineHandler(
+  async ({ env, principal }) => {
     const { keys } = await env.TASKS.list({ prefix: `${principal.organizationId}/` });
     return { tasks: keys.map(({ name }) => name) };
   },
-});
+  {
+    description: "List the organization's tasks.",
+    output: { tasks: t.Array(t.String()) },
+    mcp: { name: 'list_tasks' },
+  }
+);
 ```
 
 `maximus()` prepares `.maximus/` from `routes/`, `mcp/`, `middleware/` and the other convention

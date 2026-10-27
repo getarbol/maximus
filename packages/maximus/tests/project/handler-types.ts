@@ -4,7 +4,7 @@
  * and exposures binding derives for the client and native RPC.
  */
 import { defineAuth, defineContext, defineHandler, defineTool, t } from '../../src/index.ts';
-import type { Failed, PreparedContext, Principal, Static } from '../../src/index.ts';
+import type { Failed, HandlerOptions, PreparedContext, Principal, Static } from '../../src/index.ts';
 import { bindRoute, bindTool } from '../../src/project/config.ts';
 import type { RouteName, ToolMcpName, ToolName } from '../../src/project/config.ts';
 import type { RpcMethods } from '../../src/workers/runtime.ts';
@@ -12,12 +12,8 @@ import { base } from './fixtures/registered.ts';
 
 const task = { taskId: t.String(), title: t.String() };
 
-const complete = defineHandler({
-  input: { taskId: t.String() },
-  output: task,
-  failures: ['TASK_NOT_FOUND'],
-  rpc: true,
-  handler: ({ input, prefix, principal, fail }) => {
+const complete = defineHandler(
+  ({ input, prefix, principal, fail }) => {
     const id: string = input.taskId;
     const organization: string = principal.organizationId;
     // @ts-expect-error The registered context keeps its string prefix.
@@ -36,75 +32,110 @@ const complete = defineHandler({
     void fail('FORBIDDEN');
     return { taskId: id, title: `${prefix} task` };
   },
-});
+  {
+    input: { taskId: t.String() },
+    output: task,
+    failures: ['TASK_NOT_FOUND'],
+    rpc: true,
+  }
+);
 
-defineHandler({
-  output: task,
+defineHandler(
   // @ts-expect-error The output keeps its schema's types.
-  handler: () => ({ taskId: 1, title: 'task' }),
-});
-defineHandler({
-  output: { count: t.Integer() },
+  () => ({ taskId: 1, title: 'task' }),
+  {
+    output: task,
+  }
+);
+defineHandler(
   // @ts-expect-error Only fail creates a failure: an object of the same shape is no answer.
-  handler: () => ({ failure: { code: 'FORBIDDEN', message: '', retryable: false, data: {} } }),
-});
-defineHandler({
-  output: { count: t.Integer() },
+  () => ({ failure: { code: 'FORBIDDEN', message: '', retryable: false, data: {} } }),
+  {
+    output: { count: t.Integer() },
+  }
+);
+defineHandler(
   // @ts-expect-error Data that QUOTA_REACHED does not declare.
-  handler: ({ fail }) => fail('QUOTA_REACHED', { limit: 'many' }),
-});
-defineHandler({
-  output: { count: t.Integer() },
+  ({ fail }) => fail('QUOTA_REACHED', { limit: 'many' }),
+  {
+    output: { count: t.Integer() },
+  }
+);
+defineHandler(
   // @ts-expect-error QUOTA_REACHED requires its data.
-  handler: ({ fail }) => fail('QUOTA_REACHED'),
-});
-defineHandler({
+  ({ fail }) => fail('QUOTA_REACHED'),
+  {
+    output: { count: t.Integer() },
+  }
+);
+defineHandler(() => ({ count: 1 }), {
   output: { count: t.Integer() },
   // @ts-expect-error Only the catalog's domain codes are declared failures.
   failures: ['NOT_A_CODE'],
-  handler: () => ({ count: 1 }),
 });
-defineHandler({
+defineHandler(() => ({ count: 1 }), {
   output: { count: t.Integer() },
   // @ts-expect-error A field no route has, such as a path the filename owns.
   path: '/v1/elsewhere',
-  handler: () => ({ count: 1 }),
 });
 // @ts-expect-error A route that is an MCP tool describes what it does.
-defineHandler({
+defineHandler(() => ({ count: 1 }), {
   output: { count: t.Integer() },
   mcp: { name: 'count_tasks' },
-  handler: () => ({ count: 1 }),
 });
-defineHandler({
-  output: { count: t.Integer() },
-  http: { body: 'bytes' },
-  handler: async ({ body }) => {
+defineHandler(
+  async ({ body }) => {
     const read = await body.read();
     return { count: read.ok ? read.value.byteLength : 0 };
   },
-});
-defineHandler({
-  output: { count: t.Integer() },
+  {
+    output: { count: t.Integer() },
+    http: { body: 'bytes' },
+  }
+);
+defineHandler(
   // @ts-expect-error Only a route that declares a byte body reads one.
-  handler: async ({ body }) => ({ count: (await body.read()).ok ? 1 : 0 }),
-});
+  async ({ body }) => ({ count: (await body.read()).ok ? 1 : 0 }),
+  {
+    output: { count: t.Integer() },
+  }
+);
 
-const listed = defineHandler({
+// Without a contract, a route takes no input and answers the empty object: its handler returns nothing.
+defineHandler(async ({ principal }) => {
+  void principal.organizationId;
+});
+// @ts-expect-error A route that declares no output answers nothing of its own.
+defineHandler(() => ({ count: 1 }));
+// @ts-expect-error The handler comes first, then its contract.
+defineHandler({ output: { count: t.Integer() }, handler: () => ({ count: 1 }) });
+
+// A contract kept in a const keeps its types with satisfies.
+const contract = {
+  input: { taskId: t.String() },
+  output: { done: t.Boolean() },
+  failures: ['TASK_NOT_FOUND'],
+} satisfies HandlerOptions;
+defineHandler(({ input, fail }) => {
+  const id: string = input.taskId;
+  // @ts-expect-error Input from a kept contract holds only its declared fields.
+  void input.title;
+  return id ? { done: true } : fail('TASK_NOT_FOUND');
+}, contract);
+
+const listed = defineHandler(() => ({ tasks: [] }), {
   output: { tasks: t.Array(t.Object(task, { additionalProperties: false })) },
   description: 'List the tasks.',
   mcp: { name: 'list_tasks' },
-  handler: () => ({ tasks: [] }),
 });
-const summarize = defineTool({
+const summarize = defineTool(({ prefix }) => ({ summary: prefix }), {
   description: 'Summarize the open tasks.',
   effect: 'read',
   output: { summary: t.String() },
   rpc: true,
-  handler: ({ prefix }) => ({ summary: prefix }),
 });
 // @ts-expect-error A tool states its effect.
-defineTool({ description: 'No effect.', output: { summary: t.String() }, handler: () => ({ summary: '' }) });
+defineTool(() => ({ summary: '' }), { description: 'No effect.', output: { summary: t.String() } });
 
 const app = base
   .mount(bindRoute(base, complete, '/v1/tasks/{taskId}/complete', 'POST'))

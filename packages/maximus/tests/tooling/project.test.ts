@@ -159,10 +159,11 @@ test('ambiguous route forms and wildcard exports are rejected without replacing 
 test('suffixed modules declare one method each and share a path', () => {
   const root = project({
     'routes/v1/tasks/index.get.ts':
-      'throw new Error("must not execute"); export default defineHandler({ output: {}, handler: () => ({}) });',
-    'routes/v1/tasks/index.post.ts': 'export default defineHandler({});',
-    'routes/v1/tasks/[taskId].delete.ts': 'export default defineHandler({}); export type Removed = true;',
-    'routes/v1/debug.get.dev.ts': 'export default defineHandler({});',
+      'throw new Error("must not execute"); export default defineHandler(() => ({}), { output: {} });',
+    'routes/v1/tasks/index.post.ts': 'export default defineHandler(() => {});',
+    'routes/v1/tasks/[taskId].delete.ts':
+      'export default defineHandler(() => {}); export type Removed = true;',
+    'routes/v1/debug.get.dev.ts': 'export default defineHandler(() => {});',
   });
   prepareProject(root);
   const app = readFileSync(join(root, '.maximus/app.ts'), 'utf-8');
@@ -180,15 +181,15 @@ test('suffixed modules declare one method each and share a path', () => {
 
 test('a method has one owner: a suffixed module, or the unsuffixed module of its path', () => {
   const twice = project({
-    'routes/v1/tasks.get.ts': 'export default defineHandler({});',
-    'routes/v1/tasks/index.get.ts': 'export default defineHandler({});',
+    'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});',
+    'routes/v1/tasks/index.get.ts': 'export default defineHandler(() => {});',
   });
   expect(() => prepareProject(twice)).toThrow(
     'Multiple route files claim GET /v1/tasks: routes/v1/tasks.get.ts and routes/v1/tasks/index.get.ts.'
   );
   const mixed = project({
     'routes/v1/tasks.ts': 'export const GET = {};',
-    'routes/v1/tasks.post.ts': 'export default defineHandler({});',
+    'routes/v1/tasks.post.ts': 'export default defineHandler(() => {});',
   });
   expect(() => prepareProject(mixed)).toThrow(
     'Multiple route files claim /v1/tasks: routes/v1/tasks.post.ts and routes/v1/tasks.ts.'
@@ -197,7 +198,7 @@ test('a method has one owner: a suffixed module, or the unsuffixed module of its
 
 test('a suffixed module exports its declaration and nothing else', () => {
   for (const contents of [
-    'export const helper = 1; export default defineHandler({});',
+    'export const helper = 1; export default defineHandler(() => {});',
     'export const GET = {};',
     'export * from "./_shared";',
   ]) {
@@ -223,47 +224,53 @@ test('MCP tools are named by their file and bring the MCP transport, as a route 
   expect(worker).toContain("protocol === 'mcp'");
 
   const routeTool = project({
-    'routes/v1/tasks.get.ts': 'export default defineHandler({ "mcp": { name: "list_tasks" } });',
+    'routes/v1/tasks.get.ts': 'export default defineHandler(list, { "mcp": { name: "list_tasks" } });',
   });
   prepareProject(routeTool);
   expect(readFileSync(join(routeTool, '.maximus/worker.ts'), 'utf-8')).toContain('mcp()');
 
-  const plain = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({ rpc: true });' });
+  const plain = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler(list, { rpc: true });' });
   prepareProject(plain);
   const plainWorker = readFileSync(join(plain, '.maximus/worker.ts'), 'utf-8');
   expect(plainWorker).not.toContain('@arbol-ai/maximus/mcp');
   expect(plainWorker).toContain('const transports = options.transports;');
 });
 
-test('a route declared as a const it default-exports is an MCP tool as its fields show', () => {
+test('a route is an MCP tool as its contract shows, in the call or in a const of the module', () => {
   const transport = (contents: string) => {
     const root = project({ 'routes/v1/tasks.get.ts': contents });
     prepareProject(root);
     return readFileSync(join(root, '.maximus/worker.ts'), 'utf-8').includes('mcp()');
   };
+  expect(transport('export default defineHandler(list, { mcp: { name: "list_tasks" } });')).toBe(true);
   expect(
-    transport('const listTasks = defineHandler({ mcp: { name: "list_tasks" } });\nexport default listTasks;')
+    transport(
+      'const contract = { ["mcp"]: { name: "list_tasks" } } satisfies HandlerOptions;\nexport default defineHandler(list, contract);'
+    )
   ).toBe(true);
   expect(
     transport(
-      'const listTasks = defineHandler({ ["mcp"]: { name: "list_tasks" } } as const);\nexport { listTasks as default };'
+      'const listTasks = defineHandler(list, { mcp: { name: "list_tasks" } } as const);\nexport { listTasks as default };'
     )
   ).toBe(true);
-  expect(transport('export default defineHandler({ output, handler }) satisfies object;')).toBe(false);
-  expect(transport('const listTasks = defineHandler({ rpc: true });\nexport default listTasks;')).toBe(false);
+  expect(transport('export default defineHandler(async () => {}) satisfies object;')).toBe(false);
+  expect(transport('const listTasks = defineHandler(list, { rpc: true });\nexport default listTasks;')).toBe(
+    false
+  );
 });
 
-test('a route whose fields prepare cannot read is refused rather than left without its MCP tool', () => {
+test('a route whose contract prepare cannot read is refused rather than left without its MCP tool', () => {
   for (const contents of [
-    'export default defineHandler({ ...shared, handler });',
-    'export default defineHandler(declaration);',
-    'export default defineHandler({ [field]: true });',
-    'let listTasks = defineHandler({});\nexport default listTasks;',
+    'export default defineHandler(list, { ...shared });',
+    "import { contract } from './contract.ts';\nexport default defineHandler(list, contract);",
+    'export default defineHandler(list, { [field]: true });',
+    'let contract = {};\nexport default defineHandler(list, contract);',
+    'let listTasks = defineHandler(list);\nexport default listTasks;',
     "export { default } from '../../src/tasks.ts';",
   ]) {
     const root = project({ 'routes/v1/tasks.get.ts': contents });
     expect(() => prepareProject(root), contents).toThrow(
-      'must default-export defineHandler({ ... }) with its fields written in the call'
+      'must write its defineHandler contract as an object, in the call or in a const of the module'
     );
   }
 });
@@ -322,7 +329,7 @@ function single(files: Record<string, string> = {}): string {
 }
 
 test('a project configured in vite.config.ts carries its configuration and infers Env from its bindings', () => {
-  const root = single({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  const root = single({ 'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});' });
   expect(prepareProject(root, 'development', configured)).toMatchObject({ layout: 'options' });
   const generated = (name: string) => readFileSync(join(root, '.maximus', name), 'utf-8');
   expect(generated('config.ts')).toContain(

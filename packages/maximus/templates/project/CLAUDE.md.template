@@ -7,7 +7,7 @@ Read .agents/skills/project/SKILL.md and node_modules/@arbol-ai/maximus/skills/m
 
 This is an API-first Maximus project. vite.config.ts is its only configuration: maximus() states the
 application and its Worker, and errors.ts, context.ts and auth.ts complete it in code.
-Each route file default-exports one defineHandler: routes/v1/tasks/[taskId].delete.ts answers
+Each route file default-exports defineHandler(handler, contract): routes/v1/tasks/[taskId].delete.ts answers
 DELETE /api/v1/tasks/{taskId}. Declare strict schemas; the name, effect and scope derive from the method
 and path unless declared. MCP and RPC exposure use the same contracts; mcp/tools/ holds MCP-only tools.
 The Vite plugin and maximus prepare reconcile generated .maximus/ entries before builds. Never edit them.

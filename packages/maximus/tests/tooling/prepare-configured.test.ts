@@ -51,7 +51,7 @@ afterEach(() => {
 test('prepares a project through the plugin its vite.config.ts configures', async () => {
   const root = project({
     'vite.config.ts': `import { maximusProject } from ${JSON.stringify(PLUGIN)};\nexport default { plugins: [[maximusProject(() => (${JSON.stringify(options)}))]] };\n`,
-    'routes/v1/tasks.get.ts': 'export default defineHandler({});',
+    'routes/v1/tasks.get.ts': 'export default defineHandler(() => {});',
   });
   expect(await prepareConfiguredProject(root, 'development')).toMatchObject({
     layout: 'options',

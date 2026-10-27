@@ -34,18 +34,19 @@ async function call<C, O extends Record<string, OperationShape>>(
 }
 
 const task = { taskId: t.String(), title: t.String() };
-const complete = defineHandler({
-  input: { taskId: t.String({ minLength: 1 }) },
-  output: task,
-  failures: ['TASK_NOT_FOUND'],
-  handler: ({ input, prefix, fail }) =>
+const complete = defineHandler(
+  ({ input, prefix, fail }) =>
     input.taskId === 'missing' ? fail('TASK_NOT_FOUND') : { taskId: input.taskId, title: `${prefix} done` },
-});
-const list = defineHandler({
+  {
+    input: { taskId: t.String({ minLength: 1 }) },
+    output: task,
+    failures: ['TASK_NOT_FOUND'],
+  }
+);
+const list = defineHandler(async ({ prefix }) => ({ tasks: [`${prefix} one`] }), {
   output: { tasks: t.Array(t.String()) },
   description: 'List the tasks.',
   mcp: { name: 'list_tasks' },
-  handler: async ({ prefix }) => ({ tasks: [`${prefix} one`] }),
 });
 
 describe('routes', () => {
@@ -113,7 +114,7 @@ describe('routes', () => {
   });
 
   it('keep what a declaration names over what binding would derive', () => {
-    const declared = defineHandler({
+    const declared = defineHandler(() => ({ count: 0 }), {
       title: 'Search tasks',
       operationId: 'searchTasks',
       effect: 'read',
@@ -122,7 +123,6 @@ describe('routes', () => {
       output: { count: t.Integer() },
       description: 'Search without changing anything.',
       mcp: { name: 'search_tasks', idempotent: false, openWorld: false },
-      handler: () => ({ count: 0 }),
     });
     const searched = base.mount(bindRoute(base, declared, '/v1/tasks/search', 'POST')).build();
     expect(searched.operations.searchTasks).toMatchObject({
@@ -134,7 +134,7 @@ describe('routes', () => {
   });
 
   it('name a resource in kebab-case and delete with a write scope', () => {
-    const removed = defineHandler({ input: { listId: t.String() }, output: {}, handler: () => ({}) });
+    const removed = defineHandler(() => ({}), { input: { listId: t.String() }, output: {} });
     const lists = base.mount(bindRoute(base, removed, '/v1/taskLists/{listId}', 'DELETE')).build();
     expect(lists.operations.deleteV1TaskListsListId).toMatchObject({
       effect: 'delete',
@@ -144,15 +144,17 @@ describe('routes', () => {
   });
 
   it('read a declared byte body', async () => {
-    const upload = defineHandler({
-      input: { taskId: t.String() },
-      output: { bytes: t.Integer() },
-      http: { body: 'bytes' },
-      handler: async ({ body }) => {
+    const upload = defineHandler(
+      async ({ body }) => {
         const read = await body.read();
         return { bytes: read.ok ? read.value.byteLength : -1 };
       },
-    });
+      {
+        input: { taskId: t.String() },
+        output: { bytes: t.Integer() },
+        http: { body: 'bytes' },
+      }
+    );
     const uploads = base.mount(bindRoute(base, upload, '/v1/tasks/{taskId}/attachment', 'PUT')).build();
     const response = await createHttpHandler(uploads)(
       new Request('http://localhost:5173/v1/tasks/task-1/attachment', {
@@ -168,15 +170,16 @@ describe('routes', () => {
 
 describe('the execution path', () => {
   it('still refuses a failure the route does not declare, and an unknown code', async () => {
-    const undeclared = defineHandler({
-      output: {},
-      failures: ['TASK_NOT_FOUND'],
+    const undeclared = defineHandler(
       // A handler that escapes its types reaches the same checks as any other.
-      handler: ({ fail }) => (fail as (code: string, data?: object) => never)('QUOTA_REACHED', { limit: 1 }),
-    });
-    const unknown = defineHandler({
+      ({ fail }) => (fail as (code: string, data?: object) => never)('QUOTA_REACHED', { limit: 1 }),
+      {
+        output: {},
+        failures: ['TASK_NOT_FOUND'],
+      }
+    );
+    const unknown = defineHandler(({ fail }) => (fail as (code: string) => never)('NOT_IN_THE_CATALOG'), {
       output: {},
-      handler: ({ fail }) => (fail as (code: string) => never)('NOT_IN_THE_CATALOG'),
     });
     const app = base
       .mount(bindRoute(base, undeclared, '/v1/undeclared', 'POST'))
@@ -191,9 +194,8 @@ describe('the execution path', () => {
   });
 
   it('answers a failure with the data its code declares', async () => {
-    const quota = defineHandler({
+    const quota = defineHandler(({ fail }) => fail('QUOTA_REACHED', { limit: 3 }), {
       output: {},
-      handler: ({ fail }) => fail('QUOTA_REACHED', { limit: 3 }),
     });
     const app = base.mount(bindRoute(base, quota, '/v1/quota', 'POST')).build();
     expect(await call(app, 'POST', '/v1/quota', {})).toMatchObject({
@@ -203,11 +205,10 @@ describe('the execution path', () => {
   });
 
   it('checks the output once: a lookalike failure or an extra field is no answer', async () => {
-    const lookalike = defineHandler({
+    const lookalike = defineHandler(() => ({ failure: { code: 'TASK_NOT_FOUND' } }) as never, {
       output: {},
-      handler: () => ({ failure: { code: 'TASK_NOT_FOUND' } }) as never,
     });
-    const extra = defineHandler({ output: { count: t.Integer() }, handler: () => ({ count: 1, more: 2 }) });
+    const extra = defineHandler(() => ({ count: 1, more: 2 }), { output: { count: t.Integer() } });
     const app = base
       .mount(bindRoute(base, lookalike, '/v1/lookalike', 'POST'))
       .mount(bindRoute(base, extra, '/v1/extra', 'POST'))
@@ -227,13 +228,12 @@ describe('binding refuses', () => {
   });
 
   it('a route whose path names no resource and that declares no scope', () => {
-    const item = defineHandler({ input: { id: t.String() }, output: {}, handler: () => ({}) });
+    const item = defineHandler(() => ({}), { input: { id: t.String() }, output: {} });
     expect(() => bindRoute(base, item, '/v1/{id}', 'GET')).toThrow('declare its scope');
-    const scoped = defineHandler({
+    const scoped = defineHandler(() => ({}), {
       scope: 'tasks:items:read',
       input: { id: t.String() },
       output: {},
-      handler: () => ({}),
     });
     expect(base.mount(bindRoute(base, scoped, '/v1/{id}', 'GET')).build().operations.getV1Id.scope).toBe(
       'tasks:items:read'
@@ -241,25 +241,24 @@ describe('binding refuses', () => {
   });
 
   it('a DELETE route that declares it only reads, which would take a read scope', () => {
-    const removal = defineHandler({ output: {}, effect: 'read', handler: () => ({}) });
+    const removal = defineHandler(() => ({}), { output: {}, effect: 'read' });
     expect(() => bindRoute(base, removal, '/v1/tasks/{taskId}', 'DELETE')).toThrow(
       'DELETE /v1/tasks/{taskId}: a DELETE route deletes; its effect is delete or write, never read.'
     );
   });
 
   it('an MCP route without a description, even when its types are bypassed', () => {
-    const silent = defineHandler({
+    const silent = defineHandler(() => ({}), {
       output: {},
       mcp: { name: 'silent' },
       description: ' ',
-      handler: () => ({}),
     });
     expect(() => bindRoute(base, silent, '/v1/silent', 'GET')).toThrow('describes what it does');
   });
 
   it('a field no operation has, which `.build()` names', () => {
     const misspelling = { visiblity: 'internal' };
-    const misspelled = defineHandler({ output: {}, handler: () => ({}), ...misspelling });
+    const misspelled = defineHandler(() => ({}), { output: {}, ...misspelling });
     expect(() => base.mount(bindRoute(base, misspelled, '/v1/misspelled', 'GET')).build()).toThrow(
       '"visiblity" is not an operation field'
     );
@@ -267,19 +266,17 @@ describe('binding refuses', () => {
 });
 
 describe('tools', () => {
-  const summarize = defineTool({
+  const summarize = defineTool(({ input, prefix }) => ({ summary: `${input.limit} ${prefix}` }), {
     description: 'Summarize the open tasks.',
     effect: 'read',
     input: { limit: t.Integer({ minimum: 1 }) },
     output: { summary: t.String() },
-    handler: ({ input, prefix }) => ({ summary: `${input.limit} ${prefix}` }),
   });
-  const archive = defineTool({
+  const archive = defineTool(() => ({ archived: 0 }), {
     description: 'Archive the done tasks.',
     effect: 'write',
     output: { archived: t.Integer() },
     openWorld: false,
-    handler: () => ({ archived: 0 }),
   });
 
   it('are named by their file and serve only MCP', () => {
@@ -303,6 +300,40 @@ describe('tools', () => {
 
   it('refuse a file name that is not kebab-case', () => {
     expect(() => bindTool(base, summarize, 'Summarize_Tasks')).toThrow('kebab-case');
+  });
+});
+
+describe('a route without a contract', () => {
+  it('takes no input and answers the empty object, whatever its handler returns', async () => {
+    const touched = defineHandler(async () => {});
+    const app = base.mount(bindRoute(base, touched, '/v1/touch', 'POST')).build();
+    expect(await call(app, 'POST', '/v1/touch', {})).toMatchObject({
+      status: 200,
+      body: { success: true, data: {} },
+    });
+    expect(await call(app, 'POST', '/v1/touch', { extra: true })).toMatchObject({
+      status: 400,
+      body: { error: { code: 'INVALID_INPUT' } },
+    });
+  });
+
+  it('still answers a failure from fail', async () => {
+    const refused = defineHandler(({ fail }) => fail('FORBIDDEN'));
+    const app = base.mount(bindRoute(base, refused, '/v1/refused', 'POST')).build();
+    expect(await call(app, 'POST', '/v1/refused', {})).toMatchObject({
+      status: 403,
+      body: { error: { code: 'FORBIDDEN' } },
+    });
+  });
+
+  it('refuses a contract written where the handler goes', () => {
+    const contract = { output: {}, handler: () => ({}) };
+    expect(() => defineHandler(contract as never)).toThrow(
+      'defineHandler takes the handler first and its contract after it: defineHandler(async ({ input }) => …, { input, output }).'
+    );
+    expect(() => defineTool(contract as never, { description: 'A tool.', effect: 'read' })).toThrow(
+      'defineTool takes the handler first and its contract after it'
+    );
   });
 });
 

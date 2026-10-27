@@ -5,10 +5,11 @@ For the API-first project layout, use `maximus init <directory> --name <name> --
 token issuer, compatibility date and bindings (`env: { NAME: bindings.kv() }` from `cf/config`), and `Env`
 is generated from them. `errors.ts`, `context.ts` (`defineContext`) and `auth.ts` (`defineAuth`) complete
 the application in code; 7.4 projects keep `maximus.config.ts`. `src/` is optional domain code. Each route file
-default-exports one `defineHandler` from `@arbol-ai/maximus`: `routes/v1/tasks/[taskId].delete.ts` answers
+default-exports `defineHandler(handler, contract)` from `@arbol-ai/maximus`: `routes/v1/tasks/[taskId].delete.ts` answers
 `DELETE /v1/tasks/{taskId}`, and the operation name, effect and scope derive from the method and path unless
 declared. The handler receives `{ input, principal, env, fail, …context }` and returns its output or
-`fail(code)`. `mcp/tools/<name>.ts` default-exports a `defineTool` only MCP serves. A root `errors.ts`
+`fail(code)`. The contract (`input`, `output`, `failures`, `mcp`, …) is optional. `mcp/tools/<name>.ts` default-exports
+`defineTool(handler, contract)`, a tool only MCP serves. A root `errors.ts`
 types every handler's failures. The 7.4 `export const GET = defineRoute(…)` modules keep working.
 `defineMiddleware` (also named `defineRequestMiddleware`) wraps HTTP requests; `defineOperationMiddleware` runs after native admission on
 HTTP, MCP and RPC. Middleware files run in filename order. The Vite+ plugin reconciles entries on

@@ -137,10 +137,10 @@ imports independent of directory depth.
 
 ## Routes
 
-A route is a file whose name gives its path and method, and whose default export is a `defineHandler`
-declaration. `input` and `output` take a schema or the fields of a strict object; the handler receives one
-object (`{ input, principal, env, fail, …context }`, with the context the base prepares) and returns its
-output or `fail(code)`:
+A route is a file whose name gives its path and method, and whose default export is
+`defineHandler(handler, contract)`. The handler receives one object (`{ input, principal, env, fail,
+…context }`, with the context the base prepares) and returns its output or `fail(code)`. The contract
+states the rest: `input` and `output` take a schema or the fields of a strict object.
 
 ```ts
 // routes/v1/tasks/[taskId]/complete.post.ts: POST /api/v1/tasks/{taskId}/complete
@@ -148,20 +148,38 @@ import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
 import { TaskSchema } from '../../../../src/tasks.ts';
 
-export default defineHandler({
-  description: 'Mark a task as done. Completing a done task changes nothing.',
-  input: { taskId: UuidSchema },
-  output: TaskSchema,
-  failures: ['TASK_NOT_FOUND'],
-  mcp: { name: 'complete_task', idempotent: true },
-  handler: async ({ input, tasks, fail }) => {
+export default defineHandler(
+  async ({ input, tasks, fail }) => {
     const task = await tasks.get(input.taskId);
     if (!task) {
       return fail('TASK_NOT_FOUND');
     }
     return task.done ? task : tasks.put({ ...task, done: true });
   },
-});
+  {
+    description: 'Mark a task as done. Completing a done task changes nothing.',
+    input: { taskId: UuidSchema },
+    output: TaskSchema,
+    failures: ['TASK_NOT_FOUND'],
+    mcp: { name: 'complete_task', idempotent: true },
+  }
+);
+```
+
+The contract is optional: without one, a route takes no input and answers the empty object, so its
+handler returns nothing. A contract kept in a `const` keeps its types with `satisfies HandlerOptions`
+(an annotation would widen them):
+
+```ts
+// routes/v1/tasks/[taskId].delete.ts: DELETE /api/v1/tasks/{taskId}
+import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
+import type { HandlerOptions } from '@arbol-ai/maximus';
+
+const contract = { input: { taskId: UuidSchema } } satisfies HandlerOptions;
+
+export default defineHandler(async ({ input, tasks }) => {
+  await tasks.delete(input.taskId);
+}, contract);
 ```
 
 What a route leaves out, binding derives:
@@ -183,12 +201,12 @@ are strict objects, path parameters are required string fields of `input`, mutat
 field no route has is refused. `http` takes the byte body, header and attachment options; the path and
 method belong to the filename.
 
-`mcp/tools/<name>.ts` default-exports a `defineTool`: a tool only MCP serves, with no HTTP route. The file
-`summarize-tasks.ts` is the tool `summarize_tasks` and the operation `summarizeTasks`. A tool states its
-`description` and `effect`; its scope defaults to `<namespace>:<file>:read` or `:write` and it is
-idempotent when it reads. When a route or a tool declares MCP, the generated Worker adds the MCP transport
-unless the configuration already has one. MCP needs OAuth discovery: configure `tokens.issuer`, not an
-application `bearer` scheme.
+`mcp/tools/<name>.ts` default-exports `defineTool(handler, contract)`: a tool only MCP serves, with no
+HTTP route. The file `summarize-tasks.ts` is the tool `summarize_tasks` and the operation
+`summarizeTasks`. A tool states its `description` and `effect`; its scope defaults to
+`<namespace>:<file>:read` or `:write` and it is idempotent when it reads. When a route or a tool declares
+MCP, the generated Worker adds the MCP transport unless the configuration already has one. MCP needs OAuth
+discovery: configure `tokens.issuer`, not an application `bearer` scheme.
 
 The MCP server describes itself with Markdown in `mcp/`, which a project configured in `vite.config.ts`
 serves even when it has no tool:
@@ -262,10 +280,10 @@ zero-padded numeric prefixes for middleware order. Segment casing is preserved. 
 organize source: putting a file in `(staff)` does not make it private. Declare its scope and visibility.
 
 A suffixed file default-exports its declaration and nothing else: keep schemas and helpers unexported,
-in an ignored helper module or in `src/`. Type-only exports are allowed. Write the declaration's fields
-in the `defineHandler({ ... })` call, default-exported directly or as a `const`: prepare reads from them
-whether the route is an MCP tool, and refuses a spread, a computed key or a declaration it cannot see
-rather than leave a tool unserved. `get.ts` names a resource
+in an ignored helper module or in `src/`. Type-only exports are allowed. Write the contract as an object,
+in the call or in a `const` of the same module: prepare reads from it whether the route is an MCP tool,
+and refuses a spread, a computed key or a contract it cannot see rather than leave a tool unserved.
+`get.ts` names a resource
 literally called `get`; only a suffix after another name selects a method. `HEAD` and `OPTIONS` are not
 operation methods; HTTP transport handling remains owned by the native pipeline.
 

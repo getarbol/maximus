@@ -1,11 +1,10 @@
 import { defineHandler, t } from '@arbol-ai/maximus';
 
 /** POST /api/v1/greeting: a POST that changes nothing declares its read effect, and so its read scope. */
-export default defineHandler({
+export default defineHandler(({ input }) => input, {
   title: 'Echo a greeting',
   description: 'Return the authenticated caller’s greeting without storing it.',
   effect: 'read',
   input: { message: t.String({ minLength: 1, maxLength: 200 }) },
   output: { message: t.String() },
-  handler: ({ input }) => input,
 });
