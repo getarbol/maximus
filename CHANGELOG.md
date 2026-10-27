@@ -127,6 +127,8 @@ Everything else:
   a queue, an email or a Durable Object module, as from any other; a middleware, cron or queue module whose
   name keeps a dot besides `.dev` or `.prod`; and an email module named after neither a recipient nor
   `_default`, which no message would reach. It reads the configuration file Vite reads, in Vite's order.
+  Its refusals name a project's files relative to the project, and a route or middleware module that
+  imports the generated API, `#maximus/http`, at runtime is refused as one that imports the application is.
 - `maximus gen tool` and `maximus skills` refuse to write through a symlinked folder of the project.
 - `observability` options merge key by key over the defaults, so a partial setting keeps query strings
   redacted, and logs and traces follow `enabled` unless set. Two cron modules on one schedule make one

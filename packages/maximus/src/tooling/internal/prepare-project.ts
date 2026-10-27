@@ -156,7 +156,7 @@ function discoverRoutes(root: string, files: readonly ProjectFile[], imports: Im
       );
     }
     owners.set(claim, file);
-    mcp = declarationExports(file, 'defineHandler').mcp || mcp;
+    mcp = declarationExports(root, file, 'defineHandler').mcp || mcp;
     const identifier = imports.add(`route_${index}`, file);
     return `.mount(bindRoute(base, ${identifier}, ${JSON.stringify(path)}, ${JSON.stringify(method)}))`;
   });
@@ -172,7 +172,7 @@ function discoverTools(root: string, files: readonly ProjectFile[], imports: Imp
         `MCP modules are kebab-case tools directly in mcp/tools/, such as mcp/tools/summarize-tasks.ts: ${relative(root, file)}`
       );
     }
-    declarationExports(file, 'defineTool');
+    declarationExports(root, file, 'defineTool');
     const identifier = imports.add(`tool_${index}`, file);
     return `.mount(bindTool(base, ${identifier}, ${JSON.stringify(tool)}))`;
   });
@@ -419,21 +419,21 @@ export function prepareProject(directory: string, mode: string, project: Project
   const context = rootModule(root, 'context');
   for (const module of [catalog, auth, context]) {
     if (module) {
-      readProjectModule(join(root, module), 'config');
+      readProjectModule(root, join(root, module), 'config');
     }
   }
   const files = Object.fromEntries(
     PROJECT_DIRECTORIES.map((name) => [name, projectFiles(root, name, mode)])
   ) as Record<(typeof PROJECT_DIRECTORIES)[number], ProjectFile[]>;
   for (const { file } of files.middleware) {
-    readProjectModule(file, 'middleware');
+    readProjectModule(root, file, 'middleware');
   }
   // The modules only the generated Worker imports, which may use the application but not the Worker.
   for (const { file } of [...files.pages, ...files.queues, ...files.email, ...files['durable-objects']]) {
-    readProjectModule(file, 'worker');
+    readProjectModule(root, file, 'worker');
   }
   // Each cron module's schedule, when it states it as a literal: the Worker's triggers.
-  const schedules = files.crons.map(({ file }) => ({ file, cron: cronExpression(file) }));
+  const schedules = files.crons.map(({ file }) => ({ file, cron: cronExpression(root, file) }));
   // What mcp/ describes of the MCP server in Markdown.
   const described = mcpMarkdown(root);
 

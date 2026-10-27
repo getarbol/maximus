@@ -1,18 +1,25 @@
 /** Reads what project modules export with Oxc, without importing or executing them. */
 import { readFileSync } from 'node:fs';
+import { relative } from 'node:path';
 
 import { parseSync } from 'vite';
 
 /**
- * Parses a project module, refusing runtime imports of generated modules that would form a cycle and, in the
- * modules that complete the application, imports that only load in workerd. A module only the generated Worker
- * imports (a page, a cron, queue or email handler, a Durable Object) may use the application: only the Worker,
- * which imports it, would form a cycle.
+ * Parses a project module of `root`, refusing runtime imports of generated modules that would form a cycle
+ * and, in the modules that complete the application, imports that only load in workerd. The application and
+ * the API built from it (`app` and `http`) import routes and middleware; a module only the generated Worker
+ * imports (a page, a cron, queue or email handler, a Durable Object) may use them: only the Worker, which
+ * imports it, would form a cycle.
  */
-export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config' | 'worker') {
+export function readProjectModule(
+  root: string,
+  file: string,
+  role: 'route' | 'middleware' | 'config' | 'worker'
+) {
+  const shown = relative(root, file);
   const parsed = parseSync(file, readFileSync(file, 'utf-8'));
   if (parsed.errors.length) {
-    throw new TypeError(`Cannot discover ${file}: ${parsed.errors[0]?.message}`);
+    throw new TypeError(`Cannot discover ${shown}: ${parsed.errors[0]?.message}`);
   }
   for (const node of parsed.program.body) {
     let source: string | undefined;
@@ -39,11 +46,11 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
       generated &&
       (role === 'config' ||
         ['worker', 'entry'].includes(generated) ||
-        (role !== 'worker' && generated === 'app') ||
+        (role !== 'worker' && (generated === 'app' || generated === 'http')) ||
         (role === 'middleware' && generated === 'base'))
     ) {
       throw new TypeError(
-        `Runtime import ${source} creates a generated-module cycle in ${file}. Use a type-only import or shared domain module.`
+        `Runtime import ${source} creates a generated-module cycle in ${shown}. Use a type-only import or shared domain module.`
       );
     }
     if (
@@ -51,7 +58,7 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
       (source.startsWith('cloudflare:') || /^@arbol-ai\/maximus\/(?:workers|project)$/.test(source))
     ) {
       throw new TypeError(
-        `Configuration must remain importable outside workerd: ${source} in ${file}. Import its types only.`
+        `Configuration must remain importable outside workerd: ${source} in ${shown}. Import its types only.`
       );
     }
   }
@@ -158,8 +165,12 @@ function declaresMcp(expression: Exported | undefined, body: readonly Statement[
  * whether the declaration names an MCP tool, as its fields show it; the generated Worker serves MCP when one
  * does. A route whose fields prepare cannot see is refused, so a tool is never silently left unserved.
  */
-export function declarationExports(file: string, helper: 'defineHandler' | 'defineTool'): { mcp: boolean } {
-  const parsed = readProjectModule(file, 'route');
+export function declarationExports(
+  root: string,
+  file: string,
+  helper: 'defineHandler' | 'defineTool'
+): { mcp: boolean } {
+  const parsed = readProjectModule(root, file, 'route');
   const names = new Set<string>();
   for (const statement of parsed.module.staticExports) {
     for (const entry of statement.entries) {
@@ -189,8 +200,8 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
  * The schedule a cron module exports, `export const cron = '0 8 * * *'`, when it is a string literal: what
  * a project configured in `vite.config.ts` declares as the Worker's cron trigger. Undefined otherwise.
  */
-export function cronExpression(file: string): string | undefined {
-  for (const node of readProjectModule(file, 'worker').program.body) {
+export function cronExpression(root: string, file: string): string | undefined {
+  for (const node of readProjectModule(root, file, 'worker').program.body) {
     const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : undefined;
     if (declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
       for (const { id, init } of declaration.declarations) {

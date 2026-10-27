@@ -56,15 +56,16 @@ test('a generated file that is a symlink or a directory is refused before any ou
   expect(generated(root, 'app.ts')).toBe(app);
 });
 
-test('a route may not import the generated app, Worker or entry at runtime, in any import or export form', () => {
+test('a route may not import the generated app, API, Worker or entry at runtime, in any import or export form', () => {
   for (const [contents, source] of [
     ["import { app } from '#maximus/app';\nexport default app;", '#maximus/app'],
+    ["import { handler } from '#maximus/http';\nexport default handler;", '#maximus/http'],
     [`import '../../.maximus/worker.ts';\n${ROUTE}`, '../../.maximus/worker.ts'],
     ["export { default } from '#maximus/entry';", '#maximus/entry'],
   ] as const) {
     const root = project({ 'routes/v1/notes.get.ts': contents });
     expect(() => prepare(root), contents).toThrow(
-      `Runtime import ${source} creates a generated-module cycle in ${join(root, 'routes/v1/notes.get.ts')}. Use a type-only import or shared domain module.`
+      `Runtime import ${source} creates a generated-module cycle in routes/v1/notes.get.ts. Use a type-only import or shared domain module.`
     );
   }
 });
@@ -80,15 +81,16 @@ test('a route may import the generated base at runtime, and any generated module
   expect(app).toContain('bindRoute(base, route_1, "/v1/tasks", "GET")');
 });
 
-test('middleware may not import the generated base or app at runtime, but may name their types', () => {
+test('middleware may not import the generated base, app or API at runtime, but may name their types', () => {
   for (const [contents, source] of [
     ["import { base } from '#maximus/base';\nexport default base;", '#maximus/base'],
     ["import { app } from '#maximus/app';\nexport default app;", '#maximus/app'],
+    ["import { handler } from '#maximus/http';\nexport default handler;", '#maximus/http'],
     ["import { Service } from '../.maximus/worker.ts';\nexport default Service;", '../.maximus/worker.ts'],
   ] as const) {
     const root = project({ 'middleware/10-policy.ts': contents });
     expect(() => prepare(root), contents).toThrow(
-      `Runtime import ${source} creates a generated-module cycle in ${join(root, 'middleware/10-policy.ts')}.`
+      `Runtime import ${source} creates a generated-module cycle in middleware/10-policy.ts.`
     );
   }
   const typed = project({
@@ -113,7 +115,7 @@ test('a tool, page, queue, email or Durable Object module may not import at runt
   ] as const) {
     const root = project({ [file]: `import generated from '${source}';\nexport default generated;` });
     expect(() => prepare(root), file).toThrow(
-      `Runtime import ${source} creates a generated-module cycle in ${join(root, file)}.`
+      `Runtime import ${source} creates a generated-module cycle in ${file}.`
     );
   }
 });
@@ -134,7 +136,7 @@ test('the modules that complete the application stay importable outside workerd:
   ] as const) {
     const root = project({ [file]: contents });
     expect(() => prepare(root), source).toThrow(
-      `Configuration must remain importable outside workerd: ${source} in ${join(root, file)}. Import its types only.`
+      `Configuration must remain importable outside workerd: ${source} in ${file}. Import its types only.`
     );
   }
   const typed = project({
@@ -150,9 +152,7 @@ test('the modules that complete the application stay importable outside workerd:
 
 test('a module that does not parse is refused with what the parser found', () => {
   const root = project({ 'routes/v1/notes.get.ts': 'export default defineHandler(() => {' });
-  expect(() => prepare(root)).toThrow(
-    new RegExp(`^Cannot discover ${join(root, 'routes/v1/notes.get.ts')}: .+`)
-  );
+  expect(() => prepare(root)).toThrow(/^Cannot discover routes\/v1\/notes\.get\.ts: .+/);
 });
 
 test('a declaration default-exported through a binding is still the module’s declaration, beside its types', () => {
@@ -186,7 +186,7 @@ test('a cron module that imports the Worker that imports it is refused before an
       "import { Service } from '#maximus/worker';\nexport const cron = '0 8 * * *';\nexport default () => Service;",
   });
   expect(() => prepare(root)).toThrow(
-    `Runtime import #maximus/worker creates a generated-module cycle in ${join(root, 'crons/daily.ts')}.`
+    'Runtime import #maximus/worker creates a generated-module cycle in crons/daily.ts.'
   );
   expect(generated(root, 'worker.ts')).toBe(worker);
 });
