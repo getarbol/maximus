@@ -39,6 +39,8 @@ pipeline, never around it.
 | Tokens that are not organization-bound OAuth access tokens | `tokens.resolve`, verifying cryptographically |
 | SDKs or a catalog generated from the contract | The origin's `/openapi.json`, or `createOpenApi(app)` at build time; see `references/transports.md` |
 | A new service from scratch | `references/building-a-service.md`; `maximus init --layout project` adds optional file conventions |
+| A browser UI on the same Worker | In a project configured in `vite.config.ts`: `index.html` and React Router pages in `app/routes/`; the browser calls the API with `createClient<typeof app>`, importing the type alone. See the project-structure guide |
+| Guidance agents read over MCP | `mcp/instructions.md`, `mcp/guides/<name>.md` and `mcp/skills/<name>.md` in a project configured in `vite.config.ts`, else `mcp` in the application. Static text for every caller: never tenant data |
 | Upgrading from 4.x | `references/migration-to-v5.md` |
 | Upgrading from 2.x | `references/migration-from-v2.md` |
 
