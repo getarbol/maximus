@@ -1,7 +1,7 @@
 # __PROJECT_NAME__
 
-A [Maximus](https://github.com/getarbol/maximus) project: an API on Cloudflare Workers whose routes are also
-MCP tools when they say so, configured in one file, `vite.config.ts`.
+A [Maximus](https://github.com/getarbol/maximus) service on Cloudflare Workers: an API whose routes are
+files, served to agents as MCP tools when they say so, and configured in one file, `vite.config.ts`.
 
 ## Start
 
@@ -10,37 +10,44 @@ bun install
 bun run dev
 ```
 
-`GET /api/v1/greeting` answers `{ "message": "Hello World" }` to a signed-in caller. Locally, sign in with the
-development token in `.dev.vars`, which `vp dev` accepts from localhost alone:
+`bun run dev` serves the Worker at `http://localhost:5173`. `GET /api/v1/greeting` answers
+`{ "message": "Hello World" }` to a signed-in caller. Locally, the development token in `.dev.vars` signs you
+in, from localhost alone:
 
 ```sh
 curl -H "authorization: Bearer $(cut -d= -f2 .dev.vars)" http://localhost:5173/api/v1/greeting
 ```
 
-`/api/openapi.json` describes the API and `/health` reports liveness.
+`/api/openapi.json` describes the API, and `/health` answers without a token.
 
 ## Build on it
 
-| Add                      | How                                                                         |
-| ------------------------ | --------------------------------------------------------------------------- |
-| A route                  | `bunx maximus gen route get /v1/tasks/{taskId}` writes its file in routes/  |
-| A tool only agents call  | `bunx maximus gen tool summarize-tasks` writes mcp/tools/summarize-tasks.ts |
-| A binding (KV, D1, …)    | `env: { TASKS: bindings.kv() }` in maximus(), from `cf/config`              |
-| Your own failures        | `errors.ts` default-exports `defineErrors({ … })`                           |
-| What every handler needs | `context.ts` default-exports `defineContext(…)`                             |
+| To add                      | Do                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| A route                     | `bunx maximus gen route get '/v1/tasks/{taskId}'` writes its file in `routes/`   |
+| A tool only agents call     | `bunx maximus gen tool summarize-tasks` writes `mcp/tools/summarize-tasks.ts`    |
+| A binding (KV, D1, R2, …)   | `env: { TASKS: bindings.kv() }` in `maximus()`, with `bindings` from `cf/config` |
+| Your own failures           | `errors.ts` default-exports `defineErrors({ … })`                                |
+| A provider's webhook        | `pages/webhooks/<provider>.post.ts`, which verifies the delivery's signature     |
+| Observers or analytics      | `telemetry.ts` default-exports `defineTelemetry({ observers })`                  |
+| What every handler receives | `context.ts` default-exports `defineContext(…)`                                  |
 
-`.maximus/` is generated from these files on every `vp dev` and `vp build`; never edit it.
+`bun install`, `vp dev`, `vp test` and `vp build` generate `.maximus/` from these files; never edit it.
+[Project structure](https://github.com/getarbol/maximus/blob/main/docs/guides/project-structure.md)
+maps every file and folder a project can hold.
 
-## Verify and deploy
+## Test, verify and deploy
 
-`bun run verify` runs the types, lint and format, the tests and the build. Before the first deployment, set
-`origin` to the Worker's HTTPS URL (its workers.dev URL or a custom domain you own) and `tokens.issuer` to
-your authorization server. Then:
+`bun run test` runs the tests in `tests/` in Node, and `bun run verify` runs the types, lint and format,
+the tests and the build. Before the first deployment, set `origin` in `vite.config.ts` to the Worker's
+HTTPS URL (its workers.dev URL or a custom domain you own) and `tokens.issuer` to your authorization server.
+Then:
 
 ```sh
 bunx cf auth login
 bun run deploy
 ```
 
-The GitHub workflow verifies every pull request and deploys `main` with the repository secrets
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+The GitHub workflow verifies every pull request and deploys `main`, given the repository secrets
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The
+[Maximus documentation](https://github.com/getarbol/maximus/blob/main/docs/README.md) covers the rest.

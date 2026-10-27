@@ -1,15 +1,20 @@
 ---
 name: __PROJECT_NAME__-development
-description: Extend the __PROJECT_NAME__ Maximus project with routes, MCP tools and tests that follow its conventions.
+description: Extend the __PROJECT_NAME__ Maximus project with routes, MCP tools, bindings and tests that follow its conventions.
 ---
 
 Read CLAUDE.md and the Maximus skill (.agents/skills/maximus/SKILL.md) before changing the project.
 
-- Add a route with `bunx maximus gen route <method> <path>`, then fill in its handler and its strict input
-  and output schemas. Declare a scope or effect only where the method's default is wrong, and `mcp` or `rpc`
-  only to expose the route there.
+- Add a route with `bunx maximus gen route <method> <path>`, then write its handler, its description and its
+  strict input and output schemas. Declare a scope or effect only where the method's default is wrong, and
+  `mcp` or `rpc` only to expose the route there.
 - Add a tool only agents use with `bunx maximus gen tool <name>`, in mcp/tools/.
-- Put domain logic in named functions under src/, and what every handler needs in context.ts.
+- Put domain logic in named functions under src/, and what every handler needs in context.ts, scoped to
+  `principal.organizationId`.
 - Answer expected failures with `fail(code)` from the catalog in errors.ts, declared in `failures`.
-- Cover each route in tests/ through `handler` from #maximus/http, including its refusals.
-- Run `bun run verify` before you finish. Never edit .maximus/; cloud resources and SQL stay explicit.
+- Declare each binding in maximus()'s `env` with `bindings` from cf/config, and check what you read back
+  from storage with `readSchema`.
+- Cover each route in tests/ through `handler` from #maximus/http, its refusals included, with stand-ins
+  for the bindings it uses.
+- Run `bun run verify` before you finish. Never edit .maximus/; Cloudflare resources and migrations stay
+  explicit.

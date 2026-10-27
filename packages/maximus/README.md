@@ -1,53 +1,43 @@
 # @arbol-ai/maximus
 
-Maximus defines an organization-scoped service once and serves it on Cloudflare Workers over HTTP
-with its OpenAPI 3.1 contract, as MCP tools and as Worker RPC methods. It is one package: the root is
-the core (the fluent builder, TypeBox schemas, tokens and scopes, the error catalog, middleware, the
-native HTTP handler and OpenAPI), and each other capability is an entry. In a Vite+ project,
-`@arbol-ai/vite-plugin` makes `vite.config.ts` its only configuration.
+Maximus builds organization-scoped APIs on Cloudflare Workers that people and AI agents call alike. Each
+route is a file that declares its handler and its contract once, and the same Worker serves it over HTTP
+with an OpenAPI 3.1 document, as an MCP tool when the route names one, and over native RPC to the Workers
+you allow.
 
 ```sh
-bun add @arbol-ai/maximus
+bun create maximus my-api
 ```
 
 ```ts
-import { defineErrors, maximus, ok, t } from '@arbol-ai/maximus';
+// routes/v1/notes/[noteId].get.ts: GET /api/v1/notes/{noteId}, and the MCP tool get_note
+import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-export const app = maximus<Env>({
-  name: 'notes',
-  namespace: 'notes',
-  title: 'Notes',
-  version: '1.0.0',
-  origin: 'https://notes.example.com',
-  tokens: { issuer: 'https://auth.example.com/', audience: 'https://notes.example.com' },
-  errors: defineErrors({}),
-  rpc: { callers: [] },
-})
-  .operation(
-    'listNotes',
-    {
-      scope: 'notes:notes:read',
-      effect: 'read',
-      title: 'List notes',
-      description: "List the organization's notes.",
-      input: t.Object({}, { additionalProperties: false }),
-      output: t.Object({ notes: t.Array(t.String()) }, { additionalProperties: false }),
-      http: { method: 'GET', path: '/v1/notes' },
-    },
-    async () => ok({ notes: [] })
-  )
-  .build();
+import { NoteSchema } from '../../../src/notes.ts';
+
+export default defineHandler(
+  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  {
+    description: 'Read one note of the organization by its id.',
+    input: { noteId: UuidSchema },
+    output: NoteSchema,
+    failures: ['NOTE_NOT_FOUND'],
+    mcp: { name: 'get_note' },
+  }
+);
 ```
 
-Entries: the root (the core), `/workers` (the Worker), `/mcp` (MCP tools), `/schemas` (browser-safe
-schemas), `/errors` and `/failures` (runtime-free), `/body`,
-`/webhooks`, `/http-paths`, `/projection`, `/diagnostics`, `/internals` (the transport SPI), `/analytics`,
-`/postgres` (with the optional peer `pg`), `/testing`, `/oxlint` and `/oxfmt`. It installs the
-`maximus` CLI and ships the Maximus Agent Skill in `skills/maximus/`.
-See [package exports](https://github.com/getarbol/maximus/blob/main/docs/reference/exports.md).
+This package is the framework. Its root entry holds routes and operations, TypeBox schemas, tokens and
+scopes, the error catalog and the HTTP handler with its OpenAPI document; each optional capability is an
+entry of its own, such as `@arbol-ai/maximus/mcp`, `/workers` or `/postgres`, and a Worker carries only the
+entries it imports. The package installs the `maximus` command and ships the Maximus skill for coding agents
+in `skills/maximus/`. [`@arbol-ai/vite-plugin`](https://www.npmjs.com/package/@arbol-ai/vite-plugin) makes
+`vite.config.ts` a project's one configuration.
 
 - [Getting started](https://github.com/getarbol/maximus/blob/main/docs/getting-started.md)
 - [Concepts](https://github.com/getarbol/maximus/blob/main/docs/concepts.md)
-- [Configuration reference](https://github.com/getarbol/maximus/blob/main/docs/reference/configuration.md) and [operation reference](https://github.com/getarbol/maximus/blob/main/docs/reference/operations.md)
+- [Package exports](https://github.com/getarbol/maximus/blob/main/docs/reference/exports.md), every entry
+- [CLI](https://github.com/getarbol/maximus/blob/main/docs/reference/cli.md), the `maximus` command
+- [All documentation](https://github.com/getarbol/maximus/blob/main/docs/README.md)
 
 Released under the MIT License.
