@@ -13,13 +13,16 @@ bun install --frozen-lockfile
 bun run build
 ```
 
-| Path                      | Contains                                                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/maximus/`       | The published package: the core at the root of `src/`, one folder per entry (`workers/`, `mcp/`, `client/`, …); `tests/` mirrors it.                                                                    |
-| `examples/*`              | Runnable example services. They are workspace packages, so they typecheck with everything else.                                                                                                         |
-| `docs/`                   | The documentation.                                                                                                                                                                                      |
-| `.agents/skills/maximus/` | The canonical Agent Skill. `.claude/skills` and `.codex/skills` link to it; `bun run build` copies it into `packages/maximus/skills/` and the LICENSE beside it; both copies are generated and ignored. |
-| `scripts/`                | Build, verification and publication scripts.                                                                                                                                                            |
+| Path                       | Contains                                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/maximus/`        | `@arbol-ai/maximus`: the core at the root of `src/`, one folder per entry (`workers/`, `mcp/`, `postgres/`, `project/`, `tooling/`, …) and the starter `templates/`; `tests/` mirrors `src/`.           |
+| `packages/vite-plugin/`    | `@arbol-ai/vite-plugin`: `maximus()`, which reads `vite.config.ts` and composes Cloudflare's Vite plugin.                                                                                               |
+| `packages/create-maximus/` | `create-maximus`: `bun create maximus`, which runs `maximus init` of its own release.                                                                                                                   |
+| `examples/*`               | Example services that deploy to Cloudflare as they are. They are workspace packages, so they typecheck and test with everything else.                                                                   |
+| `e2e/`                     | The end-to-end suites, which call every example's Worker under `vp dev` or deployed.                                                                                                                    |
+| `docs/`                    | The documentation.                                                                                                                                                                                      |
+| `.agents/skills/maximus/`  | The canonical Agent Skill. `.claude/skills` and `.codex/skills` link to it; `bun run build` copies it into `packages/maximus/skills/` and the LICENSE beside it; both copies are generated and ignored. |
+| `scripts/`                 | Build, verification and publication scripts.                                                                                                                                                            |
 
 ### Where the code lives
 
@@ -36,7 +39,7 @@ Read a call top-down: `builder.ts` declares, `define-app.ts` checks, a transport
 | Identity                 | `tokens.ts` (verification and the principal), `scopes.ts`, `oauth.ts` (RFC 9728 metadata)                                                                                                                            |
 | Failures                 | `result.ts`, `errors.ts` (catalogs), `standard-failures.ts`                                                                                                                                                          |
 | Observability            | `telemetry.ts` (diagnostics and observers), `internal/diagnostics.ts` (safe error descriptions), `internal/correlation.ts`                                                                                           |
-| Entries                  | `workers/`, `mcp/`, `client/`, `analytics/` and `tooling/` (the CLI and `/testing`) depend on the core, never the other way round; `postgres/` depends only on `pg`                                                  |
+| Entries                  | `workers/`, `mcp/`, `analytics/`, `project/` (`/project` and `/config`) and `tooling/` (the CLI, `/vite` and `/testing`) depend on the core, never the other way round; `postgres/` depends only on `pg`             |
 
 Files under `internal/` are shared helpers; entries re-export the few that are public (the body
 readers, `createDiagnostics` and the correlation helpers).
@@ -115,13 +118,13 @@ a consumer must do, if anything. Keep one logical change per commit.
 
 ## Releases
 
-Maintainers release by merging a version change to `main`: the **Publish Maximus** workflow runs on
-every push to `main` and publishes when npm does not have the package version yet (it can also be
-started by hand). Maximus is `@arbol-ai/maximus` and its Vite plugin `@arbol-ai/vite-plugin` on npm,
-released together at one version; a breaking change moves the major version. Each is published from
-its packed tarball with npm provenance, never with `workspace:` or `file:` dependencies, and published
-versions never change. Installing from the registry and verifying a real deployment are separate
-gates after publication.
+Maintainers release by merging a version change, with its CHANGELOG section, to `main`: once CI passes
+on that commit, the **Publish** workflow publishes every package npm does not have at that version yet
+and releases the version on GitHub with its CHANGELOG section (it can also be started by hand on
+`main`). `@arbol-ai/maximus`, `@arbol-ai/vite-plugin` and `create-maximus` are released together at one
+version; a breaking change moves the major version. Each is published from its packed tarball with npm
+provenance, never with `workspace:` or `file:` dependencies, and published versions never change.
+Installing from the registry and verifying a real deployment are separate gates after publication.
 
 ## License
 

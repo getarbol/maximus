@@ -12,7 +12,7 @@ body:
     attributes:
       label: Version
       description: The @arbol-ai/maximus version, and the Bun, Node and cf versions if they matter.
-      placeholder: '@arbol-ai/maximus 7.0.0, Bun 1.4.3, Node 24.11.0, cf 1.0.0-beta.18'
+      placeholder: '@arbol-ai/maximus 8.0.0, Bun 1.4.4, Node 24.11.0, cf 1.0.0-beta.23'
     validations:
       required: true
   - type: textarea

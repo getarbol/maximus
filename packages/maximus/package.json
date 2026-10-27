@@ -1,6 +1,6 @@
 {
   "name": "@arbol-ai/maximus",
-  "version": "7.4.0",
+  "version": "8.0.0",
   "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, with its OpenAPI and CLI.",
   "keywords": [
     "api",

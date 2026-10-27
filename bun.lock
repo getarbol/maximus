@@ -138,7 +138,7 @@
     },
     "packages/create-maximus": {
       "name": "create-maximus",
-      "version": "7.4.0",
+      "version": "8.0.0",
       "bin": {
         "create-maximus": "dist/index.js",
       },
@@ -152,7 +152,7 @@
     },
     "packages/maximus": {
       "name": "@arbol-ai/maximus",
-      "version": "7.4.0",
+      "version": "8.0.0",
       "bin": {
         "maximus": "dist/tooling/cli.js",
       },
@@ -188,7 +188,7 @@
     },
     "packages/vite-plugin": {
       "name": "@arbol-ai/vite-plugin",
-      "version": "7.4.0",
+      "version": "8.0.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
       },
@@ -199,7 +199,7 @@
         "vite-plus": "1.4.0",
       },
       "peerDependencies": {
-        "@arbol-ai/maximus": "7.4.0",
+        "@arbol-ai/maximus": "8.0.0",
         "cf": ">=1.0.0-beta.23",
         "vite": "^8.3.4",
       },
