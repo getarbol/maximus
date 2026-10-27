@@ -41,8 +41,6 @@ pipeline, never around it.
 | A new service from scratch | `references/building-a-service.md`; `maximus init --layout project` adds optional file conventions |
 | A browser UI on the same Worker | In a project configured in `vite.config.ts`: `index.html` and React Router pages in `app/routes/`; the browser calls the API with `fetch`, typed by `typeof app.operations`, importing the type alone. See the project-structure guide |
 | Guidance agents read over MCP | `mcp/instructions.md`, `mcp/guides/<name>.md` and `mcp/skills/<name>.md` in a project configured in `vite.config.ts`, else `mcp` in the application. Static text for every caller: never tenant data |
-| Upgrading from 4.x | `references/migration-to-v5.md` |
-| Upgrading from 2.x | `references/migration-from-v2.md` |
 
 ## Rules that are never broken
 
@@ -81,8 +79,6 @@ Load the one that matches the task:
 - `references/transports.md`: HTTP and OpenAPI, MCP, native RPC, plain routes and Worker composition.
 - `references/errors-and-results.md`: catalogs, standard failures, presentation, uncertain outcomes.
 - `references/testing.md`: handler tests, the `verify` seam, MCP, `executeOperation`, RPC types.
-- `references/migration-to-v5.md`: what 5.0 removed and what to change.
-- `references/migration-from-v2.md`: 3.0.0 breaking changes and classifying older services.
 - `references/publishing-and-verification.md`: `maximus init`, deploying, verifying a deployment and
   releasing Maximus itself.
 

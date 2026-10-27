@@ -159,11 +159,11 @@ export interface TokenClaims {
   machineSubject?: '{client}@clients' | '{client}';
 }
 
-/** A token `cf dev` accepts from localhost, so a service runs without an authorization server. */
+/** A token `vp dev` accepts from localhost, so a service runs without an authorization server. */
 export interface TokenDevelopment {
   /**
-   * The env binding that holds the token, such as `DEVELOPMENT_TOKEN` set in `.dev.vars` and declared in
-   * `cloudflare.config.ts` for the development mode alone; at least 32 characters, or it never matches.
+   * The env binding that holds the token, such as `DEVELOPMENT_TOKEN` set in `.dev.vars`, which `maximus()`
+   * declares in development alone; at least 32 characters, or it never matches.
    */
   binding: string;
   /** The organization the developer acts in; `local-development` by default. */

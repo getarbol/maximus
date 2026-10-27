@@ -1,7 +1,7 @@
 # @arbol-ai/vite-plugin
 
 Maximus for [Vite+](https://viteplus.dev): one `vite.config.ts` configures a Maximus application and the
-Cloudflare Worker that serves it. No `maximus.config.ts`, no `cloudflare.config.ts`.
+Cloudflare Worker that serves it.
 
 ```sh
 bun add @arbol-ai/maximus

@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { expect, it, vi } from 'vite-plus/test';
 
-import { httpBodyFailure, readBodyBytes, readBodyText, readWebhookBody } from '../../src/internal/body.ts';
+import { httpBodyFailure, readBodyBytes, readBodyText } from '../../src/internal/body.ts';
 import type { HttpBodyFailureReason } from '../../src/internal/body.ts';
 
 const ORIGIN = 'https://records.example.test';
@@ -161,19 +161,6 @@ it('decodes UTF-8 strictly by default and leniently on request', async () => {
     value: 'héllo',
   });
   expect(await readBodyText(new Response('héllo'), { maxBytes: 5 })).toStrictEqual(refused('too_large'));
-});
-
-it("reads a webhook body leniently, within its limit and its request's own deadline", async () => {
-  const delivery = (body: BodyInit, signal?: AbortSignal) =>
-    new Request(`${ORIGIN}/hooks/payments`, { method: 'POST', body, signal });
-  expect(await readWebhookBody(delivery(new Uint8Array([0x6f, 0x6b, 0xff])), 64)).toStrictEqual({
-    ok: true,
-    value: 'ok�',
-  });
-  expect(await readWebhookBody(delivery('{"event":"paid"}'), 8)).toStrictEqual(refused('too_large'));
-  expect(await readWebhookBody(delivery('{"event":"paid"}', AbortSignal.abort()), 64)).toStrictEqual(
-    refused('aborted')
-  );
 });
 
 it("builds failures only from its closed vocabulary, never from a caller's text", () => {

@@ -39,13 +39,6 @@ Run it:
 - [Lint and format](guides/lint-and-format.md): the presets and the guardrails they enforce.
 - [Deploying](guides/deploying.md): configuration, secrets and verifying a deployment.
 
-Upgrade it:
-
-- [Migrating to 5.0](guides/migrating-to-v5.md): the delegated entrypoint, admission and the service
-  artifact are gone.
-- [Migrating to 4.0](guides/migrating-to-v4.md): one package, entries instead of packages.
-- [Migrating from 2.x](guides/migrating-from-v2.md).
-
 ## Reference
 
 - [Configuration](reference/configuration.md): every option of `maximus()`, `createWorker()` and the

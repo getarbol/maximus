@@ -163,26 +163,6 @@ export function bundleSchemas(
   return { values: rewritten.map((value) => replaceReferences(value, resolve)), components };
 }
 
-/**
- * Whether two schemas are one shape, which one `$id` may name: their `$id` and their own use-site
- * annotations aside, the same JSON.
- */
-export function sameSchema(a: unknown, b: unknown): boolean {
-  return ownShape(a) === ownShape(b);
-}
-
-/** A schema's JSON, canonical, without its own `$id` and use-site annotations. */
-function ownShape(value: unknown): string {
-  // The JSON projection documents carry, without TypeBox's symbols and codecs.
-  // oxlint-disable-next-line unicorn/prefer-structured-clone
-  const json: unknown = JSON.parse(JSON.stringify(value ?? null));
-  return json && typeof json === 'object' && !Array.isArray(json)
-    ? canonical(
-        Object.fromEntries(Object.entries(json).filter(([key]) => key !== '$id' && !ANNOTATIONS.has(key)))
-      )
-    : canonical(json);
-}
-
 /** Adds every `$ref` found in a value to `references`. */
 function collectReferences(value: unknown, references: Set<string>): void {
   if (Array.isArray(value)) {

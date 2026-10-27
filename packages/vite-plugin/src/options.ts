@@ -43,11 +43,8 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   title?: string;
   /** The version OpenAPI, the MCP server and `/health` report; by default, the package's version. */
   version?: string;
-  /**
-   * The public HTTPS origin OpenAPI, MCP resources and OAuth discovery advertise. Leave it out only while
-   * `maximus.config.ts` still configures the application.
-   */
-  origin?: string;
+  /** The public HTTPS origin OpenAPI, MCP resources and OAuth discovery advertise. */
+  origin: string;
   /** How tokens are verified: the OAuth issuer, the audience and the development token. */
   tokens?: TokenOptions;
   /** The Workers allowed to call native RPC methods, by the `caller` their Service Binding names; none by default. */
@@ -194,17 +191,10 @@ function workerEnv(root: string, options: MaximusOptions, mode: string): Record<
 
 /**
  * What the generated modules carry in a mode: the application this file configures, with the development
- * token's policy in development alone, or none for `maximus.config.ts`.
+ * token's policy in development alone.
  */
-export function projectOptions(
-  root: string,
-  options: MaximusOptions,
-  mode = 'production'
-): ProjectOptions | undefined {
+export function projectOptions(root: string, options: MaximusOptions, mode = 'production'): ProjectOptions {
   const { application } = split(options);
-  if (application.origin === undefined) {
-    return undefined;
-  }
   const { name, version } = identity(root, options);
   const { audience = application.origin, development: _declared, ...tokens } = application.tokens ?? {};
   const development = developmentToken(options);

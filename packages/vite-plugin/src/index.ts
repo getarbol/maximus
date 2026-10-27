@@ -1,8 +1,7 @@
 /**
  * `@arbol-ai/vite-plugin`: one `vite.config.ts` configures a Maximus application and the Cloudflare Worker
  * that serves it. `maximus()` keeps the project's generated modules in step with its files and runs
- * Cloudflare's Vite plugin with the Worker its options describe, so the project needs neither
- * `maximus.config.ts` nor `cloudflare.config.ts`.
+ * Cloudflare's Vite plugin with the Worker its options describe.
  */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -58,7 +57,7 @@ export function maximus(options: MaximusOptions): Plugin[] {
       const root = resolve(config.root ?? process.cwd());
       if (existsSync(join(root, 'cloudflare.config.ts'))) {
         throw new TypeError(
-          'maximus() configures the Worker: move cloudflare.config.ts into its options, or keep maximusProject() and cloudflare().'
+          "maximus() configures the Worker: move cloudflare.config.ts into maximus()'s options."
         );
       }
       checkWebAppBuild(root, config);

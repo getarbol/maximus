@@ -1,8 +1,8 @@
-/** Deterministic source discovery. Only ordinary source files inside opted-in directories are loaded. */
+/** Deterministic module discovery: only ordinary source files inside the convention directories are read. */
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
-/** Project-owned convention directories; infrastructure remains in cloudflare.config.ts. */
+/** The convention directories prepare discovers modules in; bindings and triggers stay in vite.config.ts. */
 export const PROJECT_DIRECTORIES = [
   'routes',
   'mcp',

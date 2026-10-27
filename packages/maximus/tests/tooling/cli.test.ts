@@ -1,13 +1,15 @@
 /**
- * The `maximus` command, run in this process with its arguments: help and usage, `init` with its name, layout
- * and refusals, `prepare` for a directory and mode, and failures reported as one sentence unless MAXIMUS_DEBUG
+ * The `maximus` command, run in this process with its arguments: help and usage, `init` with its name and
+ * refusals, `prepare` for a directory and mode, and failures reported as one sentence unless MAXIMUS_DEBUG
  * asks for the error itself.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, test, vi } from 'vite-plus/test';
+
+import { options, project, removeProjects, temporary } from './fixtures.ts';
 
 /** A `process.exit` call, thrown so the command stops where the process would have ended. */
 class ExitError extends Error {
@@ -21,7 +23,8 @@ class ExitError extends Error {
 
 const ARGV = process.argv;
 const CWD = process.cwd();
-const directories: string[] = [];
+/** Inside the workspace's node_modules, where a bundled configuration resolves Vite and its imports. */
+const CACHE = fileURLToPath(new URL('../../../../node_modules/.cache/', import.meta.url));
 
 afterEach(() => {
   process.argv = ARGV;
@@ -29,27 +32,8 @@ afterEach(() => {
   process.chdir(CWD);
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  removeProjects();
 });
-
-/** A new temporary directory, removed after the test. */
-function temporary(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'maximus-cli-'));
-  directories.push(directory);
-  return directory;
-}
-
-/** A project in a temporary directory, with these files. */
-function project(files: Record<string, string>): string {
-  const root = temporary();
-  for (const [name, contents] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, name)), { recursive: true });
-    writeFileSync(join(root, name), contents);
-  }
-  return root;
-}
 
 /** Runs `maximus ...args` as the binary would: what it printed and reported, and how it ended. */
 async function maximus(...args: string[]) {
@@ -83,9 +67,7 @@ test('--help prints the usage of init and prepare and exits successfully', async
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
   expect(printed).toHaveLength(1);
-  expect(printed[0]).toContain(
-    'Usage: maximus init <new-directory> --name <name> [--layout service|project]'
-  );
+  expect(printed[0]).toContain('Usage: maximus init <new-directory> [--name <name>]');
   expect(printed[0]).toContain('maximus prepare [directory] [--mode production|development]');
 });
 
@@ -98,43 +80,27 @@ test('a missing or unknown command reports the usage and fails', async () => {
   }
 });
 
-test('init scaffolds the named service and prints where it is and what to do next', async () => {
+test('init scaffolds a project named after its directory unless --name names it, and prints what to do next', async () => {
   const directory = join(temporary(), 'tasks');
-  const { printed, reported, exitCode } = await maximus('init', directory, '--name', 'tasks');
+  const { printed, reported, exitCode } = await maximus('init', directory);
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
   expect(JSON.parse(String(printed[0]))).toMatchObject({
     directory,
-    layout: 'service',
     next: expect.stringContaining('bun run deploy'),
   });
-  expect(readFileSync(join(directory, 'src/app.ts'), 'utf-8')).toContain("name: 'tasks',");
-});
-
-test('init --layout project scaffolds the file conventions', async () => {
-  const directory = join(temporary(), 'tasks');
-  const { printed } = await maximus('init', directory, '--name', 'tasks', '--layout', 'project');
-  expect(JSON.parse(String(printed[0]))).toMatchObject({ directory, layout: 'project' });
   expect(existsSync(join(directory, 'routes/v1/greeting.get.ts'))).toBe(true);
-  expect(existsSync(join(directory, 'src'))).toBe(false);
+  expect(readFileSync(join(directory, 'package.json'), 'utf-8')).toContain('"name": "tasks"');
+  const named = join(temporary(), 'service');
+  await maximus('init', named, '--name', 'billing-api');
+  expect(readFileSync(join(named, 'package.json'), 'utf-8')).toContain('"name": "billing-api"');
 });
 
-test('init without a directory or a name, or with another layout, is refused as one sentence', async () => {
-  const directory = join(temporary(), 'tasks');
-  for (const [args, sentence] of [
-    [['init', '--name', 'tasks'], 'maximus: Use maximus init <new-directory> --name <name>.'],
-    [['init', directory], 'maximus: Use maximus init <new-directory> --name <name>.'],
-    [
-      ['init', directory, '--name', 'tasks', '--layout', 'monorepo'],
-      'maximus: Choose --layout service or --layout project.',
-    ],
-  ] as const) {
-    const { printed, reported, exitCode } = await maximus(...args);
-    expect(reported, args.join(' ')).toEqual([sentence]);
-    expect(exitCode).toBe(1);
-    expect(printed).toEqual([]);
-  }
-  expect(existsSync(directory)).toBe(false);
+test('init without a directory is refused as one sentence', async () => {
+  const { printed, reported, exitCode } = await maximus('init', '--name', 'tasks');
+  expect(reported).toEqual(['maximus: Use maximus init <new-directory> [--name <name>].']);
+  expect(exitCode).toBe(1);
+  expect(printed).toEqual([]);
 });
 
 test('an unknown option or an option without its value is refused as one sentence', async () => {
@@ -169,18 +135,26 @@ test('a refusal is one sentence, and MAXIMUS_DEBUG=1 reports the error itself', 
   expect(debugged.exitCode).toBe(1);
 });
 
+/** A project whose vite.config.ts configures the plugin from source, with one route. */
+function configured(): string {
+  const plugin = fileURLToPath(new URL('../../src/tooling/vite.ts', import.meta.url));
+  return project(
+    {
+      'vite.config.ts': `import { maximusProject } from ${JSON.stringify(plugin)};\nexport default { plugins: [maximusProject(() => (${JSON.stringify(options())}))] };\n`,
+      'routes/v1/notes.get.ts': 'export default defineHandler(() => ({}));',
+    },
+    CACHE
+  );
+}
+
 test('prepare generates the project at the given directory for the given mode', async () => {
-  const root = project({
-    'maximus.config.ts': 'export default {};',
-    'routes/v1/notes.ts': 'export const GET = {};',
-  });
+  const root = configured();
   const { printed, reported, exitCode } = await maximus('prepare', root, '--mode', 'development');
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
   expect(JSON.parse(String(printed[0]))).toMatchObject({
     directory: root,
     mode: 'development',
-    layout: 'config',
     modules: { routes: 1 },
   });
   expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toContain(
@@ -189,24 +163,21 @@ test('prepare generates the project at the given directory for the given mode', 
 });
 
 test('prepare defaults to the working directory and the production mode', async () => {
-  const root = project({ 'maximus.config.ts': 'export default {};' });
+  const root = configured();
   process.chdir(root);
   const { printed } = await maximus('prepare');
-  expect(JSON.parse(String(printed[0]))).toMatchObject({
-    directory: process.cwd(),
-    mode: 'production',
-  });
+  expect(JSON.parse(String(printed[0]))).toMatchObject({ directory: process.cwd(), mode: 'production' });
   expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toContain(
     '// Generated by maximus prepare (production).'
   );
 });
 
 test('a project prepare cannot configure is refused as one sentence', async () => {
-  const root = project({ 'routes/v1/notes.ts': 'export const GET = {};' });
+  const root = project({ 'routes/v1/notes.get.ts': 'export default defineHandler(() => ({}));' });
   const { reported, exitCode } = await maximus('prepare', root);
   expect(exitCode).toBe(1);
-  expect(String(reported[0])).toMatch(
-    /^maximus: Configure the application in vite.config.ts with maximus\(\)/
-  );
+  expect(reported).toEqual([
+    'maximus: Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.',
+  ]);
   expect(existsSync(join(root, '.maximus'))).toBe(false);
 });

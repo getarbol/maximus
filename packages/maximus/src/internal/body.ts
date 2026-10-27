@@ -142,15 +142,3 @@ export async function readBodyText(
     return { ok: false, error: httpBodyFailure('invalid_utf8') };
   }
 }
-
-/** Verify the signature on the exact successful text before parsing signed input. */
-export function readWebhookBody(
-  request: Request,
-  maxBytes: number
-): Promise<Result<string, HttpBodyFailure>> {
-  return readBodyText(request, {
-    maxBytes,
-    signal: request.signal,
-    fatalUtf8: false,
-  });
-}

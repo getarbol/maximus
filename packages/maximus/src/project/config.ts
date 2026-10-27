@@ -1,95 +1,68 @@
-/** Runtime-neutral project configuration. Importing it never loads workerd or build tooling. */
-import { maximus } from '../builder.ts';
-import type { ApplicationBuilder, ApplicationConfiguration } from '../builder.ts';
+/**
+ * `@arbol-ai/maximus/config`: what a project's modules declare and what the generated `.maximus/` modules use
+ * to bind them to the application. Runtime-neutral: importing it never loads workerd or build tooling.
+ */
+import type { ApplicationBuilder } from '../builder.ts';
 import type { HttpMiddleware } from '../http.ts';
-import type { Invocation, OperationMiddleware, OperationShape, AppManifest } from '../manifest.ts';
-import type { WorkerOptions } from '../workers/runtime.ts';
+import type { AppManifest, OperationMiddleware, OperationShape } from '../manifest.ts';
 
-export { createRoute } from './route.ts';
 export { bindContext, bindRoute, bindTool, routeName, toolName } from './bind.ts';
 export type { RouteName, ToolMcpName, ToolName } from './bind.ts';
 
-/** Configuration owns the shared builder and transport policy, never discovered application modules. */
-export interface ProjectConfiguration<E, C> {
-  application: ApplicationBuilder<E, C, Record<never, never>>;
-  worker: WorkerOptions<E>;
-}
-
-/** A simple application configuration needs no hand-written builder or Worker entry. */
-export function defineConfig<E>(
-  configuration: ApplicationConfiguration<E> & { worker?: WorkerOptions<E> }
-): ProjectConfiguration<E, Invocation<E>>;
-/** An existing fluent base retains its derived context and middleware. */
-export function defineConfig<E, C>(configuration: {
-  application: ApplicationBuilder<E, C, Record<never, never>>;
-  worker?: WorkerOptions<E>;
-}): ProjectConfiguration<E, C>;
-export function defineConfig<E, C>(
-  configuration:
-    | (ApplicationConfiguration<E> & { worker?: WorkerOptions<E> })
-    | { application: ApplicationBuilder<E, C, Record<never, never>>; worker?: WorkerOptions<E> }
-): ProjectConfiguration<E, C> | ProjectConfiguration<E, Invocation<E>> {
-  if ('application' in configuration) {
-    if (Object.keys(configuration.application.definition.operations).length) {
-      throw new TypeError('Project configuration accepts a base before operations are declared.');
-    }
-    return { application: configuration.application, worker: configuration.worker ?? {} };
-  }
-  const { worker = {}, ...application } = configuration;
-  return { application: maximus(application), worker };
-}
-
-/** Request middleware has no principal; authentication belongs to the native transport continuation. */
+/** A `middleware/` module that wraps every HTTP request before token admission: it sees no principal. */
 export interface RequestMiddlewareModule<E> {
   readonly phase: 'request';
   readonly handle: HttpMiddleware<E>;
 }
 
-/** Declare a global HTTP wrapper in middleware/, ordered by filename. */
+/**
+ * Declares a `middleware/` module that wraps every HTTP request, in filename order, before the request's
+ * token is verified: CORS, security headers, request ids. It cannot authenticate a caller or bypass admission.
+ */
 export function defineMiddleware<E>(handle: HttpMiddleware<E>): RequestMiddlewareModule<E> {
   return { phase: 'request', handle };
 }
 
-/** Post-admission middleware runs on HTTP, MCP and RPC and may inspect verified invocation context. */
+/** A `middleware/` module that runs after admission, on every operation over HTTP, MCP and RPC. */
 export interface OperationMiddlewareModule<C> {
   readonly phase: 'operation';
   readonly handle: OperationMiddleware<C>;
 }
 
-/** Use this phase for business policy that must apply to every operation transport. */
+/**
+ * Declares a `middleware/` module that runs after the caller is admitted, around every operation over HTTP,
+ * MCP and RPC, with the verified invocation: business policy that must hold on every transport.
+ */
 export function defineOperationMiddleware<C>(handle: OperationMiddleware<C>): OperationMiddlewareModule<C> {
   return { phase: 'operation', handle };
 }
 
-/** Legacy bare functions retain their post-admission meaning. */
-export type ProjectMiddleware<E, C> =
-  | OperationMiddleware<C>
-  | OperationMiddlewareModule<C>
-  | RequestMiddlewareModule<E>;
+/** What a `middleware/` module default-exports. */
+export type ProjectMiddleware<E, C> = OperationMiddlewareModule<C> | RequestMiddlewareModule<E>;
 
-type OperationHandle<M> =
-  M extends OperationMiddlewareModule<infer C>
-    ? OperationMiddleware<C>
-    : M extends OperationMiddleware<never>
-      ? M
-      : never;
+/** The operation middleware of a module, with its own context type. */
+type OperationHandle<M> = M extends OperationMiddlewareModule<infer C> ? OperationMiddleware<C> : never;
+/** The request middleware of a module, with its own bindings type. */
 type RequestHandle<M> = M extends RequestMiddlewareModule<infer E> ? HttpMiddleware<E> : never;
 
-/** Split phases, retaining every module's context type rather than widening legacy middleware. */
+/**
+ * Splits `middleware/`'s modules by phase, in their order, keeping each module's own context type. A default
+ * export that neither helper made is refused.
+ */
 export function collectMiddleware<const Modules extends readonly ProjectMiddleware<never, never>[]>(
   modules: Modules
 ) {
   const middleware: OperationMiddleware<never>[] = [];
   const requestMiddleware: HttpMiddleware<never>[] = [];
   for (const module of modules) {
-    if (typeof module === 'function') {
-      middleware.push(module);
-    } else if (module.phase === 'operation' && typeof module.handle === 'function') {
+    if (module?.phase === 'operation' && typeof module.handle === 'function') {
       middleware.push(module.handle);
-    } else if (module.phase === 'request' && typeof module.handle === 'function') {
+    } else if (module?.phase === 'request' && typeof module.handle === 'function') {
       requestMiddleware.push(module.handle);
     } else {
-      throw new TypeError('A middleware module must use defineMiddleware or defineOperationMiddleware.');
+      throw new TypeError(
+        'A middleware module must default-export defineMiddleware or defineOperationMiddleware.'
+      );
     }
   }
   // The discriminants above select only these original handles, preserving their union of contexts.
@@ -99,7 +72,7 @@ export function collectMiddleware<const Modules extends readonly ProjectMiddlewa
   };
 }
 
-/** Apply discovered policy before route factories capture the base's native execution pipeline. */
+/** Applies the project's operation middleware to its base, before any route binds to it. */
 export function useProjectMiddleware<E, C>(
   base: ApplicationBuilder<E, C, Record<never, never>>,
   middleware: readonly OperationMiddleware<C>[]
@@ -111,22 +84,10 @@ export function useProjectMiddleware<E, C>(
   return application;
 }
 
-/** Typed invocation of a project, available to middleware through a type-only configuration import. */
-export type ProjectContext<T> =
-  T extends ProjectConfiguration<infer _E, infer C>
-    ? C
-    : T extends ApplicationBuilder<infer _E, infer C, infer _O>
-      ? C
-      : never;
-/** Bindings inferred from the project's configuration. */
-export type ProjectEnv<T> =
-  T extends ProjectConfiguration<infer E, infer _C>
-    ? E
-    : T extends ApplicationBuilder<infer E, infer _C, infer _O>
-      ? E
-      : never;
-
-/** Refuse a route factory that captured an earlier base and silently omitted discovered policy. */
+/**
+ * Refuses an application whose operations do not all run the project's middleware, as a route bound to an
+ * earlier base would: its policy would silently be skipped.
+ */
 export function checkProjectPipeline<E, C, BC, O extends Record<string, OperationShape>>(
   base: ApplicationBuilder<E, BC, Record<never, never>>,
   app: AppManifest<E, C, O>
@@ -135,12 +96,9 @@ export function checkProjectPipeline<E, C, BC, O extends Record<string, Operatio
   for (const [name, operation] of Object.entries(app.operations)) {
     if (expected.some((handler, index) => operation.pipeline?.middleware[index] !== handler)) {
       throw new TypeError(
-        `Operation "${name}" omits project middleware. Derive its factory from .maximus/base or .maximus/routes.`
+        `Operation "${name}" omits project middleware. Bind it to the base in .maximus/base.ts.`
       );
     }
   }
   return app;
 }
-
-/** Explicit request-phase spelling; defineMiddleware remains the concise file-convention helper. */
-export const defineRequestMiddleware = defineMiddleware;

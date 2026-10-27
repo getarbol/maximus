@@ -1,11 +1,11 @@
 /**
- * `maximus prepare` for any layout: a project configured in `vite.config.ts` is prepared by its plugin, as a
- * build would, so the command and the build generate the same modules.
+ * `maximus prepare`: the project is prepared by the plugin its `vite.config.ts` configures, as a build would,
+ * so the command and the build generate the same modules.
  */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { prepareProject } from './prepare-project.ts';
+import type { ProjectApi } from '../vite.ts';
 
 /** A configuration's plugins, as Vite flattens them from nested lists and promises. */
 async function pluginsOf(option: unknown): Promise<unknown[]> {
@@ -20,31 +20,35 @@ async function pluginsOf(option: unknown): Promise<unknown[]> {
 /** The configuration files Vite reads, in the order it looks for them. */
 const VITE_CONFIGS = ['vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs'];
 
+/** The API of the Maximus plugin among a configuration's plugins, if it has one. */
+function projectApi(plugin: unknown): ProjectApi | undefined {
+  if (plugin && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'maximus-project') {
+    const api: unknown = 'api' in plugin ? plugin.api : undefined;
+    if (api && typeof api === 'object' && 'prepare' in api && typeof api.prepare === 'function') {
+      return api as ProjectApi;
+    }
+  }
+  return undefined;
+}
+
 /**
- * Prepares the project at `directory`. Without `maximus.config.ts` or the 7.3 `src/` entries, it loads
- * `vite.config.ts` with Vite, which evaluates it as every `vp` command does, and prepares the project
- * through the plugin it configures; application modules are only parsed.
+ * Prepares the project at `directory`: loads its `vite.config.ts` with Vite, which evaluates it as every
+ * `vp` command does, and prepares it through the `maximus()` plugin it configures. Application modules are
+ * only parsed.
  */
 export async function prepareConfiguredProject(directory: string, mode = 'production') {
   const root = resolve(directory);
-  const configured = ['maximus.config.ts', 'maximus.config.mts', 'maximus.config.js', 'maximus.config.mjs'];
   const viteConfig = VITE_CONFIGS.find((name) => existsSync(join(root, name)));
-  if (
-    !viteConfig ||
-    configured.some((name) => existsSync(join(root, name))) ||
-    (existsSync(join(root, 'src/application.ts')) && existsSync(join(root, 'src/worker.ts')))
-  ) {
-    return prepareProject(root, mode);
+  if (!viteConfig) {
+    throw new TypeError('Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.');
   }
   const { loadConfigFromFile } = await import('vite');
   const loaded = await loadConfigFromFile({ command: 'build', mode }, join(root, viteConfig), root);
   for (const plugin of await pluginsOf(loaded?.config.plugins)) {
-    if (plugin && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'maximus-project') {
-      const api: unknown = 'api' in plugin ? plugin.api : undefined;
-      if (api && typeof api === 'object' && 'prepare' in api && typeof api.prepare === 'function') {
-        return (api.prepare as typeof prepareProject)(root, mode);
-      }
+    const api = projectApi(plugin);
+    if (api) {
+      return api.prepare(root, mode);
     }
   }
-  return prepareProject(root, mode);
+  throw new TypeError(`${viteConfig} configures no maximus() plugin from @arbol-ai/vite-plugin.`);
 }

@@ -1,5 +1,5 @@
 /**
- * `maximus init`: a new service from the starter template.
+ * `maximus init`: a new project from the starter template.
  */
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync, symlinkSync, readdirSync, readFileSync } from 'node:fs';
@@ -22,10 +22,10 @@ function packageDirectory(): string {
 }
 
 /**
- * `maximus init`: writes a new service from the starter template into a directory that does not exist yet.
+ * `maximus init`: writes a new project from the starter template into a directory that does not exist yet.
  */
-export function scaffold(directory: string, name: string, layout: 'service' | 'project' = 'service') {
-  // One kebab-case name serves as the package, the Worker, the scope namespace and the entrypoint.
+export function scaffold(directory: string, name: string) {
+  // One kebab-case name serves as the package, the Worker and the scope namespace.
   if (!/^(?=.{2,41}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(name)) {
     throw new TypeError('Use a lowercase kebab-case project name of 2 to 41 characters.');
   }
@@ -36,39 +36,24 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
   const own = packageDirectory();
   // A new project starts on the release that scaffolds it.
   const { version } = JSON.parse(readFileSync(join(own, 'package.json'), 'utf-8')) as { version: string };
-  const words = name.split('-');
   const values: Record<string, string> = {
     __PROJECT_NAME__: name,
-    __ENTRYPOINT__: `${words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('')}Service`,
     __MAXIMUS_VERSION__: version,
     __COMPATIBILITY_DATE__: new Date().toISOString().slice(0, 10),
   };
-  for (const templateName of layout === 'project' ? ['service', 'project'] : ['service']) {
-    const template = join(own, 'templates', templateName);
-    for (const file of readdirSync(template, { recursive: true, withFileTypes: true })) {
-      if (!file.isFile() || !file.name.endsWith('.template')) {
-        continue;
-      }
-      const source = resolve(file.parentPath, file.name);
-      if (
-        layout === 'project' &&
-        templateName === 'service' &&
-        (relative(template, source).startsWith('tests/') ||
-          relative(template, source).startsWith('src/') ||
-          file.name === 'vitest.config.ts.template' ||
-          // A project's vite.config.ts configures its Worker.
-          file.name === 'cloudflare.config.ts.template')
-      ) {
-        continue;
-      }
-      const target = resolve(root, relative(template, source).replace(/\.template$/, ''));
-      mkdirSync(dirname(target), { recursive: true });
-      let text = readFileSync(source, 'utf-8');
-      for (const [placeholder, value] of Object.entries(values)) {
-        text = text.replaceAll(placeholder, value);
-      }
-      writeFileSync(target, text, { flag: templateName === 'project' ? 'w' : 'wx' });
+  const template = join(own, 'templates', 'project');
+  for (const file of readdirSync(template, { recursive: true, withFileTypes: true })) {
+    if (!file.isFile() || !file.name.endsWith('.template')) {
+      continue;
     }
+    const source = resolve(file.parentPath, file.name);
+    const target = resolve(root, relative(template, source).replace(/\.template$/, ''));
+    mkdirSync(dirname(target), { recursive: true });
+    let text = readFileSync(source, 'utf-8');
+    for (const [placeholder, value] of Object.entries(values)) {
+      text = text.replaceAll(placeholder, value);
+    }
+    writeFileSync(target, text, { flag: 'wx' });
   }
   // The development token `vp dev` accepts from localhost, readable only by its owner. The starter's
   // .gitignore keeps `.dev.vars` out of Git, and only its development build declares the binding.
@@ -83,10 +68,6 @@ export function scaffold(directory: string, name: string, layout: 'service' | 'p
   }
   return {
     directory: root,
-    layout,
-    next:
-      layout === 'project'
-        ? 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in vite.config.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.'
-        : 'Run bun install and bun run dev, and call it with the DEVELOPMENT_TOKEN in .dev.vars. Before the first deployment, set origin, audience and issuer in src/app.ts, run bun run verify, sign in with cf auth login and run bun run deploy.',
+    next: 'Run bun install and bun run dev. The public home page says Hello World. Configure the origin and token policy in vite.config.ts before adding production callers. Use bun run verify for types, lint and build, then bun run deploy.',
   };
 }

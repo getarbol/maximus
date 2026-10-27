@@ -158,7 +158,7 @@ Vite plugin shares that version;
 breaking changes move the major version (3.0.0 renamed every wire identifier). Published
 releases are immutable. Deployed Durable Object class names, migration tags and durable keys are
 part of a service's contract: reorganizing code must not reset stored state. See
-[Migrating from 2.x](guides/migrating-from-v2.md).
+the 2.x documentation.
 
 ## Sources reviewed
 

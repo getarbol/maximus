@@ -63,7 +63,7 @@ test('refuses cloudflare.config.ts, which a second Worker configuration would be
   const root = project({ 'cloudflare.config.ts': 'export default {};' });
   await expect(
     configure(maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' }), { root })
-  ).rejects.toThrow('maximus() configures the Worker: move cloudflare.config.ts into its options');
+  ).rejects.toThrow("maximus() configures the Worker: move cloudflare.config.ts into maximus()'s options.");
 });
 
 test('serves a web app from the root, refusing a base or assets directory that would move its build', async () => {

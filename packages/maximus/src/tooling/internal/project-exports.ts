@@ -1,13 +1,12 @@
-/** Read public export names with Oxc, without importing or executing application modules. */
+/** Reads what project modules export with Oxc, without importing or executing them. */
 import { readFileSync } from 'node:fs';
 
 import { parseSync } from 'vite';
 
-export const ROUTE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
-
 /**
- * Refuse direct runtime import cycles and workerd-only imports in application configuration. A cron module
- * may use the application: only the generated Worker, which imports it, would form a cycle.
+ * Parses a project module, refusing runtime imports of generated modules that would form a cycle and, in the
+ * modules that complete the application, imports that only load in workerd. A cron module may use the
+ * application: only the generated Worker, which imports it, would form a cycle.
  */
 export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config' | 'cron') {
   const parsed = parseSync(file, readFileSync(file, 'utf-8'));
@@ -40,7 +39,7 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
       (role === 'config' ||
         ['worker', 'entry'].includes(generated) ||
         (role !== 'cron' && generated === 'app') ||
-        (role === 'middleware' && ['base', 'routes'].includes(generated)))
+        (role === 'middleware' && generated === 'base'))
     ) {
       throw new TypeError(
         `Runtime import ${source} creates a generated-module cycle in ${file}. Use a type-only import or shared domain module.`
@@ -56,38 +55,6 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
     }
   }
   return parsed;
-}
-
-/** Explicit exports make discovery reproducible; wildcard re-exports have no locally owned method set. */
-export function routeExports(file: string): { legacy: boolean; methods: readonly string[] } {
-  const parsed = readProjectModule(file, 'route');
-  const names = new Set<string>();
-  for (const statement of parsed.module.staticExports) {
-    for (const entry of statement.entries) {
-      if (entry.isType) {
-        continue;
-      }
-      const name = entry.exportName.kind === 'Default' ? 'default' : entry.exportName.name;
-      if (!name) {
-        throw new TypeError(`Route modules require explicit exports, not export *: ${file}`);
-      }
-      names.add(name);
-    }
-  }
-  const methods = ROUTE_METHODS.filter((method) => names.has(method));
-  if (names.has('default')) {
-    if (methods.length) {
-      throw new TypeError(`Choose a default route factory or named method exports, not both: ${file}`);
-    }
-    return { legacy: true, methods: [] };
-  }
-  const unsupported = [...names].filter((name) => !ROUTE_METHODS.some((method) => method === name));
-  if (!methods.length || unsupported.length) {
-    throw new TypeError(
-      `Route ${file} must export GET, POST, PUT, PATCH or DELETE. Keep helpers private or in _files.`
-    );
-  }
-  return { legacy: false, methods };
 }
 
 /** A module's statements, as Oxc parses them. */

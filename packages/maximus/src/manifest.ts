@@ -84,7 +84,7 @@ export function operationMatchesScopes(
  * explicitly, its visibility and the actors it admits.
  */
 export interface Exposure {
-  /** Eligible principal kinds; omitted only for legacy contracts. */
+  /** The principal kinds the operation admits: every kind when omitted. */
   actorKinds?: readonly Principal['actorKind'][];
   /** Versioned route; required string input fields may occupy complete {parameter} segments. */
   http?: {

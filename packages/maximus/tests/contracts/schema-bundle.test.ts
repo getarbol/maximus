@@ -1,14 +1,14 @@
 /**
  * Schema bundling: a reference made outside its definition resolved to the one component its name has, and
  * refused when the name has several shapes; recursive variants that share a name each kept apart; a
- * component name the document already uses suffixed; references to other documents left untouched in a
- * standalone schema; and the shape comparison that sets aside a schema's name and use-site annotations.
+ * component name the document already uses suffixed; and references to other documents left untouched in
+ * a standalone schema.
  */
 import { expect, it } from 'vite-plus/test';
 
 import { t } from '../../src/index.ts';
 import type { TSchema } from '../../src/index.ts';
-import { bundleSchemas, sameSchema, standaloneSchema } from '../../src/schema-bundle.ts';
+import { bundleSchemas, standaloneSchema } from '../../src/schema-bundle.ts';
 
 const strict = { additionalProperties: false } as const;
 const Money = t.Object(
@@ -86,24 +86,4 @@ it('writes a standalone schema with named definitions under $defs and references
   });
   // A name nothing refers to is dropped, the definition written in place.
   expect(standaloneSchema(Money)).toEqual(money);
-});
-
-it('compares schemas by shape, setting aside their name and use-site annotations', () => {
-  const annotated = {
-    ...Money,
-    $id: 'Price',
-    title: 'Price',
-    description: 'A price.',
-    examples: [{ amount: 100, currency: 'EUR' }],
-    deprecated: true,
-  };
-  expect(sameSchema(Money, annotated)).toBe(true);
-  // TypeBox's symbols and codecs are not part of the shape the JSON carries.
-  expect(sameSchema(Money, JSON.parse(JSON.stringify(Money)))).toBe(true);
-  expect(sameSchema(Money, { ...Money, additionalProperties: true })).toBe(false);
-  expect(sameSchema(Money, t.Object({ cents: t.Integer() }, { $id: 'Money', ...strict }))).toBe(false);
-  // Values that are not objects compare as their JSON.
-  expect(sameSchema([Money], [annotated])).toBe(false);
-  expect(sameSchema(undefined, null)).toBe(true);
-  expect(sameSchema('Money', 'Money')).toBe(true);
 });

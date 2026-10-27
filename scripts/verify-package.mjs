@@ -1,9 +1,8 @@
 /**
  * The release checks of the packed packages: every export and the bin are present, the size cap, no private
  * files or workspace protocols, publint's rules, a clean install without optional peers, declarations that
- * type-check without the DOM library, Node and browser entries, Postgres with pg, and `maximus init`
- * service and project starters that pass their own `verify` (types, lint and format, Vite+ build) on the
- * packed release.
+ * type-check without the DOM library, Node and browser entries, Postgres with pg, and a `maximus init`
+ * starter that passes its own `verify` (types, lint and format, Vite+ build) on the packed release.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -199,49 +198,9 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   );
   run(join(directory, 'postgres-check.mjs'));
 
-  // A starter depends on the release that created it, never on a version pinned in a template.
-  const starter = join(directory, 'starter');
-  execFileSync(
-    process.execPath,
-    [
-      join(directory, 'node_modules/@arbol-ai/maximus/dist/tooling/cli.js'),
-      'init',
-      starter,
-      '--name',
-      'example',
-    ],
-    { stdio: 'pipe' }
-  );
-  const starterApp = readFileSync(join(starter, 'src/app.ts'), 'utf-8');
-  assert(starterApp.includes('maximus<Env>') && starterApp.includes('issuer:'));
-  // A starter runs locally at once: its own random development token, readable only by its owner.
-  const devVars = join(starter, '.dev.vars');
-  assert.match(readFileSync(devVars, 'utf-8'), /^DEVELOPMENT_TOKEN=[0-9a-f]{64}\n$/);
-  assert.equal(statSync(devVars).mode & 0o777, 0o600, 'The development token is readable by others');
-  const starterPath = join(starter, 'package.json');
-  const starterManifest = JSON.parse(readFileSync(starterPath, 'utf-8'));
-  assert.equal(starterManifest.dependencies['@arbol-ai/maximus'], manifest.version);
-  assert(!JSON.stringify(starterManifest).includes('@arbol-ai/maximus-'), 'Starter names a retired package');
-  assert(!JSON.stringify(starterManifest).includes('wrangler'), 'The starter runs Wrangler');
-  assert(readFileSync(join(starter, 'vite.config.ts'), 'utf-8').includes('@arbol-ai/maximus/oxlint'));
-  // The starter's own verify, on this release rather than one from the registry: binding and runtime types
-  // from cf, its lint and format presets, then Vite+ build.
-  starterManifest.dependencies['@arbol-ai/maximus'] = `file:${archive}`;
-  writeFileSync(starterPath, `${JSON.stringify(starterManifest, null, 2)}\n`);
-  execFileSync('bun', ['install', '--ignore-scripts'], { cwd: starter, stdio: 'pipe' });
-  execFileSync('bun', ['run', 'verify'], { cwd: starter, stdio: 'inherit' });
-  // cf deploys the build verify left without the development token, which only `cf dev` declares.
-  const built = JSON.parse(
-    readFileSync(join(starter, '.cloudflare/output/v0/workers/default/worker.config.json'), 'utf-8')
-  );
-  assert.equal(built.name, 'example');
-  assert(
-    !JSON.stringify(built).includes('DEVELOPMENT_TOKEN'),
-    'A deployed build declares the development token'
-  );
-
-  // The project starter, on this release as well: its file routes are discovered, typed through the
-  // generated registration and built, and its build carries no development token either.
+  // The starter, on this release: it depends on the release that created it, never on a version pinned in
+  // a template; its file routes are discovered, typed through the generated registration and built; and its
+  // build carries no development token.
   const project = join(directory, 'project');
   execFileSync(
     process.execPath,
@@ -250,12 +209,14 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
       'init',
       project,
       '--name',
-      'example-project',
-      '--layout',
-      'project',
+      'example',
     ],
     { stdio: 'pipe' }
   );
+  // A starter runs locally at once: its own random development token, readable only by its owner.
+  const devVars = join(project, '.dev.vars');
+  assert.match(readFileSync(devVars, 'utf-8'), /^DEVELOPMENT_TOKEN=[0-9a-f]{64}\n$/);
+  assert.equal(statSync(devVars).mode & 0o777, 0o600, 'The development token is readable by others');
   // Its single vite.config.ts needs the Vite plugin, released at the same version and packed the same way.
   const plugin = resolve('packages/vite-plugin');
   const pluginManifest = JSON.parse(readFileSync(join(plugin, 'package.json'), 'utf-8'));
@@ -290,11 +251,8 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   const projectManifest = JSON.parse(readFileSync(projectPath, 'utf-8'));
   assert.equal(projectManifest.dependencies['@arbol-ai/maximus'], manifest.version);
   assert.equal(projectManifest.devDependencies['@arbol-ai/vite-plugin'], manifest.version);
-  assert(
-    !existsSync(join(project, 'cloudflare.config.ts')),
-    'The project starter has a cloudflare.config.ts'
-  );
-  assert(!existsSync(join(project, 'maximus.config.ts')), 'The project starter has a maximus.config.ts');
+  assert(!JSON.stringify(projectManifest).includes('wrangler'), 'The starter runs Wrangler');
+  assert(!existsSync(join(project, 'cloudflare.config.ts')), 'The starter has a cloudflare.config.ts');
   projectManifest.dependencies['@arbol-ai/maximus'] = `file:${archive}`;
   projectManifest.devDependencies['@arbol-ai/vite-plugin'] = `file:${pluginArchive}`;
   // The plugin's own dependency on Maximus resolves to this release, not to one from the registry.
@@ -305,19 +263,19 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   execFileSync('bun', ['run', 'verify'], { cwd: project, stdio: 'inherit' });
   assert.match(
     readFileSync(join(project, '.maximus/app.ts'), 'utf-8'),
-    /bindRoute\(base, routes_\d+, "\/v1\/greeting", "GET"\)/
+    /bindRoute\(base, route_\d+, "\/v1\/greeting", "GET"\)/
   );
   const projectBuild = readFileSync(
     join(project, '.cloudflare/output/v0/workers/default/worker.config.json'),
     'utf-8'
   );
-  assert.equal(JSON.parse(projectBuild).name, 'example-project');
+  assert.equal(JSON.parse(projectBuild).name, 'example');
   assert(
     !projectBuild.includes('DEVELOPMENT_TOKEN'),
     'A deployed project build declares the development token'
   );
   console.info(
-    `Packed packages, their entries and both starters passed (${manifest.name} and ${pluginManifest.name}@${manifest.version}).`
+    `Packed packages, their entries and the starter passed (${manifest.name} and ${pluginManifest.name}@${manifest.version}).`
   );
 } finally {
   rmSync(directory, { recursive: true, force: true });

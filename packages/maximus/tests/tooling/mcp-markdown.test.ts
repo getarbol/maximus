@@ -1,63 +1,15 @@
 /**
  * The MCP server's description as Markdown in mcp/: instructions.md, guides/<name>.md with their # title and
- * skills/<name>.md with their frontmatter. A project configured in vite.config.ts serves them, even with no
- * tool; the other layouts configure `mcp` in code and refuse the files.
+ * skills/<name>.md with their frontmatter, which the Worker serves even with no tool.
  */
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { prepareProject } from '../../src/tooling/internal/prepare-project.ts';
-import type { ProjectOptions } from '../../src/tooling/internal/prepare-project.ts';
+import { generated, prepare, project, removeProjects } from './fixtures.ts';
 
-const directories: string[] = [];
-
-afterEach(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-/** What vite.config.ts states for a tasks service. */
-const options: ProjectOptions = {
-  application: {
-    name: 'tasks',
-    namespace: 'tasks',
-    title: 'Tasks',
-    version: '1.0.0',
-    origin: 'https://tasks.example.test',
-    tokens: { issuer: 'https://issuer.example.test/', audience: 'https://tasks.example.test' },
-    rpc: { callers: [] },
-  },
-  worker: { http: { basePath: '/api', healthPath: '/health' } },
-  env: { production: {}, development: {} },
-};
-
-/** A project in a temporary directory, with these files. */
-function project(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), 'maximus-mcp-'));
-  directories.push(root);
-  for (const [name, contents] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, name)), { recursive: true });
-    writeFileSync(join(root, name), contents);
-  }
-  return root;
-}
-
-/** A generated module as text. */
-function generated(root: string, name: string): string {
-  return readFileSync(join(root, '.maximus', name), 'utf-8');
-}
+afterEach(removeProjects);
 
 /** The MCP configuration the generated module holds. */
 function described(root: string): unknown {
@@ -84,7 +36,7 @@ test('instructions, guides and skills describe the MCP server, which the Worker 
     'mcp/skills/weekly-review.md': weeklyReview,
     'mcp/README.md': '# Notes for the team, not for clients',
   });
-  prepareProject(root, 'production', options);
+  prepare(root);
   expect(described(root)).toEqual({
     instructions: 'Tasks belong to the caller organization.\n',
     guides: [
@@ -110,12 +62,12 @@ test('instructions, guides and skills describe the MCP server, which the Worker 
 
 test('each part stands alone, and the description goes when its Markdown does', () => {
   const root = project({ 'mcp/skills/weekly-review.md': weeklyReview });
-  prepareProject(root, 'production', options);
+  prepare(root);
   expect(described(root)).toMatchObject({ skills: [{ name: 'weekly-review' }] });
   expect(described(root)).not.toHaveProperty('instructions');
   expect(described(root)).not.toHaveProperty('guides');
   rmSync(join(root, 'mcp'), { recursive: true });
-  expect(prepareProject(root, 'production', options).changed).toBe(true);
+  expect(prepare(root).changed).toBe(true);
   expect(existsSync(join(root, '.maximus/mcp.ts'))).toBe(false);
   expect(generated(root, 'base.ts')).not.toContain('mcp');
   expect(generated(root, 'worker.ts')).not.toContain('@arbol-ai/maximus/mcp');
@@ -124,7 +76,7 @@ test('each part stands alone, and the description goes when its Markdown does', 
 test('a guide starts with its # title', () => {
   for (const text of ['Task conventions\n', '\n# Task conventions\n', '## Task conventions\n', '# \n']) {
     const root = project({ 'mcp/guides/task-conventions.md': text });
-    expect(() => prepareProject(root, 'production', options), text).toThrow(
+    expect(() => prepare(root), text).toThrow(
       'Start the guide with its # title: mcp/guides/task-conventions.md'
     );
   }
@@ -154,14 +106,14 @@ test("a skill's frontmatter states its one-line description, and its name only a
   ];
   for (const [text, message] of cases) {
     const root = project({ [path]: text });
-    expect(() => prepareProject(root, 'production', options), text).toThrow(message);
+    expect(() => prepare(root), text).toThrow(message);
   }
 });
 
-test('guides and skills are kebab-case ordinary files, and other layouts set mcp in code', () => {
+test('guides and skills are kebab-case ordinary files', () => {
   for (const name of ['mcp/guides/Task_Conventions.md', `mcp/skills/${'a'.repeat(65)}.md`]) {
     const root = project({ [name]: '# Title\n' });
-    expect(() => prepareProject(root, 'production', options), name).toThrow(
+    expect(() => prepare(root), name).toThrow(
       `Name MCP Markdown in kebab-case, at most 64 characters: ${name}`
     );
   }
@@ -169,19 +121,9 @@ test('guides and skills are kebab-case ordinary files, and other layouts set mcp
   mkdirSync(join(linked, 'mcp/guides'), { recursive: true });
   symlinkSync(join(linked, 'shared/conventions.md'), join(linked, 'mcp/guides/task-conventions.md'));
   // As every file in a convention directory.
-  expect(() => prepareProject(linked, 'production', options)).toThrow(
-    'Project modules cannot be symlinks: mcp/guides/task-conventions.md'
-  );
+  expect(() => prepare(linked)).toThrow('Project modules cannot be symlinks: mcp/guides/task-conventions.md');
   const folder = project({ 'mcp/guides/task-conventions.md/notes.txt': '' });
-  expect(() => prepareProject(folder, 'production', options)).toThrow(
+  expect(() => prepare(folder)).toThrow(
     'MCP Markdown must be an ordinary file: mcp/guides/task-conventions.md'
-  );
-  const legacy = project({
-    'src/application.ts': 'export const base = {};',
-    'src/worker.ts': 'export const options = {};',
-    'mcp/instructions.md': 'Tasks belong to the caller organization.\n',
-  });
-  expect(() => prepareProject(legacy)).toThrow(
-    'mcp/*.md describes the MCP server of a project configured in vite.config.ts: set mcp in src/application.ts instead.'
   );
 });

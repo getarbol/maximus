@@ -1,5 +1,5 @@
 /**
- * `maximus init`: a new service or project from the starter templates, with every placeholder replaced, a
+ * `maximus init`: a new project from the starter template, with every placeholder replaced, a
  * development token only its owner can read, agent guides linked to the project's own, and the names and
  * directories it refuses before writing anything.
  */
@@ -67,13 +67,13 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-test('init writes the service starter, with the name, entrypoint, release and date in every placeholder', () => {
+test('init writes the starter, with the name, release and date in every placeholder', () => {
   const directory = newDirectory('billing-api');
   const before = today();
   const result = scaffold(directory, 'billing-api');
   const after = today();
-  expect(result).toMatchObject({ directory, layout: 'service' });
-  expect(result.next).toContain('call it with the DEVELOPMENT_TOKEN in .dev.vars');
+  expect(result).toMatchObject({ directory });
+  expect(result.next).toContain('The public home page says Hello World.');
   expect(listing(directory)).toEqual([
     '.agents/skills/project/SKILL.md',
     '.claude/skills/project',
@@ -84,14 +84,13 @@ test('init writes the service starter, with the name, entrypoint, release and da
     'AGENTS.md',
     'CLAUDE.md',
     'README.md',
-    'cloudflare.config.ts',
+    'middleware/10-response.ts',
     'package.json',
-    'src/app.ts',
-    'src/index.ts',
-    'tests/contract.test.ts',
+    'pages/index.ts',
+    'routes/v1/greeting.get.ts',
+    'routes/v1/greeting.post.ts',
     'tsconfig.json',
     'vite.config.ts',
-    'vitest.config.ts',
   ]);
   for (const file of listing(directory)) {
     if (!lstatSync(join(directory, file)).isSymbolicLink()) {
@@ -101,14 +100,17 @@ test('init writes the service starter, with the name, entrypoint, release and da
   const manifest = JSON.parse(read(directory, 'package.json')) as {
     name: string;
     dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
   };
   expect(manifest.name).toBe('billing-api');
   expect(manifest.dependencies['@arbol-ai/maximus']).toBe(version);
-  expect(read(directory, 'src/index.ts')).toContain('export const BillingApiService = worker.entrypoint;');
-  expect(read(directory, 'src/app.ts')).toContain("namespace: 'billing-api',");
-  expect(read(directory, 'src/app.ts')).toContain("origin: 'https://billing-api.example.com',");
-  const date = /compatibilityDate: '(\d{4}-\d{2}-\d{2})'/.exec(read(directory, 'cloudflare.config.ts'))?.[1];
-  expect([before, after]).toContain(date);
+  expect(manifest.devDependencies['@arbol-ai/vite-plugin']).toBe(version);
+  expect(read(directory, 'vite.config.ts')).toContain("origin: 'https://billing-api.example.com',");
+  expect([before, after]).toContain(
+    /compatibilityDate: '(\d{4}-\d{2}-\d{2})'/.exec(read(directory, 'vite.config.ts'))?.[1]
+  );
+  expect(read(directory, '.gitignore').split('\n')).toContain('.maximus/');
+  expect(read(directory, 'routes/v1/greeting.get.ts')).toContain('the scope is billing-api:greeting:read');
 });
 
 test('.dev.vars holds a fresh 32-byte development token only its owner can read, and Git ignores it', () => {
@@ -137,47 +139,6 @@ test("AGENTS.md and each harness's skill folder link to the project's own guide 
       'name: tasks-development'
     );
   }
-});
-
-test('the project layout trades src/, tests and cloudflare.config.ts for conventions vite.config.ts configures', () => {
-  const directory = newDirectory();
-  const before = today();
-  const result = scaffold(directory, 'tasks', 'project');
-  const after = today();
-  expect(result).toMatchObject({ directory, layout: 'project' });
-  expect(result.next).toContain('The public home page says Hello World.');
-  expect(listing(directory)).toEqual([
-    '.agents/skills/project/SKILL.md',
-    '.claude/skills/project',
-    '.codex/skills/project',
-    '.dev.vars',
-    '.github/workflows/ci.yml',
-    '.gitignore',
-    'AGENTS.md',
-    'CLAUDE.md',
-    'README.md',
-    'middleware/10-response.ts',
-    'package.json',
-    'pages/index.ts',
-    'routes/v1/greeting.get.ts',
-    'routes/v1/greeting.post.ts',
-    'tsconfig.json',
-    'vite.config.ts',
-  ]);
-  // A file both starters have is the project's own.
-  expect(read(directory, 'vite.config.ts')).toContain("origin: 'https://tasks.example.com',");
-  expect([before, after]).toContain(
-    /compatibilityDate: '(\d{4}-\d{2}-\d{2})'/.exec(read(directory, 'vite.config.ts'))?.[1]
-  );
-  const manifest = JSON.parse(read(directory, 'package.json')) as {
-    devDependencies: Record<string, string>;
-  };
-  expect(manifest.devDependencies['@arbol-ai/vite-plugin']).toBe(version);
-  expect(read(directory, '.gitignore').split('\n')).toContain('.maximus/');
-  expect(read(directory, '.agents/skills/project/SKILL.md')).toContain(
-    'Extend the tasks Maximus backend using its optional file conventions.'
-  );
-  expect(read(directory, 'routes/v1/greeting.get.ts')).toContain('the scope is tasks:greeting:read');
 });
 
 test('init refuses a name that is not lowercase kebab-case of 2 to 41 characters, before writing anything', () => {

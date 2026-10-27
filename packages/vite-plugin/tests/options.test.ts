@@ -77,10 +77,6 @@ test('the options state what package.json does not, and a name no Worker can tak
   expect(projectOptions(root({ name: 'tasks' }), minimal)?.application.version).toBe('0.0.0');
 });
 
-test('without an origin, maximus.config.ts still configures the application', () => {
-  expect(projectOptions(root(), { compatibilityDate: '2026-10-26' })).toBeUndefined();
-});
-
 test('the development token is declared in development alone, under its own binding, or not at all', () => {
   const kv = { TASKS: bindings.kv() };
   const options: MaximusOptions = {

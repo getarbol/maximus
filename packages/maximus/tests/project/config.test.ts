@@ -1,8 +1,7 @@
 /**
- * Project configuration as maximus.config.ts and middleware/ declare it: defineConfig over a plain configuration
- * or an existing base, middleware declared for the request or the operation phase and split by
- * collectMiddleware, discovered operation policy applied in filename order, and checkProjectPipeline refusing an
- * operation declared without that policy.
+ * What middleware/ declares and how the generated modules apply it: middleware declared for the request or the
+ * operation phase and split by collectMiddleware, operation policy applied in filename order, and
+ * checkProjectPipeline refusing an operation declared without that policy.
  */
 import { describe, expect, it } from 'vite-plus/test';
 
@@ -12,10 +11,8 @@ import { defineApp, operation } from '../../src/internals.ts';
 import {
   checkProjectPipeline,
   collectMiddleware,
-  defineConfig,
   defineMiddleware,
   defineOperationMiddleware,
-  defineRequestMiddleware,
   useProjectMiddleware,
 } from '../../src/project/config.ts';
 
@@ -27,7 +24,7 @@ interface Env {
 const TOKEN = 'local-development-token-0123456789';
 const env: Env = { DEVELOPMENT_TOKEN: TOKEN };
 
-/** A notes service's configuration, as maximus.config.ts states it. */
+/** A notes service's configuration. */
 function configuration() {
   return {
     name: 'notes',
@@ -71,38 +68,8 @@ const archiving = {
 };
 const passThrough: OperationMiddleware<Invocation<Env>> = async (_context, proceed) => proceed();
 
-describe('defineConfig', () => {
-  it('starts a base from a plain configuration and keeps the Worker options beside it', () => {
-    const config = defineConfig<Env>({ ...configuration(), worker: { http: { basePath: '/api' } } });
-    expect(config.worker).toEqual({ http: { basePath: '/api' } });
-    expect(config.application.definition).toMatchObject({
-      name: 'notes',
-      namespace: 'notes',
-      operations: {},
-    });
-    expect(config.application.definition).not.toHaveProperty('worker');
-    expect(defineConfig<Env>(configuration()).worker).toEqual({});
-  });
-
-  it('keeps an existing base, with its derived context, as the application', () => {
-    const base = application().derive(async () => ok({ region: 'eu' }));
-    const config = defineConfig({ application: base });
-    expect(config.application).toBe(base);
-    expect(config.worker).toEqual({});
-    const worker = { http: { basePath: '/api' } };
-    expect(defineConfig({ application: base, worker }).worker).toBe(worker);
-  });
-
-  it('refuses a base that already declares operations', () => {
-    const declared = application().operation('listNotes', listing, async () => ok({ count: 0 }));
-    expect(() => defineConfig({ application: declared })).toThrow(
-      new TypeError('Project configuration accepts a base before operations are declared.')
-    );
-  });
-});
-
 describe('middleware modules', () => {
-  it('name their phase, and defineRequestMiddleware is defineMiddleware', async () => {
+  it('name their phase', async () => {
     const handle = async (
       _request: Request,
       _env: Env,
@@ -110,33 +77,32 @@ describe('middleware modules', () => {
       proceed: () => Promise<Response>
     ) => proceed();
     expect(defineMiddleware<Env>(handle)).toEqual({ phase: 'request', handle });
-    expect(defineRequestMiddleware).toBe(defineMiddleware);
     expect(defineOperationMiddleware(passThrough)).toEqual({ phase: 'operation', handle: passThrough });
   });
 
-  it('split into the two phases in their order, a bare function keeping the operation phase', () => {
+  it('split into the two phases in their order', () => {
     const headers = defineMiddleware<Env>(async (_request, _env, _context, proceed) => proceed());
-    const cors = defineRequestMiddleware<Env>(async (_request, _env, _context, proceed) => proceed());
+    const cors = defineMiddleware<Env>(async (_request, _env, _context, proceed) => proceed());
+    const audit = defineOperationMiddleware(passThrough);
     const policy = defineOperationMiddleware<Invocation<Env>>(async (_context, proceed) => proceed());
-    const { middleware, requestMiddleware } = collectMiddleware([
-      headers,
-      passThrough,
-      policy,
-      cors,
-    ] as const);
+    const { middleware, requestMiddleware } = collectMiddleware([headers, audit, policy, cors] as const);
     expect(middleware).toEqual([passThrough, policy.handle]);
     expect(requestMiddleware).toEqual([headers.handle, cors.handle]);
   });
 
-  it('are refused when they name no phase or no handler', () => {
+  it('are refused when they name no phase or no handler, as a bare function is', () => {
     for (const module of [
+      passThrough,
+      undefined,
       {},
       { phase: 'request' },
       { phase: 'operation', handle: 'proceed' },
       { phase: 'response', handle: passThrough },
     ]) {
       expect(() => collectMiddleware([module as never]), JSON.stringify(module)).toThrow(
-        new TypeError('A middleware module must use defineMiddleware or defineOperationMiddleware.')
+        new TypeError(
+          'A middleware module must default-export defineMiddleware or defineOperationMiddleware.'
+        )
       );
     }
   });
@@ -197,7 +163,7 @@ describe('checkProjectPipeline', () => {
       .build();
     expect(() => checkProjectPipeline(base, app)).toThrow(
       new TypeError(
-        'Operation "archiveNotes" omits project middleware. Derive its factory from .maximus/base or .maximus/routes.'
+        'Operation "archiveNotes" omits project middleware. Bind it to the base in .maximus/base.ts.'
       )
     );
   });

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * The `maximus` command scaffolds services and reconciles project entries. Vite+ owns development and
- * builds; Cloudflare owns type generation and deployment.
+ * The `maximus` command creates projects and generates their `.maximus/` modules. Vite+ owns development
+ * and builds; Cloudflare's `cf` owns deployment.
  */
+import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { scaffold } from './internal/scaffold.ts';
 
 /** The help the command prints for `--help` or a usage mistake. */
 const USAGE = [
-  'Usage: maximus init <new-directory> --name <name> [--layout service|project]',
+  'Usage: maximus init <new-directory> [--name <name>]',
   '       maximus prepare [directory] [--mode production|development]',
-  'Creates a Vite+ service. Use its dev, build, verify and deploy package scripts.',
-  'Project layout generates entries from vite.config.ts or maximus.config.ts, routes/, mcp/ and middleware/.',
+  'init creates a Maximus project; prepare generates .maximus/ from vite.config.ts and the project files.',
 ].join('\n');
 
 /** Runs the command the arguments name; an unknown or incomplete option is a refusal like any other. */
@@ -21,7 +21,6 @@ async function run(): Promise<void> {
     allowPositionals: true,
     options: {
       name: { type: 'string' },
-      layout: { type: 'string', default: 'service' },
       mode: { type: 'string', default: 'production' },
       help: { type: 'boolean', default: false },
     },
@@ -41,13 +40,10 @@ async function run(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (!target || !values.name) {
-    throw new TypeError('Use maximus init <new-directory> --name <name>.');
+  if (!target) {
+    throw new TypeError('Use maximus init <new-directory> [--name <name>].');
   }
-  if (values.layout !== 'service' && values.layout !== 'project') {
-    throw new TypeError('Choose --layout service or --layout project.');
-  }
-  console.info(JSON.stringify(scaffold(target, values.name, values.layout)));
+  console.info(JSON.stringify(scaffold(target, values.name ?? basename(resolve(target)))));
 }
 
 try {
