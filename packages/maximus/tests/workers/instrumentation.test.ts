@@ -137,3 +137,21 @@ it("runs a wrapped Durable Object's methods inside the diagnostics of its env an
   });
   expect(counter).toBeInstanceOf(CounterObject);
 });
+
+/** A Durable Object that binds a method to itself as it is constructed, as socket handlers often are. */
+class SocketObject extends DurableObject<Env> {
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env);
+    this.receive = this.receive.bind(this);
+  }
+  receive(): { diagnostics: boolean; bound: boolean } {
+    return { diagnostics: diagnosticsEnabled(), bound: this instanceof SocketObject };
+  }
+}
+
+it('lets a wrapped class rebind its methods as it is constructed, and the rebound method keeps its diagnostics', () => {
+  const Socket = worker.durableObject(SocketObject);
+  const { receive } = new Socket({} as DurableObjectState, off);
+  expect(receive()).toEqual({ diagnostics: false, bound: true });
+  expect(new Socket({} as DurableObjectState, on).receive()).toEqual({ diagnostics: true, bound: true });
+});

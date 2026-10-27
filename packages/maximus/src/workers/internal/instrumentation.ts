@@ -32,8 +32,10 @@ function instrumentMethods<C, E, D extends new (context: C, env: E) => object>(
         continue;
       }
       methods.add(name);
+      // Writable as a class method is, so the class may rebind it to an instance as it is constructed.
       Object.defineProperty(Observed.prototype, name, {
         configurable: true,
+        writable: true,
         value(this: object, ...args: unknown[]) {
           return withTelemetry(telemetry, environments.get(this), () => Reflect.apply(method, this, args));
         },

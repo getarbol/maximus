@@ -67,6 +67,9 @@ dates of the release commits.
   nobody awaits; gives an attachment envelope the request id its response carries only when it is one,
   as a JSON envelope does; cancels the body of an attachment whose length it refuses; and refuses a path
   value with a lone surrogate with its `TypeError` instead of a `URIError`.
+- `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds
+  a method to itself in its constructor, as socket handlers often do, no longer fails to construct; the
+  bound method still runs inside its instance's diagnostics.
 
 ## 7.4.0 (2026-10-26)
 
