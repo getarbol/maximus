@@ -1,11 +1,11 @@
 ---
 name: maximus
-description: Build, extend, test, upgrade and deploy services with the Maximus framework (@arbol-ai/maximus and @arbol-ai/vite-plugin), organization-scoped APIs on Cloudflare Workers whose route files declare each contract once and are served over HTTP with OpenAPI, as MCP tools and over Worker RPC. Use when a project configures maximus() in vite.config.ts or imports @arbol-ai/maximus, or a task involves Maximus routes, MCP tools, scopes, error catalogs, context.ts, middleware, bindings, Worker RPC, OpenAPI, tests, the maximus CLI or deploying with cf.
+description: Build, extend, test, upgrade and deploy services with the Maximus framework (@arbol-ai/maximus, whose /vite entry configures a project), organization-scoped APIs on Cloudflare Workers whose route files declare each contract once and are served over HTTP with OpenAPI, as MCP tools and over Worker RPC. Use when a project configures maximus() in vite.config.ts or imports @arbol-ai/maximus, or a task involves Maximus routes, MCP tools, scopes, error catalogs, context.ts, middleware, bindings, Worker RPC, OpenAPI, tests, the maximus CLI or deploying with cf.
 ---
 
 # Maximus
 
-A Maximus service is a project. `vite.config.ts` configures it with `maximus()` from `@arbol-ai/vite-plugin`,
+A Maximus service is a project. `vite.config.ts` configures it with `maximus()` from `@arbol-ai/maximus/vite`,
 and its files declare the rest. A route file declares one operation, its handler and its contract; Maximus
 serves it over HTTP with an OpenAPI document, as an MCP tool when the contract names one, and over native
 RPC when the contract says so. Each transport admits its caller (an access token holding the operation's

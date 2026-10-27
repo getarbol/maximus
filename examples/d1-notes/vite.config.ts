@@ -3,7 +3,7 @@
  * whose id NOTES_DB_ID holds (`cf d1 create --name maximus-example-notes` prints it); without one, vp dev and
  * vp preview keep a local database under .cloudflare/state, with the fixed id `bun run migrate:local` migrates.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

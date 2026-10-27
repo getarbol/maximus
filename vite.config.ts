@@ -17,7 +17,7 @@ export default defineConfig({
       {
         // The CLIs and the end-to-end harness run in Node: its fetch honors redirect: 'error', and they read
         // their own environment.
-        files: ['packages/maximus/src/tooling/**', 'packages/vite-plugin/src/**', 'e2e/**'],
+        files: ['packages/maximus/src/tooling/**', 'packages/maximus/src/vite/**', 'e2e/**'],
         rules: { 'maximus/no-fetch-redirect-error': 'off', 'no-restricted-properties': 'off' },
       },
     ],
@@ -38,7 +38,7 @@ export default defineConfig({
         resolve: {
           alias: {
             'cloudflare:workers': fileURLToPath(
-              new URL('packages/maximus/tests/workers/fixtures/cloudflare-workers.ts', import.meta.url)
+              new URL('packages/maximus/src/vite/cloudflare-workers.ts', import.meta.url)
             ),
           },
         },

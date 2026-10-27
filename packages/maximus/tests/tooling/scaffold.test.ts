@@ -109,7 +109,9 @@ test('init writes the API with its MCP server, with the name, release and date i
   };
   expect(manifest.name).toBe('billing-api');
   expect(manifest.dependencies['@arbol-ai/maximus']).toBe(version);
-  expect(manifest.devDependencies['@arbol-ai/vite-plugin']).toBe(version);
+  // One package: the Vite plugin is its vite entry.
+  expect(Object.keys(manifest.devDependencies)).not.toContain('@arbol-ai/vite-plugin');
+  expect(read(directory, 'vite.config.ts')).toContain("import { maximus } from '@arbol-ai/maximus/vite';");
   expect(manifest.scripts.verify).toContain('bun run test');
   expect(read(directory, 'vite.config.ts')).toContain("origin: 'https://billing-api.example.com',");
   expect([before, after]).toContain(

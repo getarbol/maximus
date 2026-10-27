@@ -209,11 +209,11 @@ tools, pages, middleware modules, crons, queues, email handlers, Durable Objects
 | `files`          | Every module and page prepare read.                                                                                                      |
 | `modules`        | How many modules each convention holds: `routes`, `mcp`, `pages`, `middleware`, `crons`, `queues`, `email`, `durable-objects` and `app`. |
 
-| Refusal                                                                              | When                                     |
-| ------------------------------------------------------------------------------------ | ---------------------------------------- |
-| `Prepare with --mode production, as a build does, or development, as vp dev does.`   | Another mode.                            |
-| `Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.` | The directory has no Vite configuration. |
-| `<file> configures no maximus() plugin from @arbol-ai/vite-plugin.`                  | Its configuration has no `maximus()`.    |
+| Refusal                                                                               | When                                     |
+| ------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `Prepare with --mode production, as a build does, or development, as vp dev does.`    | Another mode.                            |
+| `Configure the project in vite.config.ts with maximus() from @arbol-ai/maximus/vite.` | The directory has no Vite configuration. |
+| `<file> configures no maximus() plugin from @arbol-ai/maximus/vite.`                  | Its configuration has no `maximus()`.    |
 
 Prepare's own refusals are listed in [Project structure](../guides/project-structure.md#what-prepare-refuses),
 and those of `maximus()`'s options in [Configuration](configuration.md#refusals).

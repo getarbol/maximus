@@ -9,8 +9,8 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 import { defineErrors, maximus, ok, reportUnexpected, standardErrors, t } from '../../src/index.ts';
 import type { ExecutionObservation, Principal } from '../../src/index.ts';
 import { diagnosticsEnabled } from '../../src/telemetry.ts';
+import { tracing } from '../../src/vite/cloudflare-workers.ts';
 import { createWorker } from '../../src/workers/runtime.ts';
-import { tracing } from './fixtures/cloudflare-workers.ts';
 
 /** The bindings the Worker reads: its telemetry switch and its build files. */
 interface Env {

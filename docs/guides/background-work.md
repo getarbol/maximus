@@ -94,7 +94,7 @@ choose them, declare the consumer in `triggers`, and Maximus keeps that declarat
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings, triggers } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

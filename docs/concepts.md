@@ -42,7 +42,7 @@ src/                Domain code the routes share
 tests/              Tests that call the API in Node
 ```
 
-`maximus()` from `@arbol-ai/vite-plugin` reads `vite.config.ts` and the project's files on every
+`maximus()` from `@arbol-ai/maximus/vite` reads `vite.config.ts` and the project's files on every
 `vp dev`, `vp build` and `vp test`, and writes `.maximus/`: the Worker's entry, the application its routes
 make, the `Env` type of its bindings and the types that check every handler. `.maximus/` is generated; you
 never edit it, and it is not committed.

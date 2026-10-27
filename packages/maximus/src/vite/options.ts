@@ -6,11 +6,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { TokenDevelopment, TokenPolicy } from '@arbol-ai/maximus';
-import type { ProjectOptions } from '@arbol-ai/maximus/vite';
 import { bindings, triggers } from 'cf/config';
 import type { WorkerConfig } from 'cf/config';
 import type { UserConfig } from 'vite';
+
+import type { TokenDevelopment, TokenPolicy } from '../tokens.ts';
+import type { ProjectOptions } from '../tooling/internal/prepare-project.ts';
 
 /** Where the Worker runs: `development` under `vp dev`, `production` in every build. */
 export type Phase = 'development' | 'production';

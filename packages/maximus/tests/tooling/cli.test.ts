@@ -201,7 +201,7 @@ test('a refusal is one sentence, and MAXIMUS_DEBUG=1 reports the error itself', 
 
 /** A project whose vite.config.ts configures the plugin from source, with one route. */
 function configured(): string {
-  const plugin = fileURLToPath(new URL('../../src/tooling/vite.ts', import.meta.url));
+  const plugin = fileURLToPath(new URL('../../src/vite/project.ts', import.meta.url));
   return project(
     {
       'vite.config.ts': `import { maximusProject } from ${JSON.stringify(plugin)};\nexport default { plugins: [maximusProject(() => (${JSON.stringify(options())}))] };\n`,

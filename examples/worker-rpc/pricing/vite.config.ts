@@ -2,7 +2,7 @@
  * The pricing Worker: it quotes catalog items for the orders Worker, which calls it over native RPC through a
  * Service Binding whose props name it `orders`.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({

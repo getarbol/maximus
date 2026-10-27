@@ -128,6 +128,6 @@ pinned origins, or entrypoints of your own need a Worker composed by hand: the b
 plain route, like a page, verifies its own signature on the exact bytes (`readBodyBytes(request,
 { maxBytes })`, then `@arbol-ai/maximus/webhooks`) before it treats them as data.
 That Worker is built as any other, with its own module as its entry and `nodejs_compat`, not through
-`maximus()` from `@arbol-ai/vite-plugin`.
+`maximus()` from `@arbol-ai/maximus/vite`.
 
 See [Worker composition](https://github.com/getarbol/maximus/blob/main/docs/guides/worker-composition.md).

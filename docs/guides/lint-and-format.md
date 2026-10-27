@@ -91,7 +91,7 @@ to you. Extend the lint preset, and repeat its `ignorePatterns`, which oxlint do
 // vite.config.ts
 import fmt from '@arbol-ai/maximus/oxfmt';
 import lint from '@arbol-ai/maximus/oxlint';
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import react from 'ultracite/oxlint/react';
 import { defineConfig } from 'vite-plus';

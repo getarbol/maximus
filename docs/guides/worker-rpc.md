@@ -13,7 +13,7 @@ The owner names the Workers allowed to call it in `maximus()`, by the caller nam
 
 ```ts
 // pricing/vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
@@ -188,7 +188,7 @@ entrypoint. Its `props` name the caller:
 
 ```ts
 // orders/vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

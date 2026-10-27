@@ -9,8 +9,8 @@ import { join } from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vite-plus/test';
 
-import { maximusProject } from '../../src/tooling/vite.ts';
-import { generated, options, project, removeProjects, ROUTE, write } from './fixtures.ts';
+import { maximusProject } from '../../src/vite/project.ts';
+import { generated, options, project, removeProjects, ROUTE, write } from '../tooling/fixtures.ts';
 
 type Plugin = ReturnType<typeof maximusProject>;
 

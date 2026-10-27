@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import { bindings, triggers } from 'cf/config';
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { projectOptions, workerConfig } from '../src/options.ts';
-import type { MaximusOptions } from '../src/options.ts';
+import { projectOptions, workerConfig } from '../../src/vite/options.ts';
+import type { MaximusOptions } from '../../src/vite/options.ts';
 
 const directories: string[] = [];
 /** A project root with this package.json. */

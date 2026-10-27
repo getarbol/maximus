@@ -71,7 +71,7 @@ answers without a token.
 Declare the KV namespace as a binding of the Worker, in `maximus()` in `vite.config.ts`:
 
 ```ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

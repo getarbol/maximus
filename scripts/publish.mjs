@@ -1,5 +1,5 @@
 /**
- * Publishes the packed tarballs of @arbol-ai/maximus, @arbol-ai/vite-plugin and create-maximus to npm, with
+ * Publishes the packed tarballs of @arbol-ai/maximus and create-maximus to npm, with
  * provenance, a prerelease under its own dist-tag. They share one version, and Maximus goes first, since the
  * others require it. The publish workflow runs it after the release checks.
  */
@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 /** Where the tarballs are packed, removed at the end. */
 const directory = mkdtempSync(join(tmpdir(), 'maximus-release-'));
 try {
-  const manifests = ['maximus', 'vite-plugin', 'create-maximus'].map((name) => {
+  const manifests = ['maximus', 'create-maximus'].map((name) => {
     const cwd = resolve('packages', name);
     return { cwd, manifest: JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8')) };
   });

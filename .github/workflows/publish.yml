@@ -63,7 +63,7 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         # The registry can take a few minutes to serve a new package or version. The packages share it.
         run: |
-          for package in @arbol-ai/maximus @arbol-ai/vite-plugin create-maximus; do
+          for package in @arbol-ai/maximus create-maximus; do
             for attempt in $(seq 1 30); do
               [ "$(npm view "$package@$VERSION" version 2>/dev/null)" = "$VERSION" ] && break
               if [ "$attempt" = 30 ]; then

@@ -41,7 +41,7 @@ Two folders are generated and ignored by Git: `.maximus/`, which prepare writes,
 
 ## Configuration and root modules
 
-`vite.config.ts` is the configuration, and `maximus()` from `@arbol-ai/vite-plugin` in its plugins states
+`vite.config.ts` is the configuration, and `maximus()` from `@arbol-ai/maximus/vite` in its plugins states
 the application and the Worker that serves it. [Configuration](../reference/configuration.md) lists every
 option.
 

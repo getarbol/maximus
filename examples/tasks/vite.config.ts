@@ -3,7 +3,7 @@
  * routes/, mcp/, app/routes/, errors.ts and context.ts, and Cloudflare's Vite plugin builds, runs and deploys
  * the Worker, which serves the API under /api and the React app index.html starts.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import react from '@vitejs/plugin-react';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';

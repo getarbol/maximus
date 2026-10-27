@@ -18,7 +18,7 @@ Node.js 22.18 or later. Install the packages a project needs:
 
 ```sh
 bun add @arbol-ai/maximus@^8
-bun add -d @arbol-ai/vite-plugin@^8 vite-plus@1.4.0 vite@npm:@voidzero-dev/vite-plus-core@1.4.0 \
+bun add -d @cloudflare/vite-plugin@2.0.0-beta.v.5 vite-plus@1.4.0 vite@npm:@voidzero-dev/vite-plus-core@1.4.0 \
   typescript@7.0.2 cf@1.0.0-beta.23 @cloudflare/workers-types @types/node oxlint oxfmt ultracite
 ```
 
@@ -30,7 +30,7 @@ the project before `cf deploy --prebuilt --mode production`.
 
 ## Move the configuration into vite.config.ts
 
-`maximus()` from `@arbol-ai/vite-plugin` states the application and its Worker. Each 7.x setting has one
+`maximus()` from `@arbol-ai/maximus/vite` states the application and its Worker. Each 7.x setting has one
 place in it, or in a root module when it is code rather than configuration:
 
 | 7.x                                                                         | 8.0                                                          |
@@ -51,7 +51,7 @@ A 7.x service's two configuration files become one:
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

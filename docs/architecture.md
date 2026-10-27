@@ -24,22 +24,21 @@ Agent Skill's frontmatter, with a small writer for JSON data.
 Nothing compiles code at runtime. TypeBox checks values with its value checker, and the formats are plain
 validators, so the framework runs in workerd without `eval`.
 
-## Three packages, one version
+## One package, one version
 
-| Package                 | What it holds                                                                            |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| `@arbol-ai/maximus`     | The framework, one entry per concern, the `maximus` command and the Maximus Agent Skill. |
-| `@arbol-ai/vite-plugin` | `maximus()`, the project's only configuration, which composes Cloudflare's Vite plugin.  |
-| `create-maximus`        | `bun create maximus`: a new project from the `maximus init` of its own release.          |
+| Package             | What it holds                                                                                                                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@arbol-ai/maximus` | The framework, one entry per concern: `/vite`, whose `maximus()` is the project's only configuration and composes Cloudflare's Vite plugin, the `maximus` command and the Maximus Agent Skill. |
+| `create-maximus`    | `bun create maximus`: a new project from the `maximus init` of its own release.                                                                                                                |
 
-The three are released together, at one version, so a project's packages always agree. Within
+The two are released together, at one version, so a project never mixes releases. Within
 `@arbol-ai/maximus`, separation lives in the entries, and dependencies run in one direction:
 
 ```mermaid
 flowchart LR
   Project["A project's routes and modules"] --> Core["@arbol-ai/maximus"]
-  Plugin["@arbol-ai/vite-plugin"] --> Vite["/vite: prepare"]
-  Plugin --> Cloudflare["Cloudflare's Vite plugin"]
+  Vite["/vite: maximus()"] --> Prepare["prepare"]
+  Vite --> Cloudflare["Cloudflare's Vite plugin"]
   Generated[".maximus/"] --> Config["/config"]
   Generated --> ProjectEntry["/project"]
   Generated --> MCP["/mcp"]
@@ -136,7 +135,7 @@ either.
 
 ### The Vite plugin composes Cloudflare's
 
-`maximus()` from `@arbol-ai/vite-plugin` is the project's configuration and its build. It derives the Worker
+`maximus()` from `@arbol-ai/maximus/vite` is the project's configuration and its build. It derives the Worker
 from the options: the generated entry, `nodejs_compat`, the bindings of the phase, where the Worker is served,
 its observability, a trigger for each cron and queue module, and a web app's assets. Then it hands that
 Worker to Cloudflare's Vite plugin, which runs it in workerd under `vp dev` and writes the Build Output that

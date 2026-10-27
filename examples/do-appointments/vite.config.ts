@@ -2,7 +2,7 @@
  * The only configuration: the appointments service, its Worker, and the Durable Object class that keeps each
  * day's schedule, which the Worker exports and binds itself.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings, exports } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

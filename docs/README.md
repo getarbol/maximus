@@ -63,7 +63,7 @@ Ship it:
 - [CLI](reference/cli.md): `maximus` and `create-maximus`.
 - [Wire formats](reference/wire-formats.md): response envelopes, headers, OpenAPI extensions, MCP and RPC.
 - [Standard failures](reference/standard-failures.md): the failures every operation may answer.
-- [Package exports](reference/exports.md): every entry of `@arbol-ai/maximus` and `@arbol-ai/vite-plugin`.
+- [Package exports](reference/exports.md): every entry of `@arbol-ai/maximus`.
 
 ## Design
 

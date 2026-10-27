@@ -11,7 +11,7 @@ By default, the API accepts OAuth access tokens from one authorization server. N
 `maximus()` in `vite.config.ts`:
 
 ```ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
@@ -434,7 +434,7 @@ limits how often each caller calls the API and the MCP server. Declare the bindi
 in `rateLimit`:
 
 ```ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

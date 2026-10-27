@@ -1,5 +1,5 @@
 /**
- * `@arbol-ai/vite-plugin`: one `vite.config.ts` configures a Maximus application and the Cloudflare Worker
+ * `@arbol-ai/maximus/vite`: one `vite.config.ts` configures a Maximus application and the Cloudflare Worker
  * that serves it. `maximus()` keeps the project's generated modules in step with its files and runs
  * Cloudflare's Vite plugin with the Worker its options describe.
  */
@@ -7,7 +7,6 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { maximusProject } from '@arbol-ai/maximus/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import type { PluginConfig } from '@cloudflare/vite-plugin';
 import type { WorkerConfig } from 'cf/config';
@@ -15,6 +14,7 @@ import type { Plugin } from 'vite';
 
 import { checkWebAppBuild, projectOptions, workerConfig } from './options.ts';
 import type { MaximusOptions, Phase } from './options.ts';
+import { maximusProject } from './project.ts';
 
 export type { MaximusOptions, Phase, TokenOptions, WebAppOptions } from './options.ts';
 
@@ -93,7 +93,7 @@ export function maximus(options: MaximusOptions): Plugin[] {
 
 /** The path of this package's stand-in for `cloudflare:workers`, with this extension. */
 function workersStandIn(extension: string): string {
-  return fileURLToPath(new URL(`testing/cloudflare-workers.${extension}`, import.meta.url));
+  return fileURLToPath(new URL(`cloudflare-workers.${extension}`, import.meta.url));
 }
 
 /**

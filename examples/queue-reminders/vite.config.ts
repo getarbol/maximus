@@ -2,7 +2,7 @@
  * The only configuration: the reminders service, its Worker, the queue that delivers reminders and the KV
  * namespace that keeps them. The first deployment creates the queue, its dead letter queue and the namespace.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings, triggers } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

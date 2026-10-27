@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to Maximus, newest first. Since 8.0.0, `@arbol-ai/maximus`, `@arbol-ai/vite-plugin` and
+Notable changes to Maximus, newest first. Since 8.0.0, `@arbol-ai/maximus` and
 `create-maximus` are released together at one version; from 7.0.0 to 7.4.0, Maximus was the one package
 `@arbol-ai/maximus`. The entries before 7.0.0 come from the framework's earlier private repository, where
 every `@getarbol/maximus*` package shared the version shown unless an entry says otherwise and
@@ -16,7 +16,7 @@ setting.
 
 Breaking:
 
-- `maximus()` from the new `@arbol-ai/vite-plugin` states the application and its Worker in
+- `maximus()` from the new `@arbol-ai/maximus/vite` states the application and its Worker in
   `vite.config.ts`, with Cloudflare's own names for the Worker's settings, and composes Cloudflare's Vite
   plugin. Gone: `maximus.config.ts` and `defineConfig` and `cloudflare.config.ts`, both of which the plugin
   refuses to find;

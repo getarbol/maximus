@@ -1,12 +1,12 @@
 # Configuration
 
-Every option of `maximus()` from `@arbol-ai/vite-plugin`, the project's one configuration, with its type,
+Every option of `maximus()` from `@arbol-ai/maximus/vite`, the project's one configuration, with its type,
 its default and its effect, followed by the Worker settings Maximus sets itself and the configurations it
 refuses.
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

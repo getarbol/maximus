@@ -31,8 +31,8 @@ This package is the framework. Its root entry holds routes and operations, TypeB
 scopes, the error catalog and the HTTP handler with its OpenAPI document; each optional capability is an
 entry of its own, such as `@arbol-ai/maximus/mcp`, `/workers` or `/postgres`, and a Worker carries only the
 entries it imports. The package installs the `maximus` command and ships the Maximus skill for coding agents
-in `skills/maximus/`. [`@arbol-ai/vite-plugin`](https://www.npmjs.com/package/@arbol-ai/vite-plugin) makes
-`vite.config.ts` a project's one configuration.
+in `skills/maximus/`. `maximus()` from `@arbol-ai/maximus/vite` makes `vite.config.ts` a project's one
+configuration.
 
 - [Getting started](https://github.com/getarbol/maximus/blob/main/docs/getting-started.md)
 - [Concepts](https://github.com/getarbol/maximus/blob/main/docs/concepts.md)

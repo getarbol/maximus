@@ -12,7 +12,7 @@ own configuration package:
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

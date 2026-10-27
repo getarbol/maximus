@@ -82,7 +82,7 @@ reaches its objects through a binding to it:
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings, exports } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

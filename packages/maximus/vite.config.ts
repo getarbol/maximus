@@ -23,7 +23,7 @@ const entries = {
   'tooling/testing': 'src/tooling/testing.ts',
   'project/index': 'src/project/index.ts',
   'project/config': 'src/project/config.ts',
-  'tooling/vite': 'src/tooling/vite.ts',
+  'vite/index': 'src/vite/index.ts',
 };
 
 /**
@@ -34,7 +34,12 @@ const entries = {
  */
 export default defineConfig({
   pack: {
-    entry: { ...entries, 'tooling/cli': 'src/tooling/cli.ts' },
+    entry: {
+      ...entries,
+      'tooling/cli': 'src/tooling/cli.ts',
+      // What a project's tests resolve `cloudflare:workers` to, by its path beside the vite entry.
+      'vite/cloudflare-workers': 'src/vite/cloudflare-workers.ts',
+    },
     format: 'esm',
     platform: 'neutral',
     target: 'es2022',
@@ -43,8 +48,9 @@ export default defineConfig({
     sourcemap: false,
     minify: false,
     deps: {
-      // Built-ins and the Workers runtime stay imports, like the dependencies and peers.
-      neverBundle: [/^node:/, /^cloudflare:/],
+      // Built-ins and the Workers runtime stay imports, like the dependencies and peers, and so do the lint and
+      // format presets the vite entry loads by the package's own name: they ship as they are, in config/.
+      neverBundle: [/^node:/, /^cloudflare:/, /^@arbol-ai\/maximus\/ox(?:lint|fmt)$/],
       // Nothing from node_modules is bundled, and the output imports nothing the package does not declare.
       onlyBundle: [],
       onlyImport: [
@@ -55,6 +61,10 @@ export default defineConfig({
         'yaml',
         'pg',
         'vite',
+        '@cloudflare/vite-plugin',
+        'cf',
+        // The lint and format presets, which the vite entry loads by the package's own name.
+        '@arbol-ai/maximus',
         /^node:/,
         /^cloudflare:/,
       ],
@@ -62,7 +72,7 @@ export default defineConfig({
     dts: {
       generator: 'tsgo',
       tsconfig: 'tsconfig.release.json',
-      // The CLI is a binary, not an import: it gets no declarations.
+      // The CLI is a binary and the stand-in a module resolved by path: neither gets declarations.
       entry: Object.values(entries),
     },
     outputOptions: {

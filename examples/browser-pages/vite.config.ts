@@ -2,7 +2,7 @@
  * The only configuration: the pages service, its Worker and its Browser Rendering binding. Every browser
  * session it starts reaches only the hosts src/hosts.ts allows.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

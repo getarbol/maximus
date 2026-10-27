@@ -4,8 +4,8 @@
  */
 import { afterEach, expect, it } from 'vite-plus/test';
 
+import { tracing } from '../../src/vite/cloudflare-workers.ts';
 import { annotateInvocation } from '../../src/workers/internal/worker-tracing.ts';
-import { tracing } from './fixtures/cloudflare-workers.ts';
 
 const requestId = '00000000-0000-4000-8000-000000000001';
 const installed = tracing.getActiveSpan;

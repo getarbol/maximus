@@ -14,7 +14,7 @@ import { options, project, removeProjects, ROUTE } from './fixtures.ts';
 /** Inside the workspace's node_modules, where the bundled configuration resolves Vite and its imports. */
 const CACHE = fileURLToPath(new URL('../../../../node_modules/.cache/', import.meta.url));
 /** The plugin's source, which the configurations import. */
-const PLUGIN = fileURLToPath(new URL('../../src/tooling/vite.ts', import.meta.url));
+const PLUGIN = fileURLToPath(new URL('../../src/vite/project.ts', import.meta.url));
 
 afterEach(removeProjects);
 
@@ -50,7 +50,7 @@ test('of two configuration files, it reads the one Vite reads: vite.config.js be
 test('a project without vite.config.ts, or whose configuration has no maximus(), is refused', async () => {
   const bare = project({ 'routes/v1/tasks.get.ts': ROUTE });
   await expect(prepareConfiguredProject(bare)).rejects.toThrow(
-    'Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.'
+    'Configure the project in vite.config.ts with maximus() from @arbol-ai/maximus/vite.'
   );
   expect(existsSync(join(bare, '.maximus'))).toBe(false);
   const unconfigured = project(
@@ -58,6 +58,6 @@ test('a project without vite.config.ts, or whose configuration has no maximus(),
     CACHE
   );
   await expect(prepareConfiguredProject(unconfigured)).rejects.toThrow(
-    'vite.config.ts configures no maximus() plugin from @arbol-ai/vite-plugin.'
+    'vite.config.ts configures no maximus() plugin from @arbol-ai/maximus/vite.'
   );
 });

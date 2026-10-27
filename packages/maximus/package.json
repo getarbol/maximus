@@ -1,7 +1,7 @@
 {
   "name": "@arbol-ai/maximus",
   "version": "8.0.0",
-  "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, with its OpenAPI and CLI.",
+  "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, configured in vite.config.ts, with its OpenAPI and CLI.",
   "keywords": [
     "api",
     "cloudflare",
@@ -12,7 +12,10 @@
     "multi-tenant",
     "openapi",
     "rpc",
-    "typebox"
+    "typebox",
+    "vite",
+    "vite-plugin",
+    "vite-plus"
   ],
   "homepage": "https://github.com/getarbol/maximus#readme",
   "bugs": {
@@ -112,8 +115,8 @@
       "import": "./dist/project/index.js"
     },
     "./vite": {
-      "types": "./dist/tooling/vite.d.ts",
-      "import": "./dist/tooling/vite.js"
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js"
     },
     "./config": {
       "types": "./dist/project/config.d.ts",
@@ -135,8 +138,10 @@
     "jose": "6.2.13"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
     "@types/pg": "8.23.1",
     "ajv": "8.20.0",
+    "cf": "1.0.0-beta.23",
     "miniflare": "5.20261023.0-beta",
     "pg": "8.23.1",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -144,6 +149,8 @@
     "yaml": "2.9.1"
   },
   "peerDependencies": {
+    "@cloudflare/vite-plugin": ">=2.0.0-beta.v.5",
+    "cf": ">=1.0.0-beta.23",
     "oxfmt": ">=0.71.0 <1",
     "oxlint": "^1.86.0",
     "pg": "^8.23.1",
@@ -151,6 +158,12 @@
     "vite": "^8.3.4"
   },
   "peerDependenciesMeta": {
+    "@cloudflare/vite-plugin": {
+      "optional": true
+    },
+    "cf": {
+      "optional": true
+    },
     "oxfmt": {
       "optional": true
     },

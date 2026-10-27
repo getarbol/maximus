@@ -29,7 +29,7 @@ To add the app to an existing project:
 
    ```ts
    // vite.config.ts
-   import { maximus } from '@arbol-ai/vite-plugin';
+   import { maximus } from '@arbol-ai/maximus/vite';
    import react from '@vitejs/plugin-react';
    import { defineConfig } from 'vite-plus';
 

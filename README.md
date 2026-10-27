@@ -57,7 +57,7 @@ is the MCP tool `get_note`.
 
 ```ts
 // vite.config.ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 
@@ -112,13 +112,12 @@ Schemas are [TypeBox](https://github.com/sinclairzx81/typebox).
 
 ## Packages
 
-| Package                                                                        | What it is                                                                                           |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| [`@arbol-ai/maximus`](https://www.npmjs.com/package/@arbol-ai/maximus)         | The framework, one entry per concern, the `maximus` command and the Maximus skill for coding agents. |
-| [`@arbol-ai/vite-plugin`](https://www.npmjs.com/package/@arbol-ai/vite-plugin) | `maximus()`: the project's only configuration, run by Vite+ and Cloudflare's Vite plugin.            |
-| [`create-maximus`](https://www.npmjs.com/package/create-maximus)               | `bun create maximus`: a new project.                                                                 |
+| Package                                                                | What it is                                                                                                                                                                        |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@arbol-ai/maximus`](https://www.npmjs.com/package/@arbol-ai/maximus) | The framework, one entry per concern: `maximus()` from `@arbol-ai/maximus/vite`, the project's only configuration, the `maximus` command and the Maximus skill for coding agents. |
+| [`create-maximus`](https://www.npmjs.com/package/create-maximus)       | `bun create maximus`: a new project.                                                                                                                                              |
 
-The three are released together, at one version. A Worker carries only the entries it imports:
+The two are released together, at one version. A Worker carries only the entries it imports:
 `@arbol-ai/maximus/mcp` and `@arbol-ai/maximus/postgres`, for instance, stay out of one that does not use
 them. Every entry is listed in [package exports](docs/reference/exports.md).
 

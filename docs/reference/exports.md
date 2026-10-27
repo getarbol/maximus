@@ -1,6 +1,6 @@
 # Package exports
 
-Every entry point of `@arbol-ai/maximus` and `@arbol-ai/vite-plugin`, which are released together at one
+Every entry point of `@arbol-ai/maximus`, which is released together with `create-maximus` at one
 version, and every name each one exports, in the order the entry declares it. The packages are side-effect
 free, so a bundle carries only the entries it imports: import from the narrowest entry you need.
 
@@ -24,9 +24,8 @@ free, so a bundle carries only the entries it imports: import from the narrowest
 | `@arbol-ai/maximus/oxfmt`       | The format preset                                                      | Node, with the optional peers oxfmt and Ultracite  |
 | `@arbol-ai/maximus/oxlint`      | The lint preset                                                        | Node, with the optional peers oxlint and Ultracite |
 | `@arbol-ai/maximus/project`     | The Worker of a project                                                | A Worker                                           |
-| `@arbol-ai/maximus/vite`        | The Vite plugin that prepares a project                                | Node, with Vite, an optional peer                  |
+| `@arbol-ai/maximus/vite`        | `maximus()`, the project's configuration in `vite.config.ts`           | Node, under Vite+                                  |
 | `@arbol-ai/maximus/config`      | What a project's files declare and what `.maximus/` binds them with    | Anywhere                                           |
-| `@arbol-ai/vite-plugin`         | `maximus()`, the project's configuration in `vite.config.ts`           | Node                                               |
 
 The entries a browser may import reach no Node or Workers module, no MCP SDK and no Postgres driver; the
 release checks read their import graphs to make sure. The root reaches `node:async_hooks`, where each
@@ -499,19 +498,6 @@ The Worker a project's files make, which `.maximus/worker.ts` builds. It imports
 | `ProjectPage`         | type     | A page: an `HttpRoute` that answers `GET`, or a record of one per method, `{ POST: receive }`.  |
 | `createProjectWorker` | function | `createWorker`, with a project's pages and event handlers.                                      |
 
-## @arbol-ai/maximus/vite
-
-The Vite plugin that keeps `.maximus/` in step with a project's files, which `@arbol-ai/vite-plugin`
-composes. It runs in Node.
-
-| Export                 | Kind     | What it is                                                  |
-| ---------------------- | -------- | ----------------------------------------------------------- |
-| `PreparedProject`      | type     | What preparing a project found.                             |
-| `ProjectOptions`       | type     | What `vite.config.ts` configures, as the plugin derives it. |
-| `ProjectOptionsSource` | type     | The project's options for a root and a mode.                |
-| `ProjectApi`           | type     | `prepare(root, mode)`, which `maximus prepare` calls.       |
-| `maximusProject`       | function | The plugin.                                                 |
-
 ## @arbol-ai/maximus/config
 
 What a project's files declare, and what the generated `.maximus/` modules bind them to the application
@@ -536,11 +522,11 @@ with. It loads no Workers or build code.
 | `useProjectMiddleware`      | function | Applies the project's operation middleware to its base.                                        |
 | `checkProjectPipeline`      | function | Refuses an operation that does not run the project's middleware.                               |
 
-## @arbol-ai/vite-plugin
+## @arbol-ai/maximus/vite
 
-The project's configuration: one `vite.config.ts` configures the application and its Cloudflare Worker.
-It depends on `@cloudflare/vite-plugin` and takes `@arbol-ai/maximus`, at its own version, `cf` and
-`vite` as peers. See [Configuration](configuration.md).
+`maximus()`, the project's configuration: one `vite.config.ts` configures the application and its
+Cloudflare Worker. It runs in Node, under Vite+, and takes `@cloudflare/vite-plugin`, `cf` and `vite` as
+peers, which a project installs. See [Configuration](configuration.md).
 
 | Export           | Kind     | What it is                                                                                                                                          |
 | ---------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |

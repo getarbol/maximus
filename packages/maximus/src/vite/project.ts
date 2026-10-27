@@ -1,17 +1,15 @@
 /**
- * `@arbol-ai/maximus/vite`: the Vite plugin that keeps `.maximus/` in step with a project's files, which
- * `@arbol-ai/vite-plugin` composes with Cloudflare's. Applications configure `maximus()` from that package.
+ * The Vite plugin that keeps `.maximus/` in step with a project's files, which `maximus()` composes with
+ * Cloudflare's.
  */
 import { existsSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 import type { Plugin } from 'vite';
 
-import { prepareProject } from './internal/prepare-project.ts';
-import type { PreparedProject, ProjectOptions } from './internal/prepare-project.ts';
-import { PROJECT_DIRECTORIES } from './internal/project-files.ts';
-
-export type { PreparedProject, ProjectOptions } from './internal/prepare-project.ts';
+import { prepareProject } from '../tooling/internal/prepare-project.ts';
+import type { PreparedProject, ProjectOptions } from '../tooling/internal/prepare-project.ts';
+import { PROJECT_DIRECTORIES } from '../tooling/internal/project-files.ts';
 
 /** A web app's pages and layout, and the files its build serves by name. */
 const WEB_APP_DIRECTORIES = ['app', 'public'] as const;

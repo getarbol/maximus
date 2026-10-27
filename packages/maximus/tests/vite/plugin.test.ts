@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import type { Plugin } from 'vite';
 import { afterEach, expect, test, vi } from 'vite-plus/test';
 
-import { maximus } from '../src/index.ts';
+import { maximus } from '../../src/vite/index.ts';
 
 const directories: string[] = [];
 function project(files: Record<string, string>): string {
@@ -66,7 +66,7 @@ test('prepares the project and keeps Cloudflare’s plugin after its own, out of
     typeof testing === 'function' && testing.call({} as never, {}, { mode: 'test', command: 'serve' })
   ).toEqual({
     resolve: {
-      alias: { 'cloudflare:workers': expect.stringMatching(/testing[/\\]cloudflare-workers\.[jt]s$/) },
+      alias: { 'cloudflare:workers': expect.stringMatching(/vite[/\\]cloudflare-workers\.[jt]s$/) },
     },
     test: { server: { deps: { inline: [/@arbol-ai\/maximus/] } } },
   });
@@ -101,7 +101,7 @@ test('a preset that fails for any reason but a missing optional peer is never dr
         throw error;
       },
     }));
-    const { maximus: withFailingPreset } = await import('../src/index.ts');
+    const { maximus: withFailingPreset } = await import('../../src/vite/index.ts');
     return configure(withFailingPreset(options), { root, fmt: {} });
   };
   try {
@@ -118,7 +118,7 @@ test('a preset that fails for any reason but a missing optional peer is never dr
 });
 
 test('the stand-in for cloudflare:workers keeps what a test constructs a class with', async () => {
-  const workers = await import('../src/testing/cloudflare-workers.ts');
+  const workers = await import('../../src/vite/cloudflare-workers.ts');
   /** A Durable Object that answers what it was constructed with. */
   class Counter extends workers.DurableObject<{ LIMIT: number }> {
     limit = () => this.env.LIMIT;

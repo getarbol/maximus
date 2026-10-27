@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import type { ProjectApi } from '../vite.ts';
+import type { ProjectApi } from '../../vite/project.ts';
 
 /** A configuration's plugins, as Vite flattens them from nested lists and promises. */
 async function pluginsOf(option: unknown): Promise<unknown[]> {
@@ -50,7 +50,9 @@ export async function prepareConfiguredProject(
   const root = resolve(directory);
   const viteConfig = VITE_CONFIGS.find((name) => existsSync(join(root, name)));
   if (!viteConfig) {
-    throw new TypeError('Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.');
+    throw new TypeError(
+      'Configure the project in vite.config.ts with maximus() from @arbol-ai/maximus/vite.'
+    );
   }
   const { loadConfigFromFile } = await import('vite');
   const loaded = await loadConfigFromFile({ command: 'build', mode }, join(root, viteConfig), root);
@@ -60,5 +62,5 @@ export async function prepareConfiguredProject(
       return api.prepare(root, mode);
     }
   }
-  throw new TypeError(`${viteConfig} configures no maximus() plugin from @arbol-ai/vite-plugin.`);
+  throw new TypeError(`${viteConfig} configures no maximus() plugin from @arbol-ai/maximus/vite.`);
 }

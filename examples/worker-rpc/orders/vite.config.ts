@@ -2,7 +2,7 @@
  * The orders Worker: it quotes orders over HTTP by calling the pricing Worker over native RPC, through a
  * Service Binding whose props name it `orders`, the caller pricing admits.
  */
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

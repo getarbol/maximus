@@ -51,7 +51,7 @@ unless `http.basePath` in `maximus()` names another. `/health` and the MCP endpo
 they are, and every other path belongs to [pages](#pages) or a [web app](web-apps.md).
 
 ```ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({

@@ -31,7 +31,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -44,7 +44,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -57,7 +57,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -70,7 +70,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -83,7 +83,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -99,7 +99,7 @@
         "react-router": "8.5.0",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
@@ -116,7 +116,7 @@
         "@maximus-examples/pricing": "workspace:*",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -129,7 +129,7 @@
         "@arbol-ai/maximus": "workspace:^",
       },
       "devDependencies": {
-        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@cloudflare/workers-types": "5.20261027.1",
         "cf": "^1.0.0-beta.23",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -163,8 +163,10 @@
         "jose": "6.2.13",
       },
       "devDependencies": {
+        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
         "@types/pg": "8.23.1",
         "ajv": "8.20.0",
+        "cf": "1.0.0-beta.23",
         "miniflare": "5.20261023.0-beta",
         "pg": "8.23.1",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
@@ -172,6 +174,8 @@
         "yaml": "2.9.1",
       },
       "peerDependencies": {
+        "@cloudflare/vite-plugin": ">=2.0.0-beta.v.5",
+        "cf": ">=1.0.0-beta.23",
         "oxfmt": ">=0.71.0 <1",
         "oxlint": "^1.86.0",
         "pg": "^8.23.1",
@@ -179,30 +183,14 @@
         "vite": "^8.3.4",
       },
       "optionalPeers": [
+        "@cloudflare/vite-plugin",
+        "cf",
         "oxfmt",
         "oxlint",
         "pg",
         "ultracite",
         "vite",
       ],
-    },
-    "packages/vite-plugin": {
-      "name": "@arbol-ai/vite-plugin",
-      "version": "8.0.0",
-      "dependencies": {
-        "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
-      },
-      "devDependencies": {
-        "@arbol-ai/maximus": "workspace:^",
-        "cf": "1.0.0-beta.23",
-        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
-        "vite-plus": "1.4.0",
-      },
-      "peerDependencies": {
-        "@arbol-ai/maximus": "8.0.0",
-        "cf": ">=1.0.0-beta.23",
-        "vite": "^8.3.4",
-      },
     },
   },
   "overrides": {
@@ -211,8 +199,6 @@
   },
   "packages": {
     "@arbol-ai/maximus": ["@arbol-ai/maximus@workspace:packages/maximus"],
-
-    "@arbol-ai/vite-plugin": ["@arbol-ai/vite-plugin@workspace:packages/vite-plugin"],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 

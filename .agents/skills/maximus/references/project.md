@@ -6,7 +6,7 @@ The only configuration. `maximus()` states the application and the Worker that s
 own names for the Worker's settings:
 
 ```ts
-import { maximus } from '@arbol-ai/vite-plugin';
+import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 

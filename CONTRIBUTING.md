@@ -15,8 +15,7 @@ bun run build
 
 | Path                       | Contains                                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/maximus/`        | `@arbol-ai/maximus`: the core at the root of `src/`, one folder per entry (`workers/`, `mcp/`, `postgres/`, `project/`, `tooling/`, …) and the starter `templates/`; `tests/` mirrors `src/`.           |
-| `packages/vite-plugin/`    | `@arbol-ai/vite-plugin`: `maximus()`, which reads `vite.config.ts` and composes Cloudflare's Vite plugin.                                                                                               |
+| `packages/maximus/`        | `@arbol-ai/maximus`: the core at the root of `src/`, one folder per entry (`workers/`, `mcp/`, `postgres/`, `project/`, `vite/`, `tooling/`, …) and the starter `templates/`; `tests/` mirrors `src/`.  |
 | `packages/create-maximus/` | `create-maximus`: `bun create maximus`, which runs `maximus init` of its own release.                                                                                                                   |
 | `examples/*`               | Example services that deploy to Cloudflare as they are. They are workspace packages, so they typecheck and test with everything else.                                                                   |
 | `e2e/`                     | The end-to-end suites, which call every example's Worker under `vp dev` or deployed.                                                                                                                    |
@@ -29,17 +28,17 @@ bun run build
 Read a call top-down: `builder.ts` declares, `define-app.ts` checks, a transport admits, and
 `execution.ts` runs. In `packages/maximus/src/`:
 
-| Concern                  | Modules                                                                                                                                                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Declaring an application | `builder.ts` (the fluent builder), `manifest.ts` (what an application and an operation are), `define-app.ts` (every rule `.build()` checks)                                                                          |
-| Running an operation     | `execution.ts` (eligibility, input decoding, context, middleware, handler, output checks)                                                                                                                            |
-| HTTP                     | `http.ts` (the handler), `internal/http-layout.ts` (who owns which path), `internal/http-query.ts` (typed GET queries), `http-paths.ts` (the router), `binary.ts` and `attachment-schema.ts` (byte bodies and files) |
-| Contracts                | `openapi.ts` (the OpenAPI document), `schema-bundle.ts` (named schemas as components)                                                                                                                                |
-| Schemas                  | `schemas.ts` (the browser entry), `input-schemas.ts` (codecs), `validation.ts`, `schema-reader.ts`, `common-schemas.ts`, `pagination.ts`                                                                             |
-| Identity                 | `tokens.ts` (verification and the principal), `scopes.ts`, `oauth.ts` (RFC 9728 metadata)                                                                                                                            |
-| Failures                 | `result.ts`, `errors.ts` (catalogs), `standard-failures.ts`                                                                                                                                                          |
-| Observability            | `telemetry.ts` (diagnostics and observers), `internal/diagnostics.ts` (safe error descriptions), `internal/correlation.ts`                                                                                           |
-| Entries                  | `workers/`, `mcp/`, `analytics/`, `project/` (`/project` and `/config`) and `tooling/` (the CLI, `/vite` and `/testing`) depend on the core, never the other way round; `postgres/` depends only on `pg`             |
+| Concern                  | Modules                                                                                                                                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Declaring an application | `builder.ts` (the fluent builder), `manifest.ts` (what an application and an operation are), `define-app.ts` (every rule `.build()` checks)                                                                                              |
+| Running an operation     | `execution.ts` (eligibility, input decoding, context, middleware, handler, output checks)                                                                                                                                                |
+| HTTP                     | `http.ts` (the handler), `internal/http-layout.ts` (who owns which path), `internal/http-query.ts` (typed GET queries), `http-paths.ts` (the router), `binary.ts` and `attachment-schema.ts` (byte bodies and files)                     |
+| Contracts                | `openapi.ts` (the OpenAPI document), `schema-bundle.ts` (named schemas as components)                                                                                                                                                    |
+| Schemas                  | `schemas.ts` (the browser entry), `input-schemas.ts` (codecs), `validation.ts`, `schema-reader.ts`, `common-schemas.ts`, `pagination.ts`                                                                                                 |
+| Identity                 | `tokens.ts` (verification and the principal), `scopes.ts`, `oauth.ts` (RFC 9728 metadata)                                                                                                                                                |
+| Failures                 | `result.ts`, `errors.ts` (catalogs), `standard-failures.ts`                                                                                                                                                                              |
+| Observability            | `telemetry.ts` (diagnostics and observers), `internal/diagnostics.ts` (safe error descriptions), `internal/correlation.ts`                                                                                                               |
+| Entries                  | `workers/`, `mcp/`, `analytics/`, `project/` (`/project` and `/config`), `vite/` (`/vite`, the project's plugin) and `tooling/` (the CLI and `/testing`) depend on the core, never the other way round; `postgres/` depends only on `pg` |
 
 Files under `internal/` are shared helpers; entries re-export the few that are public (the body
 readers, `createDiagnostics` and the correlation helpers).
@@ -121,7 +120,7 @@ a consumer must do, if anything. Keep one logical change per commit.
 Maintainers release by merging a version change, with its CHANGELOG section, to `main`: once CI passes
 on that commit, the **Publish** workflow publishes every package npm does not have at that version yet
 and releases the version on GitHub with its CHANGELOG section (it can also be started by hand on
-`main`). `@arbol-ai/maximus`, `@arbol-ai/vite-plugin` and `create-maximus` are released together at one
+`main`). `@arbol-ai/maximus` and `create-maximus` are released together at one
 version; a breaking change moves the major version. Each is published from its packed tarball with npm
 provenance, never with `workspace:` or `file:` dependencies, and published versions never change.
 Installing from the registry and verifying a real deployment are separate gates after publication.

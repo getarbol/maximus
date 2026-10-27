@@ -174,7 +174,7 @@ The examples stand in for the other bindings the same way:
 
 ## Durable Objects and `cloudflare:workers`
 
-Under Vitest, `maximus()` resolves `cloudflare:workers` to a stand-in that `@arbol-ai/vite-plugin` ships:
+Under Vitest, `maximus()` resolves `cloudflare:workers` to a stand-in that `@arbol-ai/maximus/vite` ships:
 
 | Export             | In the stand-in                                                     |
 | ------------------ | ------------------------------------------------------------------- |
