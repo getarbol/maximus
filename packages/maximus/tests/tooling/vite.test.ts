@@ -148,6 +148,7 @@ test('only a convention directory or a root module rediscovers the project', asy
     'errors.ts',
     'auth.mts',
     'context.js',
+    'telemetry.ts',
   ]) {
     expect(await rediscovered(file), file).toBe(true);
   }

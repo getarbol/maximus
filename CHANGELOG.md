@@ -74,8 +74,9 @@ Everything else:
   `MaximusRegister`, which types every handler's context and failures.
 - `context.ts` (`defineContext`) prepares what every handler receives, `errors.ts` declares the error
   catalog and `auth.ts` (`defineAuth`) verifies tokens the application issues; `defineAuth` refuses the
-  issuer, the audience and every other field `vite.config.ts` states. `PreparedContext` types operation
-  middleware.
+  issuer, the audience and every other field `vite.config.ts` states. `telemetry.ts` (`defineTelemetry`)
+  states whether diagnostics run, their observers, such as `analytics()`, and the active trace id.
+  `PreparedContext` types operation middleware.
 - `.maximus/env.d.ts` types `Env` from the declared bindings with Cloudflare's own inference, and types a
   binding to one of the Worker's own Durable Object classes as `DurableObjectNamespace` of that class.
 - Each cron module's literal schedule becomes its trigger, and each queue module subscribes the Worker to

@@ -19,7 +19,7 @@ import { mcpMarkdown } from './project-markdown.ts';
 /**
  * What `vite.config.ts` configures, as the Vite plugin derives it: the application besides its code, the
  * Worker's HTTP paths and the bindings of each mode. Every value is plain data, which the generated modules
- * carry; the code that completes the application is `errors.ts`, `auth.ts` and `context.ts`.
+ * carry; the code that completes the application is `errors.ts`, `auth.ts`, `context.ts` and `telemetry.ts`.
  */
 export interface ProjectOptions {
   /** Identity, origin, token policy, RPC callers and limits. */
@@ -435,7 +435,8 @@ export function prepareProject(directory: string, mode: string, project: Project
   const catalog = rootModule(root, 'errors');
   const auth = rootModule(root, 'auth');
   const context = rootModule(root, 'context');
-  for (const module of [catalog, auth, context]) {
+  const telemetry = rootModule(root, 'telemetry');
+  for (const module of [catalog, auth, context, telemetry]) {
     if (module) {
       readProjectModule(root, join(root, module), 'config');
     }
@@ -523,12 +524,17 @@ export function prepareProject(directory: string, mode: string, project: Project
         `export const { middleware, requestMiddleware } = collectMiddleware([${middlewareModules.join(', ')}] as const);`,
       ]
     ),
-    // The application vite.config.ts configures, completed by the optional errors, auth and context modules.
-    // defineAuth again: whatever auth.ts exports, only its code joins the configured token policy.
+    // The application vite.config.ts configures, completed by the optional errors, auth, context and telemetry
+    // modules. defineAuth and defineTelemetry again: whatever those modules export, only their code joins.
     'base.ts': generatedModule(
       mode,
       [
-        `import { ${[...(auth ? ['defineAuth'] : []), 'maximus', ...(catalog ? [] : ['standardErrors'])].join(', ')} } from '@arbol-ai/maximus';`,
+        `import { ${[
+          ...(auth ? ['defineAuth'] : []),
+          ...(telemetry ? ['defineTelemetry'] : []),
+          'maximus',
+          ...(catalog ? [] : ['standardErrors']),
+        ].join(', ')} } from '@arbol-ai/maximus';`,
         `import { ${context ? 'bindContext, ' : ''}useProjectMiddleware } from '@arbol-ai/maximus/config';`,
         "import { application } from './config.ts';",
         "import { middleware } from './middleware.ts';",
@@ -536,6 +542,7 @@ export function prepareProject(directory: string, mode: string, project: Project
         ...(catalog ? [`import errors from ${relativeModule(catalog)};`] : []),
         ...(auth ? [`import auth from ${relativeModule(auth)};`] : []),
         ...(context ? [`import context from ${relativeModule(context)};`] : []),
+        ...(telemetry ? [`import telemetry from ${relativeModule(telemetry)};`] : []),
       ],
       [
         `const configured = maximus<Env>({ ${[
@@ -543,6 +550,7 @@ export function prepareProject(directory: string, mode: string, project: Project
           ...(auth ? ['tokens: { ...application.tokens, ...defineAuth(auth) }'] : []),
           catalog ? 'errors' : 'errors: standardErrors',
           ...(described ? ['mcp'] : []),
+          ...(telemetry ? ['telemetry: defineTelemetry(telemetry)'] : []),
         ].join(', ')} });`,
         `export const base = useProjectMiddleware(${context ? 'bindContext(configured, context)' : 'configured'}, middleware);`,
       ]

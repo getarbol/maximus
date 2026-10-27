@@ -16,6 +16,7 @@ import type { Exposure, Invocation, OperationShape } from './manifest.ts';
 import type { Result } from './result.ts';
 import type { StaticDecode } from './schema-types.ts';
 import type { STANDARD_FAILURES } from './standard-failures.ts';
+import type { TelemetryConfig } from './telemetry.ts';
 import type { TokenPolicy } from './tokens.ts';
 
 declare global {
@@ -463,4 +464,22 @@ export function defineAuth<const A extends AuthOptions>(
     );
   }
   return Object.freeze(auth);
+}
+
+/** The fields `telemetry.ts` states: whether diagnostics run, their observers and the active trace id. */
+const TELEMETRY_FIELDS: ReadonlySet<string> = new Set(['enabled', 'observers', 'traceId']);
+/**
+ * Declares, as `telemetry.ts`'s default export, what the application's diagnostics do: whether Maximus writes
+ * its log events, calls observers and annotates spans (`enabled`, on by default), the observers that receive
+ * each call's safe metadata, such as `analytics()` from `@arbol-ai/maximus/analytics`, and how to read the
+ * active trace id (`traceId`). Any other field throws a TypeError.
+ */
+export function defineTelemetry(telemetry: TelemetryConfig<RegisteredEnv>): TelemetryConfig<RegisteredEnv> {
+  const unknown = Object.keys(telemetry).filter((field) => !TELEMETRY_FIELDS.has(field));
+  if (unknown.length) {
+    throw new TypeError(
+      `telemetry.ts states only enabled, observers and traceId: remove ${unknown.join(', ')}.`
+    );
+  }
+  return Object.freeze(telemetry);
 }

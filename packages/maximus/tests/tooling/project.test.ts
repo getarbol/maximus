@@ -300,18 +300,20 @@ test('the generated modules carry the configuration and infer Env from the bindi
   expect(generated(root, 'entry.ts')).toContain("export { default } from './worker.ts';");
 });
 
-test('errors.ts, auth.ts and context.ts complete the application, and none may import what is generated from it', () => {
+test('errors.ts, auth.ts, context.ts and telemetry.ts complete the application, and none may import what is generated from it', () => {
   const root = project({
     'errors.ts': 'throw new Error("must not execute"); export default {};',
     'auth.ts': 'export default {};',
     'context.ts': 'export default {};',
+    'telemetry.ts': 'export default {};',
   });
   prepare(root);
   const base = generated(root, 'base.ts');
-  expect(base).toContain("import { defineAuth, maximus } from '@arbol-ai/maximus';");
+  expect(base).toContain("import { defineAuth, defineTelemetry, maximus } from '@arbol-ai/maximus';");
   expect(base).toContain("import { bindContext, useProjectMiddleware } from '@arbol-ai/maximus/config';");
+  expect(base).toContain('import telemetry from "../telemetry.ts";');
   expect(base).toContain(
-    'const configured = maximus<Env>({ ...application, tokens: { ...application.tokens, ...defineAuth(auth) }, errors });'
+    'const configured = maximus<Env>({ ...application, tokens: { ...application.tokens, ...defineAuth(auth) }, errors, telemetry: defineTelemetry(telemetry) });'
   );
   expect(base).toContain(
     'export const base = useProjectMiddleware(bindContext(configured, context), middleware);'
@@ -321,7 +323,7 @@ test('errors.ts, auth.ts and context.ts complete the application, and none may i
   expect(registration).toContain('    errors: typeof errors;');
   write(root, { 'errors.mjs': 'export default {};' });
   expect(() => prepare(root)).toThrow('Keep at most one errors module: errors.ts or errors.mjs.');
-  for (const name of ['errors', 'auth', 'context']) {
+  for (const name of ['errors', 'auth', 'context', 'telemetry']) {
     const cycle = project({
       [`${name}.ts`]: "import { base } from './.maximus/base.ts'; export default base;",
     });

@@ -26,6 +26,7 @@
     "errors.ts",
     "auth.ts",
     "context.ts",
+    "telemetry.ts",
     "vite.config.ts",
     ".maximus/*.ts"
   ]

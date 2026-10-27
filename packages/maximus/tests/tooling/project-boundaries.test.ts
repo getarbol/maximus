@@ -15,7 +15,7 @@ import { generated, prepare, project, removeProjects, ROUTE, temporary, write } 
 afterEach(removeProjects);
 
 test('a root module or the generated directory that is a symlink is refused, and nothing is written through it', () => {
-  for (const name of ['errors', 'auth', 'context']) {
+  for (const name of ['errors', 'auth', 'context', 'telemetry']) {
     const linked = project({ [`shared/${name}.ts`]: 'export default {};' });
     symlinkSync(join(linked, `shared/${name}.ts`), join(linked, `${name}.ts`));
     expect(() => prepare(linked), name).toThrow(`The ${name} module cannot be a symlink.`);

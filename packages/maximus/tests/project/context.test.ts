@@ -1,6 +1,7 @@
 /**
  * The context every handler receives, as context.ts declares it with defineContext: values prepared once per
- * call after admission, `fail` answering the call instead, and binding refusing any other export.
+ * call after admission, `fail` answering the call instead, and binding refusing any other export. Beside it,
+ * the other code that completes the application: auth.ts (defineAuth) and telemetry.ts (defineTelemetry).
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -8,12 +9,14 @@ import {
   createHttpHandler,
   defineAuth,
   defineContext,
+  defineTelemetry,
   err,
   maximus,
   ok,
   standardErrors,
   t,
 } from '../../src/index.ts';
+import type { TelemetryConfig } from '../../src/index.ts';
 import { bindContext } from '../../src/project/config.ts';
 import { errors } from './fixtures/registered.ts';
 import type { Env } from './fixtures/registered.ts';
@@ -22,8 +25,8 @@ import type { Env } from './fixtures/registered.ts';
 const TOKEN = 'local-development-token-0123456789';
 const env: Env = { PREFIX: 'Task', DEVELOPMENT_TOKEN: TOKEN };
 
-/** A tasks service whose development token acts in the given organization. */
-function application(organizationId = 'org_acme') {
+/** A tasks service whose development token acts in the given organization, with telemetry off unless given. */
+function application(organizationId = 'org_acme', telemetry: TelemetryConfig<Env> = { enabled: false }) {
   return maximus<Env>({
     name: 'tasks',
     namespace: 'tasks',
@@ -37,7 +40,7 @@ function application(organizationId = 'org_acme') {
     },
     errors,
     rpc: { callers: [] },
-    telemetry: { enabled: false },
+    telemetry,
   });
 }
 
@@ -48,9 +51,9 @@ const context = defineContext(({ env: bindings, principal, fail }) =>
 );
 const empty = t.Object({}, { additionalProperties: false });
 
-/** Reads the label the context prepared, over HTTP with the development token. */
-async function readLabel(organizationId?: string) {
-  const app = bindContext(application(organizationId), context)
+/** The label operation over the context, in a service with the given telemetry. */
+function labels(organizationId?: string, telemetry?: TelemetryConfig<Env>) {
+  return bindContext(application(organizationId, telemetry), context)
     .operation(
       'readLabel',
       {
@@ -65,10 +68,15 @@ async function readLabel(organizationId?: string) {
       async ({ label }) => ok({ label })
     )
     .build();
-  const response = await createHttpHandler(app)(
-    new Request('http://localhost:5173/v1/labels', { headers: { authorization: `Bearer ${TOKEN}` } }),
-    env
-  );
+}
+
+/** The label request, with the development token. */
+const labelRequest = () =>
+  new Request('http://localhost:5173/v1/labels', { headers: { authorization: `Bearer ${TOKEN}` } });
+
+/** Reads the label the context prepared, over HTTP with the development token. */
+async function readLabel(organizationId?: string) {
+  const response = await createHttpHandler(labels(organizationId))(labelRequest(), env);
   return { status: response.status, body: await response.json() };
 }
 
@@ -149,4 +157,33 @@ it('verifies the tokens auth.ts resolves itself, as the configuration completes 
     data: { actorId: 'billing' },
   });
   expect((await call('another-key')).status).toBe(401);
+});
+
+it('refuses in telemetry.ts what is not telemetry, and hands its observers each call while it is on', async () => {
+  expect(() =>
+    // @ts-expect-error A dataset is a binding vite.config.ts declares; telemetry.ts states code.
+    defineTelemetry({ observers: [], dataset: 'events' })
+  ).toThrow('telemetry.ts states only enabled, observers and traceId: remove dataset.');
+  const observed: string[] = [];
+  const telemetry = defineTelemetry({
+    enabled: (bindings) => bindings.PREFIX !== 'Quiet',
+    observers: [
+      {
+        execution: async ({ operation, outcome, surface }) =>
+          observed.push(`${surface} ${operation} ${outcome}`),
+      },
+    ],
+  });
+  expect(Object.isFrozen(telemetry)).toBe(true);
+  const handler = createHttpHandler(labels('org_acme', telemetry));
+  const pending: Promise<unknown>[] = [];
+  const background = {
+    waitUntil: (promise: Promise<unknown>) => {
+      pending.push(promise);
+    },
+  };
+  expect((await handler(labelRequest(), env, background)).status).toBe(200);
+  expect((await handler(labelRequest(), { ...env, PREFIX: 'Quiet' }, background)).status).toBe(200);
+  await Promise.all(pending);
+  expect(observed).toEqual(['http readLabel success']);
 });

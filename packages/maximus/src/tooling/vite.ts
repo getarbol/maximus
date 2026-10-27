@@ -16,7 +16,7 @@ export type { PreparedProject, ProjectOptions } from './internal/prepare-project
 /** A web app's pages and layout, and the files its build serves by name. */
 const WEB_APP_DIRECTORIES = ['app', 'public'] as const;
 /** The root modules that complete the application, and the web app's HTML entry. */
-const ROOT_MODULE = /^(?:(?:errors|auth|context)\.(?:ts|mts|js|mjs)|index\.html)$/;
+const ROOT_MODULE = /^(?:(?:errors|auth|context|telemetry)\.(?:ts|mts|js|mjs)|index\.html)$/;
 
 /**
  * What the plugin derives from `vite.config.ts` for a project's root and a mode: `development` under
