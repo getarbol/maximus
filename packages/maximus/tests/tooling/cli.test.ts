@@ -80,7 +80,7 @@ async function maximus(...args: string[]) {
 
 test('--help prints the usage of init and prepare and exits successfully', async () => {
   const { printed, reported, exitCode } = await maximus('--help');
-  expect(exitCode).toBe(0);
+  expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
   expect(printed).toHaveLength(1);
   expect(printed[0]).toContain(
@@ -131,6 +131,21 @@ test('init without a directory or a name, or with another layout, is refused as 
   ] as const) {
     const { printed, reported, exitCode } = await maximus(...args);
     expect(reported, args.join(' ')).toEqual([sentence]);
+    expect(exitCode).toBe(1);
+    expect(printed).toEqual([]);
+  }
+  expect(existsSync(directory)).toBe(false);
+});
+
+test('an unknown option or an option without its value is refused as one sentence', async () => {
+  const directory = join(temporary(), 'tasks');
+  for (const [args, sentence] of [
+    [['init', directory, '--nme', 'tasks'], /^maximus: Unknown option '--nme'/],
+    [['init', directory, '--name'], /^maximus: Option '--name <value>' argument missing/],
+  ] as const) {
+    const { printed, reported, exitCode } = await maximus(...args);
+    expect(reported, args.join(' ')).toHaveLength(1);
+    expect(String(reported[0]), args.join(' ')).toMatch(sentence);
     expect(exitCode).toBe(1);
     expect(printed).toEqual([]);
   }

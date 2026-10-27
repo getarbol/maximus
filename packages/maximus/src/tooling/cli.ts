@@ -7,16 +7,6 @@ import { parseArgs } from 'node:util';
 
 import { scaffold } from './internal/scaffold.ts';
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    name: { type: 'string' },
-    layout: { type: 'string', default: 'service' },
-    mode: { type: 'string', default: 'production' },
-    help: { type: 'boolean', default: false },
-  },
-});
-const [command, target] = positionals;
 /** The help the command prints for `--help` or a usage mistake. */
 const USAGE = [
   'Usage: maximus init <new-directory> --name <name> [--layout service|project]',
@@ -24,13 +14,23 @@ const USAGE = [
   'Creates a Vite+ service. Use its dev, build, verify and deploy package scripts.',
   'Project layout generates entries from vite.config.ts or maximus.config.ts, routes/, mcp/ and middleware/.',
 ].join('\n');
-if (values.help) {
-  console.info(USAGE);
-  process.exit(0);
-}
 
-/** Runs the command the arguments name. */
+/** Runs the command the arguments name; an unknown or incomplete option is a refusal like any other. */
 async function run(): Promise<void> {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: {
+      name: { type: 'string' },
+      layout: { type: 'string', default: 'service' },
+      mode: { type: 'string', default: 'production' },
+      help: { type: 'boolean', default: false },
+    },
+  });
+  const [command, target] = positionals;
+  if (values.help) {
+    console.info(USAGE);
+    return;
+  }
   if (command === 'prepare') {
     const { prepareConfiguredProject } = await import('./internal/prepare-configured.ts');
     console.info(JSON.stringify(await prepareConfiguredProject(target ?? '.', values.mode)));

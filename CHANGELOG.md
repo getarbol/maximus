@@ -58,6 +58,8 @@ dates of the release commits.
 - Project discovery keeps an email recipient whose domain ends in `.dev`, `.prod`, `.test` or `.spec`:
   `email/support@company.dev.ts` handles `support@company.dev` in every mode, where it was read as the
   development handler of `support@company`, and `email/help@example.test.ts` was skipped as a test.
+- `maximus` reports an unknown option, or one without its value, in one sentence like its other
+  refusals, instead of a stack trace.
 
 ## 7.4.0 (2026-10-26)
 
