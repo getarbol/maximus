@@ -29,9 +29,10 @@
     "directory": "packages/maximus"
   },
   "bin": {
-    "maximus": "dist/tooling/cli.js"
+    "maximus": "bin/maximus.js"
   },
   "files": [
+    "bin",
     "dist",
     "config",
     "templates",
