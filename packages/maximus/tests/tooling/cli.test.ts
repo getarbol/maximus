@@ -82,15 +82,16 @@ test('a missing or unknown command reports the usage and fails', async () => {
   }
 });
 
-test('init scaffolds a project named after its directory unless --name names it, and prints what to do next', async () => {
+test('init scaffolds a project named after its directory unless --name names it, and says what to do next', async () => {
   const directory = join(temporary(), 'tasks');
   const { printed, reported, exitCode } = await maximus('init', directory);
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
-  expect(JSON.parse(String(printed[0]))).toMatchObject({
-    directory,
-    next: expect.stringContaining('bun run deploy'),
-  });
+  expect(printed).toHaveLength(1);
+  expect(printed[0]).toMatch(
+    /^Created tasks in .+tasks: an API and its MCP server\.\nRun bun install and bun run dev\./
+  );
+  expect(printed[0]).toContain('bun run deploy deploys.');
   expect(existsSync(join(directory, 'routes/v1/greeting.get.ts'))).toBe(true);
   expect(readFileSync(join(directory, 'package.json'), 'utf-8')).toContain('"name": "tasks"');
   const named = join(temporary(), 'service');
@@ -100,13 +101,13 @@ test('init scaffolds a project named after its directory unless --name names it,
 
 test('init leaves MCP out with --no-mcp and adds a web app with --web', async () => {
   const api = join(temporary(), 'api');
-  expect(JSON.parse(String((await maximus('init', api, '--no-mcp')).printed[0]))).toMatchObject({
+  expect(JSON.parse(String((await maximus('init', api, '--no-mcp', '--json')).printed[0]))).toMatchObject({
     mcp: false,
     web: false,
   });
   expect(existsSync(join(api, 'mcp'))).toBe(false);
   const web = join(temporary(), 'web');
-  expect(JSON.parse(String((await maximus('init', web, '--web')).printed[0]))).toMatchObject({
+  expect(JSON.parse(String((await maximus('init', web, '--web', '--json')).printed[0]))).toMatchObject({
     mcp: true,
     web: true,
   });
@@ -123,24 +124,42 @@ test('gen writes a route or a tool below --root, and skills links the Maximus sk
     '--tool',
     'get_task',
     '--root',
-    root
+    root,
+    '--json'
   );
   expect(JSON.parse(String(route.printed[0]))).toEqual({
     file: join(root, 'routes/v1/tasks/[taskId].get.ts'),
     method: 'GET',
     path: '/v1/tasks/{taskId}',
   });
-  const tool = await maximus('gen', 'tool', 'summarize-tasks', '--root', root);
+  const tool = await maximus('gen', 'tool', 'summarize-tasks', '--root', root, '--json');
   expect(JSON.parse(String(tool.printed[0]))).toMatchObject({ tool: 'summarize_tasks' });
   const misused = await maximus('gen', 'route', 'get');
   expect(misused.reported).toEqual([
     'maximus: Use maximus gen route <method> <path>, or maximus gen tool <name>.',
   ]);
   expect(misused.exitCode).toBe(1);
-  const skills = await maximus('skills', root);
+  const skills = await maximus('skills', root, '--json');
   expect(JSON.parse(String(skills.printed[0]))).toEqual({
     linked: ['.agents/skills/maximus', '.claude/skills/maximus', '.codex/skills/maximus'],
   });
+});
+
+test('gen and skills say what they wrote, relative to where the command runs', async () => {
+  const root = project({});
+  process.chdir(root);
+  expect((await maximus('gen', 'route', 'get', '/v1/tasks/{taskId}', '--tool', 'get_task')).printed).toEqual([
+    'Wrote routes/v1/tasks/[taskId].get.ts: GET /v1/tasks/{taskId}, also the MCP tool get_task.',
+  ]);
+  expect((await maximus('gen', 'tool', 'summarize-tasks')).printed).toEqual([
+    'Wrote mcp/tools/summarize-tasks.ts: the MCP tool summarize_tasks.',
+  ]);
+  expect((await maximus('skills')).printed).toEqual([
+    'Linked the Maximus skill for coding agents: .agents/skills/maximus, .claude/skills/maximus, .codex/skills/maximus.',
+  ]);
+  expect((await maximus('skills')).printed).toEqual([
+    'The Maximus skill was already linked for coding agents.',
+  ]);
 });
 
 test('init without a directory is refused as one sentence', async () => {
@@ -199,9 +218,13 @@ test('prepare generates the project at the given directory for the given mode', 
   const { printed, reported, exitCode } = await maximus('prepare', root, '--mode', 'development');
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
-  expect(JSON.parse(String(printed[0]))).toMatchObject({
+  expect(printed).toEqual(['Prepared .maximus/ for development: 1 route.']);
+  // Unchanged files are kept as they are; --json gives a script what prepare found.
+  const again = await maximus('prepare', root, '--mode', 'development', '--json');
+  expect(JSON.parse(String(again.printed[0]))).toMatchObject({
     directory: root,
     mode: 'development',
+    changed: false,
     modules: { routes: 1 },
   });
   expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toContain(
@@ -212,7 +235,7 @@ test('prepare generates the project at the given directory for the given mode', 
 test('prepare defaults to the working directory and the production mode', async () => {
   const root = configured();
   process.chdir(root);
-  const { printed } = await maximus('prepare');
+  const { printed } = await maximus('prepare', '--json');
   expect(JSON.parse(String(printed[0]))).toMatchObject({ directory: process.cwd(), mode: 'production' });
   expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toContain(
     '// Generated by maximus prepare (production).'
