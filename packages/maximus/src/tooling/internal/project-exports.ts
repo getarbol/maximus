@@ -1,6 +1,6 @@
 /** Reads what project modules export with Oxc, without importing or executing them. */
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { posix, relative } from 'node:path';
 
 import { parseSync } from 'vite';
 
@@ -9,7 +9,8 @@ import { parseSync } from 'vite';
  * and, in the modules that complete the application, imports that only load in workerd. The application and
  * the API built from it (`app` and `http`) import routes and middleware; a module only the generated Worker
  * imports (a page, a cron, queue or email handler, a Durable Object) may use them: only the Worker, which
- * imports it, would form a cycle.
+ * imports it, would form a cycle. Only `import type` and `export type` are type-only: under
+ * `verbatimModuleSyntax`, `import { type x }` still loads its module.
  */
 export function readProjectModule(
   root: string,
@@ -24,14 +25,7 @@ export function readProjectModule(
   for (const node of parsed.program.body) {
     let source: string | undefined;
     if (node.type === 'ImportDeclaration' && node.importKind !== 'type') {
-      if (
-        node.specifiers.length === 0 ||
-        node.specifiers.some(
-          (specifier) => specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type'
-        )
-      ) {
-        source = node.source.value;
-      }
+      source = node.source.value;
     } else if (
       (node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') &&
       node.exportKind !== 'type'
@@ -41,13 +35,14 @@ export function readProjectModule(
     if (!source) {
       continue;
     }
-    const generated = /(?:\.maximus\/|#maximus\/)([^/.?#]+)/.exec(source)?.[1];
+    // `#maximus//http` and `#maximus/./http` reach the same module as `#maximus/http`.
+    const generated = /(?:\.maximus\/|#maximus\/)([^/.?#]+)/.exec(posix.normalize(source))?.[1];
     if (
       generated &&
       (role === 'config' ||
         ['worker', 'entry'].includes(generated) ||
         (role !== 'worker' && (generated === 'app' || generated === 'http')) ||
-        (role === 'middleware' && generated === 'base'))
+        (role === 'middleware' && (generated === 'base' || generated === 'middleware')))
     ) {
       throw new TypeError(
         `Runtime import ${source} creates a generated-module cycle in ${shown}. Use a type-only import or shared domain module.`

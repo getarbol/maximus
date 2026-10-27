@@ -60,6 +60,10 @@ test('a route may not import the generated app, API, Worker or entry at runtime,
   for (const [contents, source] of [
     ["import { app } from '#maximus/app';\nexport default app;", '#maximus/app'],
     ["import { handler } from '#maximus/http';\nexport default handler;", '#maximus/http'],
+    // The same modules by another spelling, and an inline type import, which verbatimModuleSyntax keeps.
+    ["import { handler } from '#maximus//http';\nexport default handler;", '#maximus//http'],
+    ["import { app } from '#maximus/./app';\nexport default app;", '#maximus/./app'],
+    [`import { type app } from '#maximus/app';\n${ROUTE}`, '#maximus/app'],
     [`import '../../.maximus/worker.ts';\n${ROUTE}`, '../../.maximus/worker.ts'],
     ["export { default } from '#maximus/entry';", '#maximus/entry'],
   ] as const) {
@@ -81,9 +85,10 @@ test('a route may import the generated base at runtime, and any generated module
   expect(app).toContain('bindRoute(base, route_1, "/v1/tasks", "GET")');
 });
 
-test('middleware may not import the generated base, app or API at runtime, but may name their types', () => {
+test('middleware may not import the generated base, app, API or middleware at runtime, but may name their types', () => {
   for (const [contents, source] of [
     ["import { base } from '#maximus/base';\nexport default base;", '#maximus/base'],
+    ["import { middleware } from '#maximus/middleware';\nexport default middleware;", '#maximus/middleware'],
     ["import { app } from '#maximus/app';\nexport default app;", '#maximus/app'],
     ["import { handler } from '#maximus/http';\nexport default handler;", '#maximus/http'],
     ["import { Service } from '../.maximus/worker.ts';\nexport default Service;", '../.maximus/worker.ts'],
@@ -96,7 +101,7 @@ test('middleware may not import the generated base, app or API at runtime, but m
   const typed = project({
     'middleware/10-policy.ts': [
       "import type { base } from '#maximus/base';",
-      "import { type app } from '#maximus/app';",
+      "import type { app } from '#maximus/app';",
       "export type { middleware } from '#maximus/middleware';",
       'export type Policy = [typeof base, typeof app];',
       'export default {};',

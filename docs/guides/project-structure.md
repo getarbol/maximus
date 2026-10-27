@@ -360,13 +360,14 @@ through one.
 | `State the skill's one-line description in its frontmatter: <path>`                                                                                           | A skill whose frontmatter has no description.                                                                                       |
 | `A skill's frontmatter states its one-line description, and its name only as its file does: <path>`                                                           | Any other frontmatter key, or a `name` its file does not have.                                                                      |
 
-A generated module imports your modules, so importing it back at runtime would form a cycle. A type-only
-import (`import type`, or `import { type app }`) is always allowed:
+A generated module imports your modules, so importing it back at runtime would form a cycle. An
+`import type` or `export type` is always allowed; `import { type app }` is not, since under
+`verbatimModuleSyntax` it still loads its module:
 
 | Module                                                      | Never imports at runtime from `.maximus/` or `#maximus/` |
 | ----------------------------------------------------------- | -------------------------------------------------------- |
 | `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`        | Any generated module                                     |
-| `middleware/`                                               | `base`, `app`, `http`, `worker`, `entry`                 |
+| `middleware/`                                               | `base`, `middleware`, `app`, `http`, `worker`, `entry`   |
 | `routes/`, `mcp/tools/`                                     | `app`, `http`, `worker`, `entry`                         |
 | `pages/`, `crons/`, `queues/`, `email/`, `durable-objects/` | `worker`, `entry`                                        |
 
