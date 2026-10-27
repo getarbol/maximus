@@ -1,30 +1,38 @@
 name: Publish Maximus
-# Every push to main publishes the packages' version when npm does not have it yet; a manual run does the same.
+# Once CI passes on a push to main, publishes the packages' version when npm does not have it yet, with
+# provenance, and releases it on GitHub with its CHANGELOG section. A manual run on main does the same.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  # npm provenance, and npm trusted publishing once the package trusts this workflow.
-  id-token: write
 # One release at a time; a newer push waits instead of cancelling a publish in progress.
 concurrency:
   group: publish-maximus
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      # The release and its tag.
+      contents: write
+      # npm provenance, and npm trusted publishing once the packages trust this workflow.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit CI passed on, not whatever main holds by now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           # Later steps, dependency install scripts among them, never see the job token.
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -41,23 +49,21 @@ jobs:
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
+      # CI tested this commit; the build here is the one that is packed.
       - if: steps.release.outputs.publish == 'true'
-        run: bun install --frozen-lockfile --ignore-scripts
-      # Release validation runs no tests; a human can request them in the verification workflow.
-      - if: steps.release.outputs.publish == 'true'
-        run: bun run verify:release
+        run: bun run verify
       - if: steps.release.outputs.publish == 'true'
         run: node scripts/publish.mjs
         env:
-          # Empty when the package trusts this workflow instead; npm then publishes through OIDC.
+          # Empty when the packages trust this workflow instead; npm then publishes through OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Confirm the registry serves the published version
         if: steps.release.outputs.publish == 'true'
         env:
           VERSION: ${{ steps.release.outputs.version }}
-        # The registry can take a few minutes to serve a new package or version. Both packages share it.
+        # The registry can take a few minutes to serve a new package or version. The packages share it.
         run: |
-          for package in @arbol-ai/maximus @arbol-ai/vite-plugin; do
+          for package in @arbol-ai/maximus @arbol-ai/vite-plugin create-maximus; do
             for attempt in $(seq 1 30); do
               [ "$(npm view "$package@$VERSION" version 2>/dev/null)" = "$VERSION" ] && break
               if [ "$attempt" = 30 ]; then
@@ -67,3 +73,14 @@ jobs:
               sleep 10
             done
           done
+      - name: Release the version on GitHub
+        if: steps.release.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          # The version's CHANGELOG section, from its heading to the next one.
+          awk -v heading="## $VERSION " 'index($0, heading) == 1 { found = 1; next } /^## / { found = 0 } found' CHANGELOG.md > notes.md
+          prerelease=$(case "$VERSION" in *-*) echo --prerelease;; esac)
+          gh release create "v$VERSION" --target "$COMMIT" --title "$VERSION" --notes-file notes.md $prerelease

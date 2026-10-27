@@ -34,8 +34,10 @@ No raw input/output, credentials, cookies or clinical data. Providers sanitize e
 framework telemetry and disabling native platform collection are separate controls. Never invent trace IDs.
 
 Tests live beside their entry, in packages/<package>/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
-Run bun run verify (Vite+ builds, workspace TypeScript, lint and format) and production dry bundles
-before release. Tests require an explicit human request, including scripts, hooks and CI. Publish the packed tarball. Never publish workspace: or file: dependencies.
+Run bun run verify (Vite+ builds, workspace TypeScript, lint and format) and bun run test before you
+push, and bun run test:e2e when an example changes; CI runs them all, with coverage, the packed-package
+checks and the Postgres suite, on every pull request and push to main. Publish the packed tarball. Never publish
+workspace: or file: dependencies.
 Registry installation and actual production verification are separate gates; never label mocks live.
 
 Canonical skills are tracked in .agents/skills with harness symlinks; the package includes a generated copy

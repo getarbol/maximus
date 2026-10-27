@@ -1,0 +1,51 @@
+name: Examples on Cloudflare
+# Deploys every example to a Cloudflare account and runs the end-to-end suites against the deployed Workers,
+# then runs them locally with the account's Browser Run: after every push to main, and on demand. It needs the
+# repository variables WORKERS_SUBDOMAIN (the account's workers.dev subdomain) and NOTES_DB_ID (the database
+# `cf d1 create maximus-example-notes` made), and the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
+# in the `cloudflare` environment. Without the variables it does nothing.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+# One deployment at a time; a newer push waits instead of cancelling one in progress.
+concurrency:
+  group: cloudflare-examples
+  cancel-in-progress: false
+jobs:
+  examples:
+    name: Deploy and run the examples
+    if: vars.WORKERS_SUBDOMAIN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: cloudflare
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
+      NOTES_DB_ID: ${{ vars.NOTES_DB_ID }}
+      CF_SEND_TELEMETRY: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: bun run build
+      - name: Deploy every example
+        run: bun run deploy:examples
+      - name: Run the suites against the deployed Workers
+        run: bun run test:e2e
+        env:
+          E2E_TARGET: remote
+      # Locally, Browser Run's example reaches the account's Browser Run too.
+      - name: Run the suites locally, Browser Run included
+        run: bun run test:e2e
+      - name: Keep the servers' output of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-logs
+          path: .e2e/
+          retention-days: 7

@@ -24,7 +24,8 @@ export default defineConfig({
     // Keep the established lint policy; TypeScript checks every workspace through the root check task.
     options: { typeAware: false },
   },
-  // Every suite runs from here; tests require an explicit human request, in scripts, hooks and CI alike.
+  // Every suite runs from here: `bun run test` runs the packages' and the examples', `bun run test:e2e` the
+  // examples' running Workers, and CI runs them all on every pull request and push to main.
   test: {
     projects: [
       {

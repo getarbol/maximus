@@ -43,20 +43,19 @@ readers, `createDiagnostics` and the correlation helpers).
 
 ## Check your change
 
-| Command                 | Runs                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `bun run typecheck`     | TypeScript in every package and example, as Vite+ tasks.                                       |
-| `bun run check`         | Vite+ lint (Oxlint) and format (Oxfmt) with the Maximus presets. `bun run fix` fixes.          |
-| `bun run test`          | The `unit` and `examples` test projects of the root `vite.config.ts`.                          |
-| `bun run test:coverage` | The `unit` project with V8 coverage; under 90% lines, branches, functions or statements fails. |
-| `bun run verify`        | Vite+ library and Worker builds, workspace TypeScript, lint and formatting.                    |
-| `bun run verify:tests`  | Explicitly requested test suites and packed-package smoke checks.                              |
+| Command                    | Runs                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `bun run verify`           | The packages' and examples' builds, TypeScript everywhere, lint and format.              |
+| `bun run fix`              | Fixes what lint and format can.                                                          |
+| `bun run test`             | The packages' tests and every example's, in Node.                                        |
+| `bun run test:coverage`    | The same with V8 coverage: under 90% lines, branches, functions or statements fails.     |
+| `bun run test:integration` | The Postgres entry against a real database: Docker and the `postgres:18.6-trixie` image. |
+| `bun run test:e2e`         | Every example's Worker running under `vp dev`, called over HTTP and MCP.                 |
+| `bun run verify:package`   | The packed packages installed into a new project, and starters that pass their verify.   |
 
-Run `bun run verify` before you open a pull request. Tests require a human request; CI runs the same on every push and pull
-request, and the publish workflow runs it before it publishes. The Postgres entry also has
-integration tests,
-`bun run test:integration` (the `postgres` test project), which need Docker and an already installed
-`postgres:18.6-trixie` image.
+Run `bun run verify` and `bun run test` before you push, and `bun run test:e2e` when you change an
+example or what a Worker serves. CI runs all of them on every pull request and every push to `main`, on
+Node 22 and 24, and publishing waits for it to pass on `main`.
 
 ## Rules the framework keeps
 
