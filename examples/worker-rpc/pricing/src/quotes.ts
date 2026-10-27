@@ -1,11 +1,10 @@
 /**
- * What pricing shares with the Workers that call it: the schemas of a quote, the data of its one failure and
- * the RPC entrypoint they bind. It imports no project module, so a caller depends on this file alone, never
- * on pricing's routes or the registry they are typed by.
+ * The schemas of a quote: the items it prices, the quote itself and the data of its one failure. The Workers
+ * that call pricing never import them: they bind to the RPC document pricing publishes, openapi.rpc.json,
+ * which `maximus openapi` writes from the routes that use these schemas.
  */
 import { t } from '@arbol-ai/maximus';
-import type { Failure, Principal, Result, Static } from '@arbol-ai/maximus';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
+import type { Static } from '@arbol-ai/maximus';
 
 /** One line of an order: a catalog SKU and how many units of it. */
 export const ItemSchema = t.Object(
@@ -43,12 +42,3 @@ export const UnknownSkuSchema = t.Object(
   { index: t.Integer({ minimum: 0 }) },
   { additionalProperties: false }
 );
-
-/**
- * Pricing's RPC entrypoint, the `Service` export a Service Binding names: one method per route that declares
- * `rpc`, called with the caller's verified principal. Pricing's tests prove its routes serve exactly these.
- */
-export interface PricingService extends WorkerEntrypoint {
-  /** The quote route over RPC: the quote of the items, or `UNKNOWN_SKU` naming the first unknown one. */
-  quoteItems: (principal: Principal, input: { items: Items }) => Promise<Result<Quote, Failure>>;
-}

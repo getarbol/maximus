@@ -1,0 +1,18 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pricing",
+    "version": "0.0.0",
+    "description": "Prices catalog items for the services of the account that call it over native RPC."
+  },
+  "servers": [
+    {
+      "url": "https://example-pricing.example.workers.dev/api"
+    }
+  ],
+  "tags": [],
+  "paths": {},
+  "components": {
+    "schemas": {}
+  }
+}

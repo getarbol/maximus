@@ -15,6 +15,10 @@ export default defineConfig({
       name: 'example-queue-reminders',
       namespace: 'reminders',
       title: 'Reminders',
+      description: 'Schedules reminders and delivers each through a queue, retrying a failed delivery.',
+      groups: {
+        Reminders: "The reminders of the caller's organization, and whether each was delivered.",
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://example-queue-reminders.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       tokens: { issuer: 'https://auth.example.com/' },

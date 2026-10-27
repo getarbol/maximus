@@ -11,6 +11,7 @@
     "build": "vp build",
     "test": "vp test run",
     "typecheck": "maximus prepare && tsc --noEmit",
+    "openapi": "maximus openapi --check",
     "verify": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {

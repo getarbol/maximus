@@ -134,8 +134,17 @@ Everything else:
   `REQUEST_TOO_LARGE` and `UNSUPPORTED_MEDIA_TYPE` only when it sends one. A DELETE whose path carries its
   whole input documents no body, and a body keeps its `minProperties` net of the path's fields. TypeScript
   types from openapi-typescript, and Go and Python clients from the OpenAPI Generator, compile from it.
-- `maximus openapi` writes the document the Worker serves to `openapi.json`, and `--check` fails when it is
-  out of date. The format preset leaves every `openapi.json` as written.
+- `maximus openapi` writes the document the Worker serves to `openapi.json`, and, when a route or tool
+  declares `rpc`, the RPC document to `openapi.rpc.json`; `--check` fails when either is out of date. The
+  format preset leaves every `openapi*.json` as written.
+- `services` in `maximus()` binds other Maximus services' native RPC methods, each by its Worker's name and
+  the RPC document it publishes, with props that name this service as the caller, and `maximus prepare`
+  types each binding from its document in `.maximus/services/<binding>.ts`: one method per RPC operation,
+  its input, its output and the union of its failures, which `code` narrows. A caller imports nothing of
+  the other project, and its type check fails when that project's document changes in a way its calls do
+  not follow. `createRpcOpenApi(app)` builds the RPC document: every operation served over native RPC,
+  internal ones and tools included, as `POST /rpc/<method>` whose body is its whole input, with
+  `x-rpc-callers`.
 - The OpenAPI document gives a list query parameter `style: form` and `explode: false`, so a generated
   client sends `tags=a,b`, the one form the API reads, rather than repeating the key, which it refuses.
 - Every refusal of `.build()` that concerns one operation names it, and a refusal of a route template names
@@ -183,8 +192,9 @@ Everything else:
 - Seven examples deploy to Cloudflare as they are, each with tests in Node and an end-to-end suite: tasks
   with a web app, notes in D1, two Workers over RPC, a queue with a dead letter queue, Browser Run, documents
   in R2 and a Durable Object that books appointments.
-- CI runs the build, types, lint and format, the tests with coverage on Node 22 and 24, the Postgres suite,
-  the packed packages and every example's end-to-end suite on each pull request and push to `main`;
+- CI runs, through Bun, the build, types, lint and format, the tests with coverage, the Postgres suite, the
+  packed packages, the examples' OpenAPI documents through Redocly's strictest rules and
+  openapi-typescript, and every example's end-to-end suite on each pull request and push to `main`;
   publishing follows a green CI on `main`, with provenance, and releases the version on GitHub with its
   section of this file.
 - Dependencies: Vite+ 1.4, Vitest 5, TypeScript 7, Cloudflare's Vite plugin 2.0 beta, `cf` 1.0 beta,

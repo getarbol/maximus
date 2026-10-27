@@ -1,0 +1,2227 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Appointments",
+    "version": "0.0.0",
+    "description": "Books appointments in the slots of a day, whose schedule one Durable Object per organization and day keeps."
+  },
+  "servers": [
+    {
+      "url": "https://example-do-appointments.example.workers.dev/api"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Days",
+      "description": "Each day's slots and the bookings that hold them."
+    }
+  ],
+  "paths": {
+    "/v1/days/{date}/bookings": {
+      "get": {
+        "operationId": "listDayBookings",
+        "summary": "List day bookings",
+        "description": "List a day's bookings, by slot.",
+        "tags": [
+          "Days"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "appointments:days:read"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "appointments:days:read"
+        ],
+        "x-effect": "read",
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "description": "The date.",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDayBookingsResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BOOKING_NOT_FOUND`: The booking does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "BOOKING_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`SLOT_TAKEN`: The slot is already booked; choose another.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "SLOT_TAKEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotTakenError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createDayBooking",
+        "summary": "Create a day booking",
+        "description": "Book a free slot of a day for a patient, named by your system's identifier for them, never by their name.",
+        "tags": [
+          "Days"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "appointments:days:write"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "appointments:days:write"
+        ],
+        "x-effect": "write",
+        "x-mcp-tool": "book_slot",
+        "x-mcp-idempotent": false,
+        "x-mcp-open-world": true,
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "description": "The date.",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDayBookingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`SLOT_TAKEN`: The slot is already booked; choose another.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "SLOT_TAKEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotTakenError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`REQUEST_TOO_LARGE`: The request exceeds the allowed size.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "REQUEST_TOO_LARGE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTooLargeError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`UNSUPPORTED_MEDIA_TYPE`: The request content type is not supported.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNSUPPORTED_MEDIA_TYPE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedMediaTypeError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/days/{date}/bookings/{bookingId}": {
+      "delete": {
+        "operationId": "deleteDayBooking",
+        "summary": "Delete a day booking",
+        "description": "Cancel a booking, freeing its slot.",
+        "tags": [
+          "Days"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "appointments:days:write"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "appointments:days:write"
+        ],
+        "x-effect": "delete",
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "description": "The date.",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "name": "bookingId",
+            "in": "path",
+            "required": true,
+            "description": "The booking id.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BOOKING_NOT_FOUND`: The booking does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "BOOKING_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingNotFoundError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/days/{date}/slots": {
+      "get": {
+        "operationId": "listDaySlots",
+        "summary": "List day slots",
+        "description": "List the slots of a day, each free or held, to choose one to book.",
+        "tags": [
+          "Days"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "appointments:days:read"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "appointments:days:read"
+        ],
+        "x-effect": "read",
+        "x-mcp-tool": "list_slots",
+        "x-mcp-idempotent": true,
+        "x-mcp-open-world": true,
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "description": "The date.",
+            "schema": {
+              "format": "date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDaySlotsResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BOOKING_NOT_FOUND`: The booking does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "BOOKING_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookingNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`SLOT_TAKEN`: The slot is already booked; choose another.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "SLOT_TAKEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotTakenError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Booking": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bookingId",
+          "slot",
+          "patientRef",
+          "bookedAt"
+        ],
+        "properties": {
+          "bookingId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "const": "09:00",
+                "type": "string"
+              },
+              {
+                "const": "09:30",
+                "type": "string"
+              },
+              {
+                "const": "10:00",
+                "type": "string"
+              },
+              {
+                "const": "10:30",
+                "type": "string"
+              },
+              {
+                "const": "11:00",
+                "type": "string"
+              },
+              {
+                "const": "11:30",
+                "type": "string"
+              },
+              {
+                "const": "12:00",
+                "type": "string"
+              },
+              {
+                "const": "12:30",
+                "type": "string"
+              },
+              {
+                "const": "13:00",
+                "type": "string"
+              },
+              {
+                "const": "13:30",
+                "type": "string"
+              },
+              {
+                "const": "14:00",
+                "type": "string"
+              },
+              {
+                "const": "14:30",
+                "type": "string"
+              },
+              {
+                "const": "15:00",
+                "type": "string"
+              },
+              {
+                "const": "15:30",
+                "type": "string"
+              },
+              {
+                "const": "16:00",
+                "type": "string"
+              },
+              {
+                "const": "16:30",
+                "type": "string"
+              }
+            ]
+          },
+          "patientRef": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "bookedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "BookingNotFoundError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/BookingNotFoundFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "BookingNotFoundFailure": {
+        "type": "object",
+        "description": "The booking does not exist.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "BOOKING_NOT_FOUND"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "BookingResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Booking"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "CreateDayBookingBody": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slot",
+          "patientRef"
+        ],
+        "properties": {
+          "slot": {
+            "anyOf": [
+              {
+                "const": "09:00",
+                "type": "string"
+              },
+              {
+                "const": "09:30",
+                "type": "string"
+              },
+              {
+                "const": "10:00",
+                "type": "string"
+              },
+              {
+                "const": "10:30",
+                "type": "string"
+              },
+              {
+                "const": "11:00",
+                "type": "string"
+              },
+              {
+                "const": "11:30",
+                "type": "string"
+              },
+              {
+                "const": "12:00",
+                "type": "string"
+              },
+              {
+                "const": "12:30",
+                "type": "string"
+              },
+              {
+                "const": "13:00",
+                "type": "string"
+              },
+              {
+                "const": "13:30",
+                "type": "string"
+              },
+              {
+                "const": "14:00",
+                "type": "string"
+              },
+              {
+                "const": "14:30",
+                "type": "string"
+              },
+              {
+                "const": "15:00",
+                "type": "string"
+              },
+              {
+                "const": "15:30",
+                "type": "string"
+              },
+              {
+                "const": "16:00",
+                "type": "string"
+              },
+              {
+                "const": "16:30",
+                "type": "string"
+              }
+            ]
+          },
+          "patientRef": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          }
+        }
+      },
+      "Empty": {
+        "type": "object",
+        "description": "No fields.",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "EmptyResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ForbiddenError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/ForbiddenFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ForbiddenFailure": {
+        "type": "object",
+        "description": "The token does not authorize this operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "FORBIDDEN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InternalFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InternalFailure": {
+        "type": "object",
+        "description": "The service could not complete the operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INTERNAL_ERROR"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InvalidInputError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InvalidInputFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InvalidInputFailure": {
+        "type": "object",
+        "description": "The request does not match the published schema.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_INPUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/InvalidInputFailureData"
+          }
+        }
+      },
+      "InvalidInputFailureData": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "issues": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            }
+          }
+        }
+      },
+      "ListDayBookingsResult": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bookings"
+        ],
+        "properties": {
+          "bookings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Booking"
+            }
+          }
+        }
+      },
+      "ListDayBookingsResultResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/ListDayBookingsResult"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ListDaySlotsResult": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "slots"
+        ],
+        "properties": {
+          "date": {
+            "format": "date",
+            "type": "string"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "slot",
+                "free"
+              ],
+              "properties": {
+                "slot": {
+                  "anyOf": [
+                    {
+                      "const": "09:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "09:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "10:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "10:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "11:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "11:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "12:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "12:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "13:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "13:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "14:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "14:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "15:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "15:30",
+                      "type": "string"
+                    },
+                    {
+                      "const": "16:00",
+                      "type": "string"
+                    },
+                    {
+                      "const": "16:30",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "free": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ListDaySlotsResultResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/ListDaySlotsResult"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "OutcomeUnknownError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/OutcomeUnknownFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "OutcomeUnknownFailure": {
+        "type": "object",
+        "description": "The operation may have been applied; check its result before repeating it.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "RateLimitedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/RateLimitedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RateLimitedFailure": {
+        "type": "object",
+        "description": "The request rate limit was exceeded. Try again later.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "RATE_LIMITED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "RequestTooLargeError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/RequestTooLargeFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RequestTooLargeFailure": {
+        "type": "object",
+        "description": "The request exceeds the allowed size.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "REQUEST_TOO_LARGE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "ResponseMetadata": {
+        "type": "object",
+        "description": "What every answer carries besides its data or error.",
+        "additionalProperties": false,
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "Request correlation identifier, also sent as X-Request-Id."
+          }
+        }
+      },
+      "SlotTakenError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/SlotTakenFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "SlotTakenFailure": {
+        "type": "object",
+        "description": "The slot is already booked; choose another.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SLOT_TAKEN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UnauthorizedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UnauthorizedFailure": {
+        "type": "object",
+        "description": "A valid access token is required.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNAUTHORIZED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UnsupportedMediaTypeError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UnsupportedMediaTypeFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UnsupportedMediaTypeFailure": {
+        "type": "object",
+        "description": "The request content type is not supported.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNSUPPORTED_MEDIA_TYPE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UpstreamTimeoutError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamTimeoutFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamTimeoutFailure": {
+        "type": "object",
+        "description": "The upstream service did not respond before its deadline.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UpstreamUnavailableError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamUnavailableFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamUnavailableFailure": {
+        "type": "object",
+        "description": "The upstream service could not complete the request.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "Uuid": {
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "ValidationIssue": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "maxLength": 256,
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        }
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Request correlation identifier.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds before another attempt.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/oauth/token",
+            "scopes": {
+              "appointments:days:read": "Read days.",
+              "appointments:days:write": "Create, change and delete days."
+            }
+          },
+          "clientCredentials": {
+            "tokenUrl": "https://auth.example.com/oauth/token",
+            "scopes": {
+              "appointments:days:read": "Read days.",
+              "appointments:days:write": "Create, change and delete days."
+            }
+          }
+        }
+      }
+    }
+  }
+}

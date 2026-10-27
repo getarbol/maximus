@@ -3,8 +3,17 @@
  * `.maximus/`, which the Worker and the type checker load. Discovery parses application modules and never
  * runs them, so preparing a project executes none of its code and keeps filesystem code out of the Worker.
  */
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import type { ApplicationConfiguration } from '../../builder.ts';
 import { operationPathParameters } from '../../http-paths.ts';
@@ -17,6 +26,7 @@ import { cronExpression, declarationExports, readProjectModule } from './project
 import { PROJECT_DIRECTORIES, projectFiles, projectPath, publicFiles, routeShape } from './project-files.ts';
 import type { ProjectFile } from './project-files.ts';
 import { mcpMarkdown } from './project-markdown.ts';
+import { serviceModule, serviceTypeName } from './service-types.ts';
 
 /**
  * What `vite.config.ts` configures, as the Vite plugin derives it: the application besides its code, the
@@ -42,6 +52,11 @@ export interface ProjectOptions {
     http: { basePath: string; healthPath: string; origins?: readonly string[] };
     assets?: { binding: string; headers?: Readonly<Record<string, string>> };
   };
+  /**
+   * The other Maximus services this one calls over native RPC, by their bindings: the OpenAPI document each
+   * publishes, a path from the project's root, types its binding in `.maximus/services/`.
+   */
+  services?: Readonly<Record<string, { worker: string; openapi: string }>>;
   /** The bindings each mode declares, as `cf/config` states them: the generated `Env` is inferred from them. */
   env: { production: Readonly<Record<string, unknown>>; development: Readonly<Record<string, unknown>> };
 }
@@ -412,10 +427,14 @@ function writeGenerated(
       throw new TypeError(`Generated files must be ordinary files: ${name}`);
     }
   }
+  if (existsSync(join(output, 'services')) && lstatSync(join(output, 'services')).isSymbolicLink()) {
+    throw new TypeError('The generated .maximus/services directory cannot be a symlink.');
+  }
   mkdirSync(output, { recursive: true });
   let changed = false;
   for (const [name, content] of Object.entries(generated)) {
     const target = join(output, name);
+    mkdirSync(dirname(target), { recursive: true });
     if (!existsSync(target) || readFileSync(target, 'utf-8') !== content) {
       changed = true;
       const temporary = `${target}.${process.pid}.tmp`;
@@ -428,6 +447,43 @@ function writeGenerated(
     changed = true;
   }
   return changed;
+}
+
+/** The file under `.maximus/services/` that types a binding: `PRICING` is `pricing.ts`, `NOTES_API` `notes-api.ts`. */
+function serviceFile(binding: string): string {
+  return `${binding.toLowerCase().replaceAll('_', '-')}.ts`;
+}
+
+/**
+ * The modules that type the services the project calls, each from the OpenAPI document its service publishes,
+ * with the documents read, which the plugin watches, and the `Env` entry each binding's type takes.
+ */
+function serviceTypes(root: string, project: ProjectOptions) {
+  const services = Object.entries(project.services ?? {});
+  return {
+    modules: Object.fromEntries(
+      services.map(([binding, { openapi }]) => {
+        const file = resolve(root, openapi);
+        if (!existsSync(file)) {
+          throw new TypeError(
+            `services.${binding}: ${openapi} does not exist; write it with maximus openapi in that service.`
+          );
+        }
+        let document: unknown;
+        try {
+          document = JSON.parse(readFileSync(file, 'utf-8'));
+        } catch (error) {
+          throw new TypeError(`services.${binding}: ${openapi} is not JSON.`, { cause: error });
+        }
+        return [`services/${serviceFile(binding)}`, serviceModule(binding, document, openapi)];
+      })
+    ),
+    files: services.map(([, { openapi }]) => resolve(root, openapi)),
+    bindings: services.map(
+      ([binding]) =>
+        `  ${JSON.stringify(binding)}: Service<import('./services/${serviceFile(binding)}').${serviceTypeName(binding)}Service>;`
+    ),
+  };
 }
 
 /**
@@ -498,6 +554,12 @@ export function prepareProject(directory: string, mode: string, project: Project
   const email = discoverEvents('email', files.email, worker);
   const durableObjects = discoverDurableObjects(files['durable-objects'], worker);
   const objects = durableObjectBindings(project, files['durable-objects'], new Imports(output));
+  const services = serviceTypes(root, project);
+  // The bindings whose types come from the project rather than from Cloudflare's inference.
+  const typed = [
+    ...(objects.length ? [{ name: 'DurableObjects', entries: objects }] : []),
+    ...(services.bindings.length ? [{ name: 'Services', entries: services.bindings }] : []),
+  ];
   const web = discoverWebApp(root, output, mode, project, pages.paths);
 
   const generated: Record<string, string> = {
@@ -519,12 +581,12 @@ export function prepareProject(directory: string, mode: string, project: Project
         "type Bindings = import('cf/config').InferEnv<",
         `  { env: ${JSON.stringify(project.env.production)} } | { env: ${JSON.stringify(project.env.development)} }`,
         '>;',
-        ...(objects.length ? ['type DurableObjects = {', ...objects, '};'] : []),
+        ...typed.flatMap(({ name, entries }) => [`type ${name} = {`, ...entries, '};']),
         '',
         'declare global {',
         '  namespace Cloudflare {',
-        objects.length
-          ? '    interface Env extends Omit<Bindings, keyof DurableObjects>, DurableObjects {}'
+        typed.length
+          ? `    interface Env extends Omit<Bindings, ${typed.map(({ name }) => `keyof ${name}`).join(' | ')}>, ${typed.map(({ name }) => name).join(', ')} {}`
           : '    interface Env extends Bindings {}',
         '  }',
         '  interface Env extends Cloudflare.Env {}',
@@ -657,6 +719,7 @@ export function prepareProject(directory: string, mode: string, project: Project
       [],
       ["export { default } from './worker.ts';", "export * from './worker.ts';"]
     ),
+    ...services.modules,
     ...(web?.routes ? { 'app-routes.ts': web.routes } : {}),
     ...(described
       ? {
@@ -670,7 +733,15 @@ export function prepareProject(directory: string, mode: string, project: Project
   };
   // Modules a generated one may leave behind once their sources are gone, and `routes.ts`, which earlier
   // releases generated.
-  const changed = writeGenerated(output, generated, ['app-routes.ts', 'mcp.ts', 'routes.ts']);
+  const previousServices = existsSync(join(output, 'services'))
+    ? readdirSync(join(output, 'services')).map((name) => `services/${name}`)
+    : [];
+  const changed = writeGenerated(output, generated, [
+    'app-routes.ts',
+    'mcp.ts',
+    'routes.ts',
+    ...previousServices,
+  ]);
   return {
     directory: root,
     mode,
@@ -684,6 +755,7 @@ export function prepareProject(directory: string, mode: string, project: Project
         .flat()
         .map(({ file }) => file),
       ...(web?.files ?? []),
+      ...services.files,
     ],
     modules: {
       ...Object.fromEntries(Object.entries(files).map(([kind, entries]) => [kind, entries.length])),

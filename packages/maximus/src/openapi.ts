@@ -131,7 +131,7 @@ export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
     operationExtensions?: (name: string, operation: OperationShape) => Record<`x-${string}`, unknown>;
   }
 ): Record<string, unknown> {
-  const document = openApiDocument(manifest);
+  const document = openApiDocument(manifest, 'http');
   if (options?.operationExtensions) {
     const paths = document.paths as Record<string, Record<string, Record<string, unknown>>>;
     for (const methods of Object.values(paths)) {
@@ -149,6 +149,31 @@ export function createOpenApi<E, C, O extends Record<string, OperationShape>>(
       }
     }
   }
+  return bundledDocument(document, manifest);
+}
+
+/**
+ * The document of the operations an application serves over native RPC, which another service binds to:
+ * each operation that declares `rpc`, internal ones and tools included, as `POST /rpc/<name>` whose body is
+ * the operation's whole input, with its answer and failures named as in the HTTP document. No HTTP route
+ * answers these paths: each names a method of the Worker's `Service` entrypoint, which a Service Binding
+ * calls with the caller's principal. `maximus openapi` writes it to `rpc.openapi.json`, and a caller's
+ * `services` option types its binding from it.
+ */
+export function createRpcOpenApi<E, C, O extends Record<string, OperationShape>>(
+  manifest: AppManifest<E, C, O>
+): Record<string, unknown> {
+  return bundledDocument(openApiDocument(manifest, 'rpc'), manifest);
+}
+
+/**
+ * A document with its `$id`-named schemas bundled into components, every component in name order, after the
+ * names it publishes are checked.
+ */
+function bundledDocument<E, C, O extends Record<string, OperationShape>>(
+  document: OpenApiDocument,
+  manifest: AppManifest<E, C, O>
+): Record<string, unknown> {
   const own = Object.entries(document.components.schemas);
   const sources = [document.paths, ...own.map(([, schema]) => schema)];
   checkComponentNames(
@@ -204,16 +229,74 @@ function checkComponentNames(
   }
 }
 
-/** The document `createOpenApi` builds, before its `$id`-named schemas are bundled. */
-function openApiDocument<E, C, O extends Record<string, OperationShape>>(
+/** The document an application publishes: its HTTP API's, which its origin serves, or its native RPC methods'. */
+type DocumentKind = 'http' | 'rpc';
+
+/** An operation as a document lists it: its name, its declaration, the route it is documented at and its group. */
+interface DocumentedOperation {
+  name: string;
+  op: OperationShape;
+  http: NonNullable<OperationShape['http']>;
+  group: string;
+}
+
+/**
+ * The operations a document lists: for the HTTP document, each public operation that declares a route, at that
+ * route; for the RPC document, each operation that declares `rpc`, at `POST /rpc/<name>`. Each keeps the group
+ * its route gives it.
+ */
+function documentedOperations<E, C, O extends Record<string, OperationShape>>(
+  manifest: AppManifest<E, C, O>,
+  kind: DocumentKind
+): DocumentedOperation[] {
+  return Object.entries(manifest.operations).flatMap(([name, op]): DocumentedOperation[] => {
+    const group = op.group ?? (op.http ? routeGroup(op.http.path) : undefined) ?? manifest.title;
+    if (kind === 'rpc') {
+      return op.rpc ? [{ name, op, http: { method: 'POST', path: `/rpc/${name}` }, group }] : [];
+    }
+    return op.http && isPublicOperation(op) ? [{ name, op, http: op.http, group }] : [];
+  });
+}
+
+/**
+ * Refuses a description of a group no document lists: each name `groups` describes must be the group of a
+ * public route or of an operation served over native RPC.
+ */
+function checkDescribedGroups<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>
-): OpenApiDocument {
-  // Each public operation that declares a route, with that route.
-  const entries = Object.entries(manifest.operations).flatMap(([name, op]) =>
-    op.http && isPublicOperation(op) ? [[name, op, op.http] as const] : []
+) {
+  const described = Object.keys(manifest.groups ?? {});
+  if (!described.length) {
+    return;
+  }
+  const listed = new Set(
+    [...documentedOperations(manifest, 'http'), ...documentedOperations(manifest, 'rpc')].map(
+      ({ group }) => group
+    )
   );
+  for (const group of described) {
+    if (!listed.has(group)) {
+      throw new TypeError(
+        `groups describes "${group}", which no public route or RPC method has as its group; the groups are ${[...listed].join(', ') || 'none'}.`
+      );
+    }
+  }
+}
+
+/** What an RPC document says about itself, in place of servers its paths do not have. */
+function rpcDescription(title: string): string {
+  return `The operations ${title} serves over native RPC, to the Workers its rpc.callers name, through a Service Binding to its Service entrypoint. No HTTP route answers these paths: each names a method, called with the caller's principal and the operation's whole input.`;
+}
+
+/** The document `createOpenApi` or `createRpcOpenApi` builds, before its `$id`-named schemas are bundled. */
+function openApiDocument<E, C, O extends Record<string, OperationShape>>(
+  manifest: AppManifest<E, C, O>,
+  kind: DocumentKind
+): OpenApiDocument {
+  const entries = documentedOperations(manifest, kind);
+  const rpc = kind === 'rpc';
   const scopes = Object.fromEntries(
-    entries.flatMap(([, op]) =>
+    entries.flatMap(({ op }) =>
       [...operationScopes(op), ...(op.conditionalScopes ?? [])].map((scope) => [
         scope,
         scopeDescription(scope),
@@ -221,17 +304,20 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
     )
   );
   const components = new ComponentSchemas();
-  components.add('ResponseMetadata', RESPONSE_METADATA);
-  const headers = new Set<keyof typeof HEADERS>(['RequestId']);
+  // What every answer shares, written only for a document that has answers.
+  if (entries.length) {
+    components.add('ResponseMetadata', RESPONSE_METADATA);
+  }
+  const headers = new Set<keyof typeof HEADERS>(entries.length ? ['RequestId'] : []);
   const groups: string[] = [];
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const [name, op, http] of entries) {
-    const group = op.group ?? routeGroup(http.path) ?? manifest.title;
+  for (const { name, op, http, group } of entries) {
     if (!groups.includes(group)) {
       groups.push(group);
     }
-    const request = requestContract(name, op, http, components);
-    const sendsBody = 'requestBody' in request;
+    const request = rpc ? rpcRequest(name, op, components) : requestContract(name, op, http, components);
+    // A native RPC call reads no body: its input arrives whole, so a body's failures never answer it.
+    const sendsBody = !rpc && 'requestBody' in request;
     const failures = failureResponses(name, op, sendsBody, manifest.errors.definitions, components);
     if (Object.values(failures).some((response) => 'Retry-After' in response.headers)) {
       headers.add('RetryAfter');
@@ -242,25 +328,7 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       // A route that says no more than its title documents none.
       ...(op.description ? { description: op.description } : {}),
       tags: [group],
-      // Alternatives: OpenAPI admits a request that satisfies any one security requirement.
-      security: operationSecurity(op, manifest.tokens),
-      'x-required-scopes': [...operationScopes(op)],
-      ...(operationScopes(op).length > 1 ? { 'x-scope-match': op.scopeMatch ?? 'any' } : {}),
-      ...(op.conditionalScopes ? { 'x-conditional-scopes': op.conditionalScopes } : {}),
-      'x-effect': op.effect,
-      ...(op.mcp
-        ? {
-            'x-mcp-tool': op.mcp.name,
-            'x-mcp-idempotent': op.mcp.idempotent,
-            'x-mcp-open-world': mcpOpenWorld(op.mcp),
-          }
-        : {}),
-      'x-native-rpc': Boolean(op.rpc),
-      // The limits in force: the operation's, else the application's, else the default.
-      'x-max-body-bytes': operationBodyLimit(manifest, op),
-      'x-max-output-bytes': operationOutputLimit(manifest, op),
-      ...(http.body ? { 'x-body': http.body, 'x-input-headers': http.headers ?? {} } : {}),
-      ...(http.response ? { 'x-response': http.response } : {}),
+      ...(rpc ? rpcExtensions(manifest, op) : httpExtensions(manifest, op, http)),
       ...request,
       responses: {
         [http.successStatus ?? 200]: successResponse(name, op, http, components),
@@ -268,13 +336,7 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       },
     };
   }
-  for (const described of Object.keys(manifest.groups ?? {})) {
-    if (!groups.includes(described)) {
-      throw new TypeError(
-        `groups describes "${described}", which no public route has as its group; the groups are ${groups.join(', ') || 'none'}.`
-      );
-    }
-  }
+  checkDescribedGroups(manifest);
   // A JSON round trip drops TypeBox's symbol metadata from the wire contract; JSON and YAML serve this
   // same document.
   // oxlint-disable-next-line unicorn/prefer-structured-clone
@@ -284,9 +346,10 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       info: {
         title: manifest.title,
         version: manifest.version,
-        ...(manifest.description ? { description: manifest.description } : {}),
+        ...(rpc ? { description: rpcDescription(manifest.title) } : {}),
+        ...(!rpc && manifest.description ? { description: manifest.description } : {}),
       },
-      servers: [{ url: manifest.origin }],
+      ...(rpc ? {} : { servers: [{ url: manifest.origin }] }),
       tags: groups.map((group) => {
         const description = manifest.groups?.[group];
         return description ? { name: group, description } : { name: group };
@@ -294,11 +357,61 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       paths,
       components: {
         schemas: components.schemas,
-        headers: Object.fromEntries([...headers].map((name) => [name, HEADERS[name]])),
-        securitySchemes: securitySchemes(manifest.tokens, scopes),
+        ...(headers.size
+          ? { headers: Object.fromEntries([...headers].map((name) => [name, HEADERS[name]])) }
+          : {}),
+        ...(rpc || !entries.length ? {} : { securitySchemes: securitySchemes(manifest.tokens, scopes) }),
       },
     })
   ) as OpenApiDocument;
+}
+
+/**
+ * What an HTTP operation adds beside OpenAPI's own fields: the requirements that admit it, its scopes,
+ * effect, MCP tool, native RPC and limits, and how its body and answer travel.
+ */
+function httpExtensions<E, C, O extends Record<string, OperationShape>>(
+  manifest: AppManifest<E, C, O>,
+  op: OperationShape,
+  http: NonNullable<OperationShape['http']>
+): object {
+  return {
+    // Alternatives: OpenAPI admits a request that satisfies any one security requirement.
+    security: operationSecurity(op, manifest.tokens),
+    'x-required-scopes': [...operationScopes(op)],
+    ...(operationScopes(op).length > 1 ? { 'x-scope-match': op.scopeMatch ?? 'any' } : {}),
+    ...(op.conditionalScopes ? { 'x-conditional-scopes': op.conditionalScopes } : {}),
+    'x-effect': op.effect,
+    ...(op.mcp
+      ? {
+          'x-mcp-tool': op.mcp.name,
+          'x-mcp-idempotent': op.mcp.idempotent,
+          'x-mcp-open-world': mcpOpenWorld(op.mcp),
+        }
+      : {}),
+    'x-native-rpc': Boolean(op.rpc),
+    // The limits in force: the operation's, else the application's, else the default.
+    'x-max-body-bytes': operationBodyLimit(manifest, op),
+    'x-max-output-bytes': operationOutputLimit(manifest, op),
+    ...(http.body ? { 'x-body': http.body, 'x-input-headers': http.headers ?? {} } : {}),
+    ...(http.response ? { 'x-response': http.response } : {}),
+  };
+}
+
+/**
+ * What a native RPC operation adds beside OpenAPI's own fields: its effect, the callers that may call it,
+ * and the output limit in force. A Service Binding names its caller, so it has no security requirement.
+ */
+function rpcExtensions<E, C, O extends Record<string, OperationShape>>(
+  manifest: AppManifest<E, C, O>,
+  op: OperationShape
+): object {
+  return {
+    'x-effect': op.effect,
+    'x-native-rpc': true,
+    'x-rpc-callers': op.rpc === true ? [...manifest.rpc.callers] : [...(op.rpc?.callers ?? [])],
+    'x-max-output-bytes': operationOutputLimit(manifest, op),
+  };
 }
 
 /** A scope as people read it: `notes:notes:read` reads notes, `notes:task-lists:write` writes task lists. */
@@ -423,16 +536,32 @@ function requestContract(
 
 /**
  * The schema of a JSON request body: `Empty` for one without fields, which still travels as `{}`; the
- * input's own when it is named and the path carries none of it; else the component `<Operation>Body`.
+ * input's own when it is named and the path carries none of it; else the component `<Operation>Body`, or
+ * `<Operation>Input` for a native RPC method's whole input.
  */
-function bodySchema(name: string, body: TSchema, components: ComponentSchemas): TSchema | SchemaReference {
+function bodySchema(
+  name: string,
+  body: TSchema,
+  components: ComponentSchemas,
+  suffix: 'Body' | 'Input' = 'Body'
+): TSchema | SchemaReference {
   if (isEmptyObject(body)) {
     return components.add('Empty', EMPTY_OBJECT);
   }
   if (typeof body.$id === 'string') {
     return body;
   }
-  return components.add(`${pascalCase(name)}Body`, body);
+  return components.add(`${pascalCase(name)}${suffix}`, body);
+}
+
+/** A native RPC method's request: its whole input, as callers send it, which the method takes as one object. */
+function rpcRequest(name: string, op: OperationShape, components: ComponentSchemas): object {
+  return {
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: bodySchema(name, wireInput(op.input), components, 'Input') } },
+    },
+  };
 }
 
 /** The success response: the JSON envelope, or a validated attachment's bytes and headers. */

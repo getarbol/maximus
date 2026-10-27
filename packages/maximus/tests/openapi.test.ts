@@ -672,7 +672,7 @@ it('describes the service and each group it lists, and refuses a description of 
   });
   expect(described.tags).toStrictEqual([{ name: 'Records', description: 'The records.' }]);
   expect(() => documentOf(single(read, { groups: { Recrods: 'The records.' } }))).toThrow(
-    'groups describes "Recrods", which no public route has as its group; the groups are Records.'
+    'groups describes "Recrods", which no public route or RPC method has as its group; the groups are Records.'
   );
 });
 

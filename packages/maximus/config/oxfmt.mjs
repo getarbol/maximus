@@ -21,7 +21,7 @@ export default defineConfig({
     '**/.maximus/**',
     '**/.wrangler/**',
     '**/dist/**',
-    '**/openapi.json',
+    '**/openapi*.json',
     '**/.agents/**',
     '**/.claude/**',
     '**/.codex/**',

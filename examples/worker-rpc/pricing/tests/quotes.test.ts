@@ -1,15 +1,16 @@
 /**
  * Pricing in Node, through the API the Worker serves: a quote, an item the catalog does not list, and a
- * refused input; the public OpenAPI document, which leaves the internal route out; and the RPC methods the
- * routes serve, which are the ones the contract its callers import declares.
+ * refused input; the public OpenAPI document, which leaves the internal route out; and the RPC document its
+ * callers bind to, which lists the route and is current with it.
  */
-import type { RpcMethods } from '@arbol-ai/maximus/workers';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-import { expect, expectTypeOf, it } from 'vite-plus/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import type { app } from '#maximus/app';
+import { createRpcOpenApi } from '@arbol-ai/maximus';
+import { expect, it } from 'vite-plus/test';
+
+import { app } from '#maximus/app';
 import { handler } from '#maximus/http';
-import type { PricingService } from '#src/contract.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
 const token = 'test-development-token-for-local-tests';
@@ -60,8 +61,12 @@ it('keeps the internal quote route out of the public OpenAPI document', async ()
   expect(Object.keys(document.paths)).not.toContain('/v1/quotes');
 });
 
-it('serves over RPC exactly the methods its contract declares', () => {
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<
-    Omit<PricingService, keyof WorkerEntrypoint>
-  >();
+it('publishes the RPC document its callers bind to, current with its routes', () => {
+  const published: unknown = JSON.parse(
+    readFileSync(join(import.meta.dirname, '../openapi.rpc.json'), 'utf-8')
+  );
+  expect(published).toStrictEqual(createRpcOpenApi(app));
+  expect(published).toMatchObject({
+    paths: { '/rpc/quoteItems': { post: { 'x-rpc-callers': ['example-orders'] } } },
+  });
 });

@@ -1,0 +1,973 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pricing",
+    "version": "0.0.0",
+    "description": "The operations Pricing serves over native RPC, to the Workers its rpc.callers name, through a Service Binding to its Service entrypoint. No HTTP route answers these paths: each names a method, called with the caller's principal and the operation's whole input."
+  },
+  "tags": [
+    {
+      "name": "Quotes",
+      "description": "Quotes of catalog items, in US cents."
+    }
+  ],
+  "paths": {
+    "/rpc/quoteItems": {
+      "post": {
+        "operationId": "quoteItems",
+        "summary": "Create a quote",
+        "description": "Price a list of catalog items for the calling organization.",
+        "tags": [
+          "Quotes"
+        ],
+        "x-effect": "read",
+        "x-native-rpc": true,
+        "x-rpc-callers": [
+          "example-orders"
+        ],
+        "x-max-output-bytes": 262144,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteItemsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`UNKNOWN_SKU`: An item is not in the catalog.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNKNOWN_SKU"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownSkuError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Empty": {
+        "type": "object",
+        "description": "No fields.",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "ForbiddenError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/ForbiddenFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ForbiddenFailure": {
+        "type": "object",
+        "description": "The token does not authorize this operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "FORBIDDEN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InternalFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InternalFailure": {
+        "type": "object",
+        "description": "The service could not complete the operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INTERNAL_ERROR"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InvalidInputError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InvalidInputFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InvalidInputFailure": {
+        "type": "object",
+        "description": "The request does not match the published schema.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_INPUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/InvalidInputFailureData"
+          }
+        }
+      },
+      "InvalidInputFailureData": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "issues": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            }
+          }
+        }
+      },
+      "OutcomeUnknownError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/OutcomeUnknownFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "OutcomeUnknownFailure": {
+        "type": "object",
+        "description": "The operation may have been applied; check its result before repeating it.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "Quote": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "currency",
+          "lines",
+          "totalCents"
+        ],
+        "properties": {
+          "currency": {
+            "const": "USD",
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "sku",
+                "quantity",
+                "unitCents",
+                "totalCents"
+              ],
+              "properties": {
+                "sku": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "unitCents": {
+                  "type": "integer"
+                },
+                "totalCents": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "totalCents": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "QuoteItemsInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "sku",
+                "quantity"
+              ],
+              "properties": {
+                "sku": {
+                  "pattern": "^[A-Z]{3}-[0-9]{3}$",
+                  "type": "string"
+                },
+                "quantity": {
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "QuoteResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Quote"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RateLimitedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/RateLimitedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RateLimitedFailure": {
+        "type": "object",
+        "description": "The request rate limit was exceeded. Try again later.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "RATE_LIMITED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "ResponseMetadata": {
+        "type": "object",
+        "description": "What every answer carries besides its data or error.",
+        "additionalProperties": false,
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "Request correlation identifier, also sent as X-Request-Id."
+          }
+        }
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UnauthorizedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UnauthorizedFailure": {
+        "type": "object",
+        "description": "A valid access token is required.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNAUTHORIZED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UnknownSkuError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UnknownSkuFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UnknownSkuFailure": {
+        "type": "object",
+        "description": "An item is not in the catalog.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN_SKU"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/UnknownSkuFailureData"
+          }
+        }
+      },
+      "UnknownSkuFailureData": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index"
+        ],
+        "properties": {
+          "index": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      },
+      "UpstreamTimeoutError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamTimeoutFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamTimeoutFailure": {
+        "type": "object",
+        "description": "The upstream service did not respond before its deadline.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UpstreamUnavailableError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamUnavailableFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamUnavailableFailure": {
+        "type": "object",
+        "description": "The upstream service could not complete the request.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "ValidationIssue": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "maxLength": 256,
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        }
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Request correlation identifier.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds before another attempt.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

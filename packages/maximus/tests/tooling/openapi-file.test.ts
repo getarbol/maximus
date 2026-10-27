@@ -69,3 +69,35 @@ test('writes the document the Worker serves, keeps it when it is current, and ch
     changed: true,
   });
 }, 60_000);
+
+test('writes the RPC document beside the HTTP one when a route is served over native RPC, and checks both', async () => {
+  const configured = {
+    ...options(),
+    application: { ...options().application, rpc: { callers: ['orders'] } },
+  };
+  const root = project(
+    {
+      'vite.config.ts': `import { maximusProject } from ${JSON.stringify(PLUGIN)};\nexport default { plugins: [maximusProject(() => (${JSON.stringify(configured)}))] };\n`,
+      'routes/v1/notes/[noteId].get.ts': NOTE_ROUTE.replace(
+        '  output: { noteId: t.String() },',
+        '  output: { noteId: t.String() },\n  rpc: true,'
+      ),
+    },
+    CACHE
+  );
+  mkdirSync(join(root, 'node_modules/@arbol-ai'), { recursive: true });
+  symlinkSync(PACKAGE, join(root, 'node_modules/@arbol-ai/maximus'));
+  expect(await writeOpenApi(root)).toMatchObject({
+    operations: 1,
+    changed: true,
+    rpc: { file: join(root, 'openapi.rpc.json'), operations: 1, changed: true },
+  });
+  const rpc = JSON.parse(readFileSync(join(root, 'openapi.rpc.json'), 'utf-8')) as { paths: object };
+  expect(rpc.paths).toMatchObject({ '/rpc/getNote': { post: { 'x-rpc-callers': ['orders'] } } });
+  // The RPC document's name follows the HTTP document's.
+  expect(await writeOpenApi(root, { out: 'contracts/notes.json', check: true })).toMatchObject({
+    rpc: { file: join(root, 'contracts/notes.rpc.json'), changed: true },
+  });
+  writeFileSync(join(root, 'openapi.rpc.json'), '{}\n');
+  expect(await writeOpenApi(root, { check: true })).toMatchObject({ changed: false, rpc: { changed: true } });
+}, 60_000);

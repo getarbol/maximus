@@ -30,6 +30,14 @@ export type TokenOptions = Omit<
   development?: TokenDevelopment | false;
 };
 
+/** Another Maximus service this one calls over native RPC: its Worker, and the OpenAPI document that types it. */
+export interface ServiceOptions {
+  /** The service's Worker name, as its own configuration names it. */
+  worker: string;
+  /** The OpenAPI document the service publishes with `maximus openapi`, a path from this project's root. */
+  openapi: string;
+}
+
 /** What a web app (`index.html` at the project's root) answers with, besides its build. */
 export interface WebAppOptions {
   /**
@@ -80,6 +88,14 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   tokens?: TokenOptions;
   /** The Workers allowed to call native RPC methods, by the `caller` their Service Binding names; none by default. */
   rpc?: { callers: readonly string[] };
+  /**
+   * Other Maximus services this one calls over native RPC, by the binding `env` gives each, such as
+   * `{ PRICING: { worker: 'pricing', openapi: '../pricing/openapi.json' } }`: the Worker, and the OpenAPI
+   * document it publishes with `maximus openapi`, from this project's root, which types the binding's methods
+   * in `.maximus/services/`. Each binding's props name this service, by its `name`, as the caller the other
+   * admits in its `rpc.callers`.
+   */
+  services?: Readonly<Record<string, ServiceOptions>>;
   /** Where the API and the health check answer: `/api` and `/health` by default. */
   http?: { basePath?: string; healthPath?: string };
   /** The request body limit of every operation that sets none, in bytes: 32 KiB by default. */
@@ -135,6 +151,7 @@ function split(options: MaximusOptions) {
     maxOutputBytes,
     rateLimit,
     env,
+    services,
     webApp,
     ...worker
   } = options;
@@ -155,6 +172,7 @@ function split(options: MaximusOptions) {
       rateLimit,
     },
     env,
+    services,
     webApp,
     worker,
   };
@@ -213,12 +231,47 @@ function developmentToken(options: MaximusOptions): TokenDevelopment | undefined
   return development === false ? undefined : (development ?? { binding: 'DEVELOPMENT_TOKEN' });
 }
 
+/** A binding's name: an uppercase letter, then uppercase letters, digits and underscores. */
+const BINDING_NAME = /^[A-Z][A-Z0-9_]{0,62}$/;
+
 /**
- * The Worker's bindings in a phase: the declared ones, a web app's assets and, under `vp dev` alone, the
- * development token.
+ * The binding of each service the project calls over native RPC: the `Service` entrypoint of its Worker, with
+ * this service's name as the caller. A binding that is not an uppercase name, that `env` declares too, or
+ * whose worker or document is not named throws a TypeError.
+ */
+function serviceBindings(root: string, options: MaximusOptions): Record<string, unknown> {
+  const services = Object.entries(options.services ?? {});
+  if (!services.length) {
+    return {};
+  }
+  const caller = identity(root, options).name;
+  return Object.fromEntries(
+    services.map(([binding, service]) => {
+      if (!BINDING_NAME.test(binding) || Object.hasOwn(options.env ?? {}, binding)) {
+        throw new TypeError(
+          `services.${binding}: name each service's binding in uppercase, such as PRICING, once: env declares the others.`
+        );
+      }
+      const { worker, openapi } = service ?? {};
+      if (typeof worker !== 'string' || !worker || typeof openapi !== 'string' || !openapi) {
+        throw new TypeError(
+          `services.${binding} names the service's Worker and the OpenAPI document it publishes: { worker, openapi }.`
+        );
+      }
+      return [binding, bindings.worker({ worker, exportName: 'Service', props: { caller } })];
+    })
+  );
+}
+
+/**
+ * The Worker's bindings in a phase: the declared ones and each service's, a web app's assets and, under
+ * `vp dev` alone, the development token. A declared binding cannot take the name of either of those.
  */
 function workerEnv(root: string, options: MaximusOptions, phase: Phase): Record<string, unknown> {
-  const declared = Object.fromEntries(Object.entries(options.env ?? {}).filter(([, binding]) => binding));
+  const declared = {
+    ...Object.fromEntries(Object.entries(options.env ?? {}).filter(([, binding]) => binding)),
+    ...serviceBindings(root, options),
+  };
   const development = developmentToken(options);
   if (development && Object.hasOwn(declared, development.binding)) {
     throw new TypeError(
@@ -334,6 +387,7 @@ export function projectOptions(
       },
       ...(servesWebApp(root) ? { assets: { binding: ASSETS, headers: webAppHeaders(options, phase) } } : {}),
     },
+    ...(options.services ? { services: options.services } : {}),
     env: {
       production: workerEnv(root, options, 'production'),
       development: workerEnv(root, options, 'development'),

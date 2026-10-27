@@ -15,6 +15,11 @@ export default defineConfig({
       name: NAME,
       namespace: 'appointments',
       title: 'Appointments',
+      description:
+        'Books appointments in the slots of a day, whose schedule one Durable Object per organization and day keeps.',
+      groups: {
+        Days: "Each day's slots and the bookings that hold them.",
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://${NAME}.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       tokens: { issuer: 'https://auth.example.com/' },

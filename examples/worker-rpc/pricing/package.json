@@ -6,14 +6,12 @@
     "#maximus/*": "./.maximus/*.ts",
     "#src/*": "./src/*"
   },
-  "exports": {
-    "./contract": "./src/contract.ts"
-  },
   "scripts": {
     "dev": "vp dev --port 5174",
     "build": "vp build",
     "test": "vp test run",
     "typecheck": "maximus prepare && tsc --noEmit",
+    "openapi": "maximus openapi --check",
     "verify": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {

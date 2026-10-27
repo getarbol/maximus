@@ -1,0 +1,1886 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Documents",
+    "version": "0.0.0",
+    "description": "Keeps the documents of each organization in R2: uploaded, described, downloaded and deleted."
+  },
+  "servers": [
+    {
+      "url": "https://example-r2-documents.example.workers.dev/api"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Documents",
+      "description": "The documents of the caller's organization, uploaded and downloaded as bytes."
+    }
+  ],
+  "paths": {
+    "/v1/documents/{documentId}": {
+      "delete": {
+        "operationId": "deleteDocument",
+        "summary": "Delete a document",
+        "description": "Delete one of the organization's documents.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "documents:documents:write"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "documents:documents:write"
+        ],
+        "x-effect": "delete",
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "description": "The document id.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`DOCUMENT_NOT_FOUND`: The document does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "DOCUMENT_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentNotFoundError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getDocument",
+        "summary": "Get a document",
+        "description": "Describe one of the organization's documents: its name, type, size, SHA-256 and upload time.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "documents:documents:read"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "documents:documents:read"
+        ],
+        "x-effect": "read",
+        "x-mcp-tool": "get_document",
+        "x-mcp-idempotent": true,
+        "x-mcp-open-world": true,
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 262144,
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "description": "The document id.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`DOCUMENT_NOT_FOUND`: The document does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "DOCUMENT_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentNotFoundError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents/{documentId}/content": {
+      "get": {
+        "operationId": "getDocumentContent",
+        "summary": "Get document content",
+        "description": "Download a document of the organization.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "documents:documents:read"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "documents:documents:read"
+        ],
+        "x-effect": "read",
+        "x-native-rpc": false,
+        "x-max-body-bytes": 32768,
+        "x-max-output-bytes": 10485760,
+        "x-response": "attachment",
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "description": "The document id.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Validated attachment media type."
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "description": "Exact attachment byte length."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Attachment filename in ASCII and RFC 5987 UTF-8 forms."
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`DOCUMENT_NOT_FOUND`: The document does not exist.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "DOCUMENT_NOT_FOUND"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentNotFoundError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents": {
+      "post": {
+        "operationId": "createDocument",
+        "summary": "Create a document",
+        "description": "Upload a document: a PDF, PNG, JPEG or UTF-8 text file of at most 10 MiB.",
+        "tags": [
+          "Documents"
+        ],
+        "security": [
+          {
+            "oauth2": [
+              "documents:documents:write"
+            ]
+          }
+        ],
+        "x-required-scopes": [
+          "documents:documents:write"
+        ],
+        "x-effect": "write",
+        "x-native-rpc": false,
+        "x-max-body-bytes": 10485760,
+        "x-max-output-bytes": 262144,
+        "x-body": "bytes",
+        "x-input-headers": {
+          "contentType": "content-type"
+        },
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "description": "The filename.",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$",
+              "type": "string"
+            },
+            "x-input-field": "filename"
+          },
+          {
+            "name": "content-type",
+            "in": "header",
+            "required": true,
+            "description": "The content-type header.",
+            "schema": {
+              "maxLength": 255,
+              "description": "The content-type header.",
+              "type": "string"
+            },
+            "x-input-field": "contentType"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`INVALID_INPUT`: The request does not match the published schema.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INVALID_INPUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidInputError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHORIZED`: A valid access token is required.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNAUTHORIZED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`: The token does not authorize this operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "FORBIDDEN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`REQUEST_TOO_LARGE`: The request exceeds the allowed size.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "REQUEST_TOO_LARGE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTooLargeError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "- `UNSUPPORTED_MEDIA_TYPE`: The request content type is not supported.\n- `DOCUMENT_NOT_ACCEPTED`: A document must be a PDF, PNG, JPEG or UTF-8 text file whose bytes match its content type.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UNSUPPORTED_MEDIA_TYPE",
+              "DOCUMENT_NOT_ACCEPTED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateDocumentUnsupportedMediaTypeError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`RATE_LIMITED`: The request rate limit was exceeded. Try again later.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "x-failure-codes": [
+              "RATE_LIMITED"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`: The service could not complete the operation.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "INTERNAL_ERROR"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`OUTCOME_UNKNOWN`: The operation may have been applied; check its result before repeating it.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeUnknownError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`UPSTREAM_UNAVAILABLE`: The upstream service could not complete the request.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamUnavailableError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`UPSTREAM_TIMEOUT`: The upstream service did not respond before its deadline.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "x-failure-codes": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamTimeoutError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateDocumentUnsupportedMediaTypeError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/CreateDocumentUnsupportedMediaTypeFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "CreateDocumentUnsupportedMediaTypeFailure": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UnsupportedMediaTypeFailure"
+          },
+          {
+            "$ref": "#/components/schemas/DocumentNotAcceptedFailure"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "code",
+          "mapping": {
+            "UNSUPPORTED_MEDIA_TYPE": "#/components/schemas/UnsupportedMediaTypeFailure",
+            "DOCUMENT_NOT_ACCEPTED": "#/components/schemas/DocumentNotAcceptedFailure"
+          }
+        }
+      },
+      "Document": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "documentId",
+          "filename",
+          "contentType",
+          "byteLength",
+          "sha256",
+          "uploadedAt"
+        ],
+        "properties": {
+          "documentId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "filename": {
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$",
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteLength": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "uploadedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "DocumentNotAcceptedFailure": {
+        "type": "object",
+        "description": "A document must be a PDF, PNG, JPEG or UTF-8 text file whose bytes match its content type.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "DOCUMENT_NOT_ACCEPTED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "DocumentNotFoundError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/DocumentNotFoundFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "DocumentNotFoundFailure": {
+        "type": "object",
+        "description": "The document does not exist.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "DOCUMENT_NOT_FOUND"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "DocumentResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "Empty": {
+        "type": "object",
+        "description": "No fields.",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "EmptyResponse": {
+        "type": "object",
+        "description": "A successful answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          },
+          "error": {
+            "const": null
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ForbiddenError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/ForbiddenFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "ForbiddenFailure": {
+        "type": "object",
+        "description": "The token does not authorize this operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "FORBIDDEN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InternalError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InternalFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InternalFailure": {
+        "type": "object",
+        "description": "The service could not complete the operation.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INTERNAL_ERROR"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "InvalidInputError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/InvalidInputFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "InvalidInputFailure": {
+        "type": "object",
+        "description": "The request does not match the published schema.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_INPUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/InvalidInputFailureData"
+          }
+        }
+      },
+      "InvalidInputFailureData": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "issues": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            }
+          }
+        }
+      },
+      "OutcomeUnknownError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/OutcomeUnknownFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "OutcomeUnknownFailure": {
+        "type": "object",
+        "description": "The operation may have been applied; check its result before repeating it.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "OUTCOME_UNKNOWN"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "RateLimitedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/RateLimitedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RateLimitedFailure": {
+        "type": "object",
+        "description": "The request rate limit was exceeded. Try again later.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "RATE_LIMITED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "RequestTooLargeError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/RequestTooLargeFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "RequestTooLargeFailure": {
+        "type": "object",
+        "description": "The request exceeds the allowed size.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "REQUEST_TOO_LARGE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "ResponseMetadata": {
+        "type": "object",
+        "description": "What every answer carries besides its data or error.",
+        "additionalProperties": false,
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "Request correlation identifier, also sent as X-Request-Id."
+          }
+        }
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UnauthorizedFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UnauthorizedFailure": {
+        "type": "object",
+        "description": "A valid access token is required.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNAUTHORIZED"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UnsupportedMediaTypeFailure": {
+        "type": "object",
+        "description": "The request content type is not supported.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNSUPPORTED_MEDIA_TYPE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UpstreamTimeoutError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamTimeoutFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamTimeoutFailure": {
+        "type": "object",
+        "description": "The upstream service did not respond before its deadline.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_TIMEOUT"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "UpstreamUnavailableError": {
+        "type": "object",
+        "description": "A failed answer.",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "data",
+          "error",
+          "metadata"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "data": {
+            "const": null
+          },
+          "error": {
+            "$ref": "#/components/schemas/UpstreamUnavailableFailure"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          }
+        }
+      },
+      "UpstreamUnavailableFailure": {
+        "type": "object",
+        "description": "The upstream service could not complete the request.",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UPSTREAM_UNAVAILABLE"
+            ],
+            "description": "The failure code, stable across releases."
+          },
+          "message": {
+            "type": "string",
+            "description": "What went wrong, for people; it never contains input values."
+          },
+          "retryable": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Whether repeating the same request may succeed."
+          },
+          "data": {
+            "$ref": "#/components/schemas/Empty"
+          }
+        }
+      },
+      "Uuid": {
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "ValidationIssue": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "maxLength": 256,
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        }
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "description": "Request correlation identifier.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RetryAfter": {
+        "description": "Seconds before another attempt.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "tokenUrl": "https://auth.example.com/oauth/token",
+            "scopes": {
+              "documents:documents:write": "Create, change and delete documents.",
+              "documents:documents:read": "Read documents."
+            }
+          },
+          "clientCredentials": {
+            "tokenUrl": "https://auth.example.com/oauth/token",
+            "scopes": {
+              "documents:documents:write": "Create, change and delete documents.",
+              "documents:documents:read": "Read documents."
+            }
+          }
+        }
+      }
+    }
+  }
+}

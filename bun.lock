@@ -113,7 +113,6 @@
       "name": "@maximus-examples/orders",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
-        "@maximus-examples/pricing": "workspace:*",
       },
       "devDependencies": {
         "@cloudflare/vite-plugin": "2.0.0-beta.v.5",

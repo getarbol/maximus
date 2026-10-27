@@ -19,7 +19,7 @@ const USAGE = [
   'gen       writes a route file (routes/v1/tasks/[taskId].get.ts) or an MCP tool file (mcp/tools/<name>.ts).',
   "skills    links the installed Maximus skill into the project's .agents, .claude and .codex skill folders.",
   'prepare   writes .maximus/ from vite.config.ts and the project files, as vp dev and vp build do.',
-  'openapi   writes the OpenAPI document the Worker serves to openapi.json; --check fails if it changed.',
+  "openapi   writes the Worker's OpenAPI documents, openapi.json and openapi.rpc.json; --check fails if they changed.",
   '',
   'Each command says what it did; with --json it prints that as JSON instead, for scripts.',
 ].join('\n');
@@ -139,17 +139,25 @@ async function run(): Promise<void> {
         ...(values.out === undefined ? {} : { out: values.out }),
         check: values.check,
       });
-      const counted = `${written.operations} operation${written.operations === 1 ? '' : 's'}`;
-      if (values.check && written.changed) {
-        report(written, `${shown(written.file)} differs from what the routes declare; run maximus openapi.`);
+      const files = [written, ...(written.rpc ? [written.rpc] : [])];
+      const stale = files.filter(({ changed }) => changed);
+      if (values.check && stale.length) {
+        const named = stale.map(({ file }) => shown(file)).join(' and ');
+        report(
+          written,
+          `${named} ${stale.length === 1 ? 'differs' : 'differ'} from what the routes declare; run maximus openapi.`
+        );
         process.exitCode = 1;
         return;
       }
-      let state = written.changed ? 'was written' : 'was current';
-      if (values.check) {
-        state = 'matches the routes';
-      }
-      report(written, `${shown(written.file)} ${state}: ${counted}.`);
+      const sentences = files.map(({ file, operations, changed }) => {
+        let state = changed ? 'was written' : 'was current';
+        if (values.check) {
+          state = 'matches the routes';
+        }
+        return `${shown(file)} ${state}: ${operations} operation${operations === 1 ? '' : 's'}.`;
+      });
+      report(written, sentences.join(' '));
       return;
     }
     default: {

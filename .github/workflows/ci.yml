@@ -1,7 +1,8 @@
 name: CI
 # Every pull request and every push to main, each run through Bun: the build, types, lint and format; the
 # tests with coverage; the Postgres entry against a real database; the packed packages as a project installs
-# them; and every example's Worker running under vp dev.
+# them; the examples' OpenAPI documents as client generators read them; and every example's Worker running
+# under vp dev.
 on:
   push:
     branches: [main]
@@ -67,6 +68,19 @@ jobs:
       - run: bun run build
       # Packs each package, installs it into a new project and creates starters that pass their own verify.
       - run: bun run verify:package
+
+  clients:
+    name: OpenAPI clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # Each committed document passes Redocly's strictest rules, and the TypeScript types openapi-typescript
+      # writes from it compile; the tools are pinned, installed without their install scripts.
+      - run: bun run check:clients
 
   e2e:
     name: Examples running

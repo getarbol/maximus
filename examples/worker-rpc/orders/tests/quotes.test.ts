@@ -3,10 +3,10 @@
  * for the caller, an item pricing does not list, the failures pricing may or may not recover from, a pricing
  * Worker that cannot be reached, and items refused before pricing is called.
  */
-import type { PricingService, Quote } from '@maximus-examples/pricing/contract';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
+import type { PricingService, Quote, QuoteItemsFailure } from '#maximus/services/pricing';
 
 /** The development token `vp test` accepts from localhost, as a developer holding every scope. */
 const token = 'test-development-token-for-local-tests';
@@ -75,9 +75,10 @@ it('names the item pricing does not list in its own failure', async () => {
 });
 
 it('keeps what pricing may recover from retryable, and answers the rest as its own fault', async () => {
+  // A failure as pricing's deployed Worker might answer it, which may not be the one its document typed.
   const pricingFailure = (code: string, retryable: boolean, data = {}) => ({
     ok: false as const,
-    error: { code, message: 'Pricing failed.', retryable, data },
+    error: { code, message: 'Pricing failed.', retryable, data } as QuoteItemsFailure,
   });
   pricing.quoteItems
     .mockResolvedValueOnce(pricingFailure('RATE_LIMITED', true))

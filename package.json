@@ -11,7 +11,7 @@
   "scripts": {
     "build": "bun scripts/prepare-package.ts && vp run -r build",
     "typecheck": "vp run -r typecheck && tsc -p scripts",
-    "check": "vp run typecheck && vp check",
+    "check": "vp run typecheck && vp run -r openapi && vp check",
     "fix": "vp check --fix",
     "verify": "bun run build && bun run check",
     "test": "vp test run --project unit --project '@maximus-examples/*'",
@@ -19,6 +19,7 @@
     "test:integration": "vp test run --project postgres",
     "test:e2e": "bun e2e/run.ts",
     "verify:package": "bun scripts/verify-package.ts",
+    "check:clients": "bun scripts/check-clients.ts",
     "deploy:examples": "bun e2e/deploy.ts"
   },
   "devDependencies": {

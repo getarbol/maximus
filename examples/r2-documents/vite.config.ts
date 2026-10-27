@@ -12,6 +12,11 @@ export default defineConfig({
       name: 'example-r2-documents',
       namespace: 'documents',
       title: 'Documents',
+      description:
+        'Keeps the documents of each organization in R2: uploaded, described, downloaded and deleted.',
+      groups: {
+        Documents: "The documents of the caller's organization, uploaded and downloaded as bytes.",
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://example-r2-documents.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       tokens: { issuer: 'https://auth.example.com/' },

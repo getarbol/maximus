@@ -119,7 +119,7 @@ export type { BodyReadOptions, HttpBodyFailure, HttpBodyFailureReason } from './
 export { readJsonResponse, readJsonBody, retryAfterSeconds, isJsonMediaType } from './internal/json.ts';
 
 // The contract: the OpenAPI document.
-export { createOpenApi } from './openapi.ts';
+export { createOpenApi, createRpcOpenApi } from './openapi.ts';
 
 // Telemetry.
 export { reportUnexpected } from './telemetry.ts';

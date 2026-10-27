@@ -3,7 +3,7 @@
  */
 import { defineErrors } from '@arbol-ai/maximus';
 
-import { UnknownSkuSchema } from '#src/contract.ts';
+import { UnknownSkuSchema } from '#src/quotes.ts';
 
 export default defineErrors({
   unknownSku: {

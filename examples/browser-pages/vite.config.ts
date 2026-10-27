@@ -12,6 +12,11 @@ export default defineConfig({
       name: 'example-browser-pages',
       namespace: 'pages',
       title: 'Pages',
+      description:
+        'Reads public web pages at the hosts it allows, as Markdown, and captures them as PNG images.',
+      groups: {
+        Pages: 'Public web pages, read or captured as a browser renders them.',
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://example-browser-pages.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       tokens: { issuer: 'https://auth.example.com/' },

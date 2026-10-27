@@ -1,7 +1,7 @@
 /**
  * The catalog pricing quotes from: a deliberately small one, in US cents per unit.
  */
-import type { Items, Quote } from './contract.ts';
+import type { Items, Quote } from './quotes.ts';
 
 /** The price of one unit of each SKU, in US cents. */
 const UNIT_PRICE_CENTS: Readonly<Record<string, number>> = {

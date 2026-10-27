@@ -11,11 +11,11 @@
     "build": "vp build",
     "test": "vp test run",
     "typecheck": "maximus prepare && tsc --noEmit",
+    "openapi": "maximus openapi --check",
     "verify": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
-    "@arbol-ai/maximus": "workspace:^",
-    "@maximus-examples/pricing": "workspace:*"
+    "@arbol-ai/maximus": "workspace:^"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.5",

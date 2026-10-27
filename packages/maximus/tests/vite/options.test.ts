@@ -81,6 +81,31 @@ test('the options state what package.json does not, and a name no Worker can tak
   expect(projectOptions(root({ name: 'tasks' }), minimal)?.application.version).toBe('0.0.0');
 });
 
+test("each service the project calls is bound to its Worker's entrypoint, naming this service as the caller", () => {
+  const services = { PRICING: { worker: 'pricing', openapi: '../pricing/openapi.rpc.json' } };
+  const configured = projectOptions(root(), { ...minimal, services });
+  const binding = { type: 'worker', worker: 'pricing', exportName: 'Service', props: { caller: 'tasks' } };
+  expect(configured.env).toEqual({
+    production: { PRICING: binding },
+    development: { PRICING: binding, DEVELOPMENT_TOKEN: { type: 'secret' } },
+  });
+  expect(configured.services).toEqual(services);
+  // A binding env declares too, a name that is no binding's, the development token's, and a service without
+  // its Worker or document.
+  for (const [refused, message] of [
+    [{ ...minimal, services, env: { PRICING: bindings.kv() } }, 'services.PRICING: name each'],
+    [
+      { ...minimal, services: { DEVELOPMENT_TOKEN: services.PRICING } },
+      'DEVELOPMENT_TOKEN is the development token',
+    ],
+    [{ ...minimal, services: { pricing: services.PRICING } }, 'services.pricing: name each'],
+    [{ ...minimal, services: { PRICING: { worker: '', openapi: 'x.json' } } }, '{ worker, openapi }'],
+    [{ ...minimal, services: { PRICING: { worker: 'pricing' } } }, '{ worker, openapi }'],
+  ] as const) {
+    expect(() => projectOptions(root(), refused as MaximusOptions)).toThrow(message);
+  }
+});
+
 test('the development token is declared in development alone, under its own binding, or not at all', () => {
   const kv = { TASKS: bindings.kv() };
   const options: MaximusOptions = {

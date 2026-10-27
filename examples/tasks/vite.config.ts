@@ -15,6 +15,10 @@ export default defineConfig({
       name: 'example-tasks',
       namespace: 'tasks',
       title: 'Tasks',
+      description: 'The tasks of each organization, for people in its web app and for agents over MCP.',
+      groups: {
+        Tasks: "The tasks of the caller's organization, open and done.",
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://example-tasks.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       // OAuth access tokens from your authorization server (replace it with yours), which MCP clients

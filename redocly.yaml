@@ -1,0 +1,6 @@
+# The rules the OpenAPI documents of the examples pass, which scripts/check-clients.ts applies: Redocly's
+# strictest, but the license, which each service states for itself.
+extends:
+  - recommended-strict
+rules:
+  info-license: off

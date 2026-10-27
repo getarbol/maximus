@@ -16,6 +16,11 @@ export default defineConfig({
       name: 'example-d1-notes',
       namespace: 'notes',
       title: 'Notes',
+      description:
+        'The notes of each organization, kept in D1: written, read, changed, deleted, listed and searched.',
+      groups: {
+        Notes: "The notes of the caller's organization.",
+      },
       // The Worker's workers.dev URL in the account it deploys to.
       origin: `https://example-d1-notes.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       // OAuth access tokens from your authorization server (replace it with yours); `vp dev` also accepts
