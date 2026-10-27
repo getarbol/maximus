@@ -1,21 +1,15 @@
 # Errors and results
 
-## Results
+## The catalog
+
+`errors.ts` declares the service's own failures. Each has a fixed code, HTTP status and message; the catalog
+also holds every standard failure.
 
 ```ts
-import { err, ok } from '@arbol-ai/maximus';
+// errors.ts
+import { defineErrors, t } from '@arbol-ai/maximus';
 
-return note ? ok(note) : err(errors.noteNotFound.create());
-```
-
-A handler returns exactly `{ ok: true, value }` or `{ ok: false, error }`. Anything else, a throw, an
-output that fails its schema or exceeds its byte limit, or a failure outside the catalog becomes
-`INTERNAL_ERROR`, reported to diagnostics without its message.
-
-## Catalog
-
-```ts
-export const errors = defineErrors({
+export default defineErrors({
   noteNotFound: { code: 'NOTE_NOT_FOUND', status: 404, message: 'The note does not exist.' },
   quotaExceeded: {
     code: 'QUOTA_EXCEEDED',
@@ -26,51 +20,97 @@ export const errors = defineErrors({
     dataSchema: t.Object({ limit: t.Integer() }, { additionalProperties: false }),
   },
 });
-
-errors.quotaExceeded.create({ limit: 100 }); // data required when dataSchema has required fields
-errors.noteNotFound.is(value);
-errors.status('NOTE_NOT_FOUND'); // 404
 ```
 
-- Codes `UPPER_SNAKE_CASE`, unique including standard codes; status 400–599; messages fixed and
-  value-free; `dataSchema` strict.
-- Standard names are reserved keys: `invalidInput`, `unauthorized`, `forbidden`, `notFound`,
-  `methodNotAllowed`, `tooLarge`, `unsupportedMedia`, `rateLimited`, `internal`,
-  `upstreamUnavailable`, `upstreamTimeout`, `outcomeUnknown`. Every catalog contains them, so use
-  `errors.forbidden.create()` etc. `standardErrors` is the catalog with nothing added.
-- The catalog's members are reserved keys too: `schema`, `definitions`, `status`, `retryAfter`,
-  `validate`.
-- Return only failures from this application's catalog. A dependency's failure must be translated.
+- A code is uppercase words joined by underscores, unique among the catalog's codes, the standard ones
+  included. A status is from 400 to 599. A message is fixed and never holds a value.
+- `retryable` says whether the same request may succeed later; `retryAfter` sends `Retry-After` seconds.
+- `dataSchema` is a strict object: the `data` a failure of that code carries. Put codes, counts, positions
+  and field paths in it, never a submitted value, a credential or another service's answer.
+- The standard failures' names (`invalidInput`, `unauthorized`, `forbidden`, `notFound`, `methodNotAllowed`,
+  `tooLarge`, `unsupportedMedia`, `rateLimited`, `internal`, `upstreamUnavailable`, `upstreamTimeout`,
+  `outcomeUnknown`) and the catalog's members (`schema`, `definitions`, `status`, `retryAfter`, `validate`) are
+  reserved keys.
 
-## Standard codes
+`defineErrors` throws a `TypeError` for a rule it refuses.
 
-| Code | Status | Retryable | Typical cause |
-| --- | --- | --- | --- |
-| `INVALID_INPUT` | 400 | No | Schema refusal with `data.issues` (≤ 10 `{ path, message }`, JSON Pointers); repeated query key; bad JSON |
-| `UNAUTHORIZED` | 401 | No | Missing/invalid token, bad RPC props or principal, invalid proof |
-| `FORBIDDEN` | 403 | No | Missing scope, ineligible actor, absent authority for conditional scopes, proof not admitting the call |
-| `NOT_FOUND` | 404 | No | No route (before authentication), unpinned origin |
-| `HTTP_METHOD_NOT_ALLOWED` | 405 | No | Non-GET on health or a `tokens.resources` path, non-GET/HEAD on assets |
-| `REQUEST_TOO_LARGE` | 413 | No | Body over its limit |
-| `UNSUPPORTED_MEDIA_TYPE` | 415 | No | Non-JSON body; content-encoded byte upload |
-| `RATE_LIMITED` | 429 | Yes (60 s) | The configured rate limit |
-| `INTERNAL_ERROR` | 500 | No | Unexpected error or invalid result |
-| `OUTCOME_UNKNOWN` | 502 | No | Returned by handlers: a write may have happened |
-| `UPSTREAM_UNAVAILABLE` | 503 | Yes | Returned by handlers |
-| `UPSTREAM_TIMEOUT` | 504 | Yes | Returned by handlers |
+## Answer a failure
 
-## Presentation
+A handler, `context.ts` or a tool answers an expected failure with `fail(code)`, and passes the data its code
+declares:
 
-HTTP: the catalog status, the envelope, `Retry-After` for `retryAfter`. MCP: a tool result with
-`isError: true` and the failure JSON. RPC: the `Result` itself.
+```ts
+return (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND');
+return fail('QUOTA_EXCEEDED', { limit: 100 });
+```
+
+A route lists the domain codes it may answer in `failures`: `failures: ['NOTE_NOT_FOUND']`. `fail` then
+type-checks only those codes and the standard ones, the OpenAPI document lists them, and any other domain
+failure, from the handler, `context.ts` or middleware, answers `INTERNAL_ERROR` and is reported. Without
+`failures`, every code of the catalog is allowed and listed.
+
+Throw only for what should never happen. A throw, an output its schema refuses or over its limit, or a code
+outside the catalog answers `INTERNAL_ERROR`, never the error's text, and is reported as `maximus.unexpected`
+by the error's name alone.
+
+## Standard failures
+
+Every operation may answer these without listing them:
+
+| Code                      | Status | Retryable | When                                                                                    |
+| ------------------------- | ------ | --------- | --------------------------------------------------------------------------------------- |
+| `INVALID_INPUT`           | 400    | No        | The input does not match its schema; `data.issues` lists up to ten `{ path, message }`. |
+| `UNAUTHORIZED`            | 401    | No        | No valid token; RPC props or principal refused.                                         |
+| `FORBIDDEN`               | 403    | No        | The token lacks the scope, the actor kind is not admitted.                              |
+| `NOT_FOUND`               | 404    | No        | No route answers the method and path, before any token is read.                         |
+| `HTTP_METHOD_NOT_ALLOWED` | 405    | No        | A method the path does not answer, such as `POST /health`.                              |
+| `REQUEST_TOO_LARGE`       | 413    | No        | The body exceeds its limit.                                                             |
+| `UNSUPPORTED_MEDIA_TYPE`  | 415    | No        | A body that is not JSON, or a compressed byte upload.                                   |
+| `RATE_LIMITED`            | 429    | Yes, 60 s | The rate limit refused the caller.                                                      |
+| `INTERNAL_ERROR`          | 500    | No        | Anything unexpected.                                                                    |
+| `OUTCOME_UNKNOWN`         | 502    | No        | A write may have happened and its answer was lost.                                      |
+| `UPSTREAM_UNAVAILABLE`    | 503    | Yes       | A service this one depends on could not answer.                                         |
+| `UPSTREAM_TIMEOUT`        | 504    | Yes       | A service this one depends on did not answer in time.                                   |
+
+A handler answers the last three itself, with `fail('UPSTREAM_UNAVAILABLE')` for instance.
+
+## On each transport
+
+- HTTP: the code's status and `{ success: false, data: null, error, metadata: { requestId } }`, with
+  `Retry-After` when the code has one.
+- MCP: a tool result with `isError: true` whose text is the failure.
+- RPC: the `Result` `{ ok: false, error }`.
+
+The failure is `{ code, message, retryable, data }` on all three.
 
 ## Uncertain outcomes and retries
 
-- `retryable: true` only when the same call may succeed later (rate limit, outage, timeout).
-- When a write may have been applied and its answer was lost, return
-  `errors.outcomeUnknown.create()`. Callers reconcile (read the resource, poll an operation) before
-  repeating anything. Record intent before provider writes and use idempotency keys where possible.
-- Never retry uncertain writes or paid provider calls blindly; never turn an outage into an empty
+- `retryable: true` only when the same call may succeed later: a rate limit, an outage, a timeout.
+- When a write may have been applied and its answer was lost, answer `OUTCOME_UNKNOWN`. The caller reconciles
+  (reads the resource, looks for the id it chose) before repeating anything. Record intent before a provider
+  write and give writes stable keys, such as an id the caller chooses.
+- Never retry an uncertain write or a paid provider call blindly, and never turn an outage into an empty
   success.
-- `data` holds finite codes, counts, positions and field paths. Never submitted values, credentials
-  or provider bodies.
+
+## Failures of other services
+
+A failure another service answers belongs to that service's catalog, not to this one. Translate it before
+answering: a failure the caller can fix becomes one of this catalog's codes, one that may pass becomes
+`UPSTREAM_UNAVAILABLE`, and the rest `INTERNAL_ERROR`. A code outside this catalog fails its check and
+answers `INTERNAL_ERROR`. Catch a call that throws, such as an RPC call to a Worker that cannot be reached:
+
+```ts
+let priced;
+try {
+  priced = await env.PRICING.quoteItems(principal, input);
+} catch {
+  return fail('UPSTREAM_UNAVAILABLE');
+}
+if (priced.ok) {
+  return priced.value;
+}
+return fail(priced.error.retryable ? 'UPSTREAM_UNAVAILABLE' : 'INTERNAL_ERROR');
+```
+
+See [Errors and results](https://github.com/getarbol/maximus/blob/main/docs/guides/errors-and-results.md)
+and [Standard failures](https://github.com/getarbol/maximus/blob/main/docs/reference/standard-failures.md).
