@@ -20,6 +20,17 @@ export interface ProjectFile {
   name: string;
 }
 
+/** A full recipient, `local@domain.tld`: what an email module is named after. */
+const RECIPIENT = /^[^@/]+@[^@/]+\.[^@./]+$/;
+
+/**
+ * Whether a `.dev`, `.prod`, `.test` or `.spec` ending is the last label of an email module's recipient,
+ * `help@example.dev`, rather than a mode or test suffix: only what precedes it is no recipient.
+ */
+function endsRecipient(directory: string, name: string, rest: string): boolean {
+  return directory === 'email' && RECIPIENT.test(name) && !RECIPIENT.test(rest);
+}
+
 /** Sort by code units so generated imports are identical on every locale and platform. */
 export function compareNames(a: string, b: string): number {
   return a < b ? -1 : Number(a > b);
@@ -49,20 +60,24 @@ export function projectFiles(root: string, directory: string, mode: string): Pro
       }
       if (entry.isDirectory()) {
         visit(file);
-      } else if (
-        entry.isFile() &&
-        /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/.test(entry.name) &&
-        !/\.(?:d|test|spec)(?:\.(?:dev|prod))?\.[^.]+$/.test(entry.name)
-      ) {
-        const name = relative(folder, file)
+      } else if (entry.isFile() && /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/.test(entry.name)) {
+        const stem = relative(folder, file)
           .split(sep)
           .join('/')
           .replace(/\.[^.]+$/, '');
-        const environment = /\.(dev|prod)$/.exec(name)?.[1];
-        if (environment && (environment === 'dev' ? mode !== 'development' : mode !== 'production')) {
+        const suffix = /\.(dev|prod)$/.exec(stem);
+        const environment =
+          suffix && !endsRecipient(directory, stem, stem.slice(0, suffix.index)) ? suffix : undefined;
+        const name = environment ? stem.slice(0, environment.index) : stem;
+        // Declarations, tests and specs sit beside modules without being discovered.
+        const marker = /\.(d|test|spec)$/.exec(name);
+        if (marker && (marker[1] === 'd' || !endsRecipient(directory, name, name.slice(0, marker.index)))) {
           continue;
         }
-        files.push({ file, name: name.replace(/\.(?:dev|prod)$/, '') });
+        if (environment && (environment[1] === 'dev' ? mode !== 'development' : mode !== 'production')) {
+          continue;
+        }
+        files.push({ file, name });
       }
     }
   }

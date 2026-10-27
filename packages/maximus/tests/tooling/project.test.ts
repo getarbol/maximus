@@ -74,6 +74,30 @@ test('mode filtering excludes helpers and tests even when a test carries a mode 
   expect(readFileSync(join(root, '.maximus/app.ts'), 'utf-8')).toContain('debug.dev.ts');
 });
 
+test('an email recipient whose domain ends in dev, prod or test keeps it, beside mode-suffixed and test modules', () => {
+  const root = project({
+    'email/support@company.dev.ts': '',
+    'email/ops@team.prod.ts': '',
+    'email/help@example.test.ts': '',
+    'email/help@example.com.dev.ts': '',
+    'email/help@example.com.test.ts': '',
+    'email/notes.test.ts': '',
+    'email/types.d.ts': '',
+  });
+  const recipients = (mode: string) => {
+    prepareProject(root, mode);
+    const worker = readFileSync(join(root, '.maximus/worker.ts'), 'utf-8');
+    return [...worker.matchAll(/"([^"]+)": email_\d+/g)].map(([, recipient]) => recipient);
+  };
+  expect(recipients('production')).toEqual(['help@example.test', 'ops@team.prod', 'support@company.dev']);
+  expect(recipients('development')).toEqual([
+    'help@example.com',
+    'help@example.test',
+    'ops@team.prod',
+    'support@company.dev',
+  ]);
+});
+
 test('colliding index and group routes are refused before replacing generated files', () => {
   const root = project({ 'routes/v1/notes.ts': 'export default () => ({});' });
   prepareProject(root);

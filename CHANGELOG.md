@@ -55,6 +55,9 @@ dates of the release commits.
 - The `service` starter's CI workflow pins its actions by commit, keeps the checkout token from later
   steps, stops after 15 minutes and no longer hands a GitHub Packages token to `bun install`. Its
   `cloudflare.config.ts` pins the compatibility date of the day the project is created.
+- Project discovery keeps an email recipient whose domain ends in `.dev`, `.prod`, `.test` or `.spec`:
+  `email/support@company.dev.ts` handles `support@company.dev` in every mode, where it was read as the
+  development handler of `support@company`, and `email/help@example.test.ts` was skipped as a test.
 
 ## 7.4.0 (2026-10-26)
 

@@ -481,7 +481,10 @@ a deployed file/class casually: Cloudflare storage identity and migrations belon
 
 Modules may use `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` or `.cjs`. Dotfiles, helper paths
 starting with `_`, declaration files and `.test`/`.spec` files are excluded; `email/_default` is the
-sole underscore exception. `.dev` and `.prod` suffixes select only the matching Vite mode. A base
+sole underscore exception. `.dev` and `.prod` suffixes select only the matching Vite mode. In `email/`,
+such an ending belongs to the recipient when only it completes the address: `support@company.dev.ts`
+handles `support@company.dev`, and `help@example.com.dev.ts` is the development handler of
+`help@example.com`. A base
 file and a mode-specific file must not claim the same route. Symlinks in convention directories are
 refused. No filesystem access or runtime source compilation enters the Worker bundle.
 
