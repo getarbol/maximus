@@ -1,8 +1,8 @@
 # Testing
 
 A project tests itself in Node with `vp test`: each test calls the API as the Worker serves it, over
-stand-ins for the bindings it uses. This guide covers those tests, calls over MCP, the type tests that keep
-an RPC contract in step with its routes, the contract check, and suites that call a running Worker.
+stand-ins for the bindings it uses. This guide covers those tests, calls over MCP, the tests of Worker RPC
+on both sides of a binding, the contract check, and suites that call a running Worker.
 
 ## Run the tests
 
@@ -30,9 +30,9 @@ starter's `package.json` maps `#maximus/*` to `.maximus/` in its `imports`. A te
 import { beforeEach, expect, it } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
+import { noteStore } from '#src/notes.ts';
+import type { Note } from '#src/notes.ts';
 
-import { noteStore } from '../src/notes.ts';
-import type { Note } from '../src/notes.ts';
 import { testNamespace } from './kv.ts';
 
 /** The development token `vp test` accepts from localhost, as a developer who holds every scope. */
@@ -76,9 +76,9 @@ it('refuses an empty note, and a caller without a token', async () => {
 });
 
 it('keeps each organization to its own notes', async () => {
-  const kv = testNamespace();
-  const note = await noteStore(kv, 'org_1234567890abcdef').create('Call back on Monday.');
-  expect(await noteStore(kv, 'org_abcdef1234567890').get(note.noteId)).toBeUndefined();
+  const namespace = testNamespace();
+  const note = await noteStore(namespace, 'org_1234567890abcdef').create('Call back on Monday.');
+  expect(await noteStore(namespace, 'org_abcdef1234567890').find(note.noteId)).toBeUndefined();
 });
 ```
 
@@ -144,9 +144,9 @@ export function testDatabase(): D1Database {
     .toSorted()) {
     database.exec(readFileSync(join(MIGRATIONS, file), 'utf-8'));
   }
-  /** A statement with the values bound so far. */
-  const statement = (sql: string, values: readonly SQLInputValue[] = []) => ({
-    bind: (...bound: SQLInputValue[]) => statement(sql, bound),
+  /** A prepared statement, with the values bound so far. */
+  const prepareStatement = (sql: string, values: readonly SQLInputValue[] = []) => ({
+    bind: (...bound: SQLInputValue[]) => prepareStatement(sql, bound),
     first: async () => database.prepare(sql).get(...values) ?? null,
     all: async () => ({ results: database.prepare(sql).all(...values), success: true, meta: {} }),
     run: async () => {
@@ -155,7 +155,7 @@ export function testDatabase(): D1Database {
     },
   });
   // The notes use prepare, bind, first, all and run alone: what D1Database declares besides goes unused.
-  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
+  return { prepare: (sql: string) => prepareStatement(sql) } as unknown as D1Database;
 }
 ```
 
@@ -169,7 +169,8 @@ The examples stand in for the other bindings the same way:
   export, and a cron module's, directly with the event, the `env` and an execution context. See
   [`examples/queue-reminders/tests`](../../examples/queue-reminders/tests).
 - **Another Worker over RPC**: an object with the methods the binding exposes, each a `vi.fn()` typed by
-  the owner's contract, so a test controls what the other Worker answers. See
+  the module `maximus prepare` writes from the other Worker's RPC document, so a test controls what that
+  Worker answers. See [Test Worker RPC](#test-worker-rpc) and
   [`examples/worker-rpc/orders/tests`](../../examples/worker-rpc/orders/tests).
 
 ## Durable Objects and `cloudflare:workers`
@@ -220,7 +221,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue } from 'node:sqlite';
 
 /** SQL storage over a new in-memory database: `exec` answers the rows a query reads, or how many it wrote. */
-function sqlStorage() {
+function createSqlStorage() {
   const database = new DatabaseSync(':memory:');
   return {
     exec(query: string, ...bindings: SQLInputValue[]) {
@@ -235,19 +236,22 @@ function sqlStorage() {
   };
 }
 
-/** A Durable Object namespace whose instances `create` constructs, one per name, called directly. */
+/** A namespace whose instances `create` constructs from their state, and the names it was asked for. */
 export function testNamespace<T>(create: (state: DurableObjectState) => T) {
   const instances = new Map<string, T>();
   return {
     getByName(name: string): T {
-      let instance = instances.get(name);
-      if (!instance) {
-        // The class uses storage.sql alone: what DurableObjectState declares besides goes unused.
-        instance = create({ storage: { sql: sqlStorage() } } as unknown as DurableObjectState);
-        instances.set(name, instance);
+      const existing = instances.get(name);
+      if (existing) {
+        return existing;
       }
+      // The classes use storage.sql alone: what DurableObjectState declares besides goes unused.
+      const instance = create({ storage: { sql: createSqlStorage() } } as unknown as DurableObjectState);
+      instances.set(name, instance);
       return instance;
     },
+    /** The name of every instance the Worker reached. */
+    listNames: () => [...instances.keys()],
   };
 }
 ```
@@ -303,7 +307,7 @@ server-sent events, and reads the answer from its `data:` line. Added to `tests/
 
 ```ts
 /** Sends one JSON-RPC request to the MCP server, signed in, and answers its result. */
-async function mcp(method: string, params: object = {}) {
+async function callMcp(method: string, params: object = {}) {
   const response = await handler(
     new Request('http://localhost/mcp', {
       method: 'POST',
@@ -327,14 +331,15 @@ async function mcp(method: string, params: object = {}) {
 
 it('serves get_note to agents, with the route’s checks', async () => {
   const note = (await call('POST', '/v1/notes', { text: 'Call back on Monday.' })).body.data as Note;
-  const tools = (await mcp('tools/list')).tools as { name: string }[];
+  const tools = (await callMcp('tools/list')).tools as { name: string }[];
   expect(tools.map(({ name }) => name)).toContain('get_note');
-  expect(await mcp('tools/call', { name: 'get_note', arguments: { noteId: note.noteId } })).toMatchObject({
-    structuredContent: note,
+  const answer = await callMcp('tools/call', { name: 'get_note', arguments: { noteId: note.noteId } });
+  expect(answer).toMatchObject({ structuredContent: note });
+  const refusal = await callMcp('tools/call', {
+    name: 'get_note',
+    arguments: { noteId: crypto.randomUUID() },
   });
-  expect(
-    await mcp('tools/call', { name: 'get_note', arguments: { noteId: crypto.randomUUID() } })
-  ).toMatchObject({ isError: true });
+  expect(refusal).toMatchObject({ isError: true });
 });
 ```
 
@@ -342,62 +347,56 @@ A tool's output is the result's `structuredContent`; a failure is a result with 
 is the failure, `NOTE_NOT_FOUND` here. `tools/list` lists the tools the caller's scopes admit, and the
 development token holds them all, `<service>:mcp:use` included. [MCP](mcp.md) describes the server.
 
-## Check RPC types
+## Test Worker RPC
 
-A Worker that calls this one over RPC types its binding with a contract this project publishes: an
-interface of the `Service` entrypoint's methods, in a file that imports no route (see
-[Worker RPC](worker-rpc.md)). Here a route declares `operationId: 'summarizeNote'` and `rpc: true`, and
-the contract states the method it serves:
-
-```ts
-// src/contract.ts: what the Workers that call this one import
-import { t } from '@arbol-ai/maximus';
-import type { Failure, Principal, Result, Static } from '@arbol-ai/maximus';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-
-/** A note's summary, as callers over RPC receive it. */
-export const SummarySchema = t.Object(
-  { noteId: t.String(), words: t.Integer({ minimum: 0 }) },
-  { $id: 'Summary', additionalProperties: false }
-);
-export type Summary = Static<typeof SummarySchema>;
-
-/** The `Service` entrypoint that other Workers bind. */
-export interface NotesService extends WorkerEntrypoint {
-  summarizeNote: (principal: Principal, input: { noteId: string }) => Promise<Result<Summary, Failure>>;
-}
-```
-
-A type test proves the routes serve exactly that contract:
+A Worker that serves routes over RPC publishes the document its callers bind to, `openapi.rpc.json`, which
+`bunx maximus openapi` writes from its routes (see [Worker RPC](worker-rpc.md)). Its tests prove that the
+committed document is the one its routes declare:
 
 ```ts
-// tests/rpc.test.ts
-import type { RpcMethods } from '@arbol-ai/maximus/workers';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-import { expectTypeOf, it } from 'vite-plus/test';
+// tests/quotes.test.ts of the pricing Worker
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import type { app } from '#maximus/app';
+import { createRpcOpenApi } from '@arbol-ai/maximus';
+import { expect, it } from 'vite-plus/test';
 
-import type { NotesService } from '../src/contract.ts';
+import { app } from '#maximus/app';
 
-it('serves over RPC exactly the methods its contract declares', () => {
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<
-    Omit<NotesService, keyof WorkerEntrypoint>
-  >();
-  // @ts-expect-error A contract without summarizeNote is not the one the routes serve.
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<Record<never, never>>();
+it('publishes the RPC document its callers bind to, current with its routes', () => {
+  const published: unknown = JSON.parse(
+    readFileSync(join(import.meta.dirname, '../openapi.rpc.json'), 'utf-8')
+  );
+  expect(published).toStrictEqual(createRpcOpenApi(app));
 });
 ```
 
-`RpcMethods<typeof app.operations>` is the type of the entrypoint's methods: one for each operation that
-declares `rpc`, named by its operation, taking the caller's principal and the input and answering a
-`Result`. `app` comes from `#maximus/app` as a type alone.
+A caller's binding is typed by the module `maximus prepare` writes from that document,
+`#maximus/services/<binding>`. Its tests stand in for the binding with an object whose methods are
+`vi.fn()`, typed by that module, and control what the other Worker answers:
 
-`tsc` checks these assertions, in `bun run typecheck` and so in `bun run verify`. `vp test run` runs the
-file without checking its types, so a contract that drifted from its routes passes `bun run test` and fails
-`bun run typecheck`. The `@ts-expect-error` line is the negative control: it proves the comparison can
-fail, because a check that accepted any type would make that line compile, and `tsc` would report the
+```ts
+// tests/quotes.test.ts of the orders Worker
+import { vi } from 'vite-plus/test';
+
+import type { PricingService } from '#maximus/services/pricing';
+
+const token = 'test-development-token-for-local-tests';
+/** The pricing binding as the tests stand it in: its one RPC method, which records each call. */
+const pricing = { quoteItems: vi.fn<PricingService['quoteItems']>() };
+const env = { DEVELOPMENT_TOKEN: token, PRICING: pricing } as unknown as Env;
+```
+
+A module of `tests/` that no test runner loads can prove what the binding's types accept and refuse, with
+`@ts-expect-error` on each call they must refuse;
+[`examples/worker-rpc/orders/tests/pricing-types.ts`](../../examples/worker-rpc/orders/tests/pricing-types.ts)
+is one. `tsc` checks it, in `bun run typecheck` and so in `bun run verify`; `vp test run` checks no types.
+Each `@ts-expect-error` line is a negative control: should the types accept that call, `tsc` reports the
 directive as unused.
+
+In a Worker composed by hand, `RpcMethods<typeof app.operations>` from `@arbol-ai/maximus/workers` is the
+type of the entrypoint's methods: one for each operation that declares `rpc`, named by its operation,
+taking the caller's principal and the input and answering a `Result`.
 
 ## Check the published contract
 

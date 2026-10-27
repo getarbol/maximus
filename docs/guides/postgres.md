@@ -73,6 +73,7 @@ export const NoteSchema = t.Object(
   },
   { $id: 'Note', additionalProperties: false }
 );
+/** A note. */
 export type Note = Static<typeof NoteSchema>;
 
 /** A row of the notes table. */
@@ -85,8 +86,8 @@ interface NoteRow {
 /** Each transaction's time budgets, in milliseconds. */
 const BUDGETS = { statementTimeoutMs: 5000, lockTimeoutMs: 1000, idleTimeoutMs: 5000 };
 
-/** A row as the note it stores, checked against the note's schema. */
-function note(row: NoteRow): Note {
+/** The note a row stores, checked against the note's schema. */
+function noteFromRow(row: NoteRow): Note {
   return readSchema(NoteSchema, {
     noteId: row.note_id,
     text: row.text,
@@ -98,15 +99,20 @@ function note(row: NoteRow): Note {
 export function noteStore(pool: Pick<Pool, 'connect'>, organizationId: string) {
   const tenant = { organizationId };
   return {
-    /** The note, or undefined when the organization has none with this id. */
-    get: (noteId: string) =>
+    /** The note with this id, or undefined when the organization has none. */
+    find: (noteId: string) =>
       withTenantTransaction(pool, tenant, BUDGETS, async (client, { organizationId: owner }) => {
         const { rows } = await client.query<NoteRow>(
           'SELECT note_id, text, created_at FROM notes WHERE organization_id = $1 AND note_id = $2',
           [owner, noteId]
         );
-        return rows[0] === undefined ? undefined : note(rows[0]);
+        const [row] = rows;
+        if (!row) {
+          return undefined;
+        }
+        return noteFromRow(row);
       }),
+
     /** Stores a new note under the id the caller chose, and answers it. */
     create: (noteId: string, text: string) =>
       withTenantTransaction(pool, tenant, BUDGETS, async (client, { organizationId: owner }) => {
@@ -118,7 +124,7 @@ export function noteStore(pool: Pick<Pool, 'connect'>, organizationId: string) {
         if (!row) {
           throw new TypeError('The insert answered no row.');
         }
-        return note(row);
+        return noteFromRow(row);
       }),
   };
 }
@@ -219,16 +225,18 @@ that would together break the rule, and the retry runs it again against the othe
 import { withTenantTransaction } from '@arbol-ai/maximus/postgres';
 import type { Pool } from 'pg';
 
+/** The most notes an organization may hold. */
+const MAX_NOTES = 1000;
+
 /**
- * Stores a new note unless the organization already holds `limit` notes, and answers whether it did. Two
+ * Stores a new note unless the organization already holds `MAX_NOTES` notes, and answers whether it did. Two
  * writers that count at once cannot both pass the limit: under `serializable`, Postgres aborts one of them,
  * which runs again and counts the other's note.
  */
 export function createWithinQuota(
   pool: Pick<Pool, 'connect'>,
   organizationId: string,
-  note: { noteId: string; text: string },
-  limit: number
+  note: { noteId: string; text: string }
 ) {
   return withTenantTransaction(
     pool,
@@ -245,7 +253,8 @@ export function createWithinQuota(
         'SELECT count(*)::int AS total FROM notes WHERE organization_id = $1',
         [owner]
       );
-      if ((rows[0]?.total ?? 0) >= limit) {
+      const total = rows[0]?.total ?? 0;
+      if (total >= MAX_NOTES) {
         return false;
       }
       await client.query('INSERT INTO notes (organization_id, note_id, text) VALUES ($1, $2, $3)', [
@@ -302,8 +311,8 @@ A conflict the caller can fix becomes a failure of the service's own catalog, he
 // routes/v1/notes.post.ts
 import { defineHandler, t, UuidSchema } from '@arbol-ai/maximus';
 
-import { standardFailure } from '../../src/database.ts';
-import { NoteSchema } from '../../src/notes.ts';
+import { standardFailure } from '#src/database.ts';
+import { NoteSchema } from '#src/notes.ts';
 
 /** POST /api/v1/notes: a new note under the id its caller chose, so a repeated request finds it. */
 export default defineHandler(
@@ -312,9 +321,10 @@ export default defineHandler(
     if (created.ok) {
       return created.value;
     }
-    return created.error.code === 'DATABASE_CONFLICT'
-      ? fail('NOTE_EXISTS')
-      : fail(standardFailure(created.error));
+    if (created.error.code === 'DATABASE_CONFLICT') {
+      return fail('NOTE_EXISTS');
+    }
+    return fail(standardFailure(created.error));
   },
   {
     description: 'Write a note for the organization, under an id the caller chooses.',

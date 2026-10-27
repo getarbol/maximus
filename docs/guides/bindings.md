@@ -47,18 +47,19 @@ the configuration evaluates. Two names are Maximus's own, and declaring either i
 
 ## Helpers and types
 
-| Resource                                       | Declare                                                        | `Env` type                             |
-| ---------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| A Workers KV namespace                         | `bindings.kv()`                                                | `KVNamespace`                          |
-| A D1 database                                  | `bindings.d1({ name, id })`                                    | `D1Database`                           |
-| An R2 bucket                                   | `bindings.r2({ name })`                                        | `R2Bucket`                             |
-| A queue the Worker sends to                    | `bindings.queue({ name })`                                     | `Queue`, whose messages are `unknown`  |
-| One of the Worker's own Durable Object classes | `bindings.durableObject({ worker, exportName })`               | `DurableObjectNamespace` of that class |
-| An entrypoint of another Worker                | `bindings.worker({ worker, exportName, props })`               | `Fetcher`                              |
-| Browser Run                                    | `bindings.browser()`                                           | `BrowserRun`                           |
-| A rate limiter                                 | `bindings.rateLimit({ namespace, simple: { limit, period } })` | `RateLimit`                            |
-| A secret                                       | `bindings.secret()`                                            | `string`                               |
-| A plain value                                  | `bindings.text('…')` or `bindings.json({ … })`                 | The value's own type                   |
+| Resource                                       | Declare                                                        | `Env` type                                                |
+| ---------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| A Workers KV namespace                         | `bindings.kv()`                                                | `KVNamespace`                                             |
+| A D1 database                                  | `bindings.d1({ name, id })`                                    | `D1Database`                                              |
+| An R2 bucket                                   | `bindings.r2({ name })`                                        | `R2Bucket`                                                |
+| A queue the Worker sends to                    | `bindings.queue({ name })`                                     | `Queue`, whose messages are `unknown`                     |
+| One of the Worker's own Durable Object classes | `bindings.durableObject({ worker, exportName })`               | `DurableObjectNamespace` of that class                    |
+| An entrypoint of another Worker                | `bindings.worker({ worker, exportName, props })`               | `Fetcher`                                                 |
+| Another Maximus Worker's RPC methods           | `services: { PRICING: { worker, openapi } }` in `maximus()`    | `Service<PricingService>`, from the document it publishes |
+| Browser Run                                    | `bindings.browser()`                                           | `BrowserRun`                                              |
+| A rate limiter                                 | `bindings.rateLimit({ namespace, simple: { limit, period } })` | `RateLimit`                                               |
+| A secret                                       | `bindings.secret()`                                            | `string`                                                  |
+| A plain value                                  | `bindings.text('…')` or `bindings.json({ … })`                 | The value's own type                                      |
 
 `cf/config` has a helper for the rest of Cloudflare's bindings too, among them Workers AI (`ai`),
 Vectorize (`vectorize`), Hyperdrive (`hyperdrive`), Analytics Engine (`analyticsEngineDataset`), Workflows
@@ -67,8 +68,8 @@ Vectorize (`vectorize`), Hyperdrive (`hyperdrive`), Analytics Engine (`analytics
 ## Type what inference cannot
 
 Inference reads the configuration as data. A queue binding names its queue but not the type of its
-messages, and a binding to another Worker names that Worker but not its entrypoint's methods. State those
-types once, in the module that owns them, by adding to the global `Env`:
+messages, and a binding to another Worker names that Worker but not its entrypoint's methods. State a
+queue's message type once, in the module that owns it, by adding to the global `Env`:
 
 ```ts
 // src/reminders.ts
@@ -90,23 +91,11 @@ declare global {
 }
 ```
 
-```ts
-// src/pricing.ts
-import type { PricingService } from '@maximus-examples/pricing/contract';
-
-declare global {
-  interface Env {
-    /** The pricing Worker's `Service` entrypoint. */
-    PRICING: Service<PricingService>;
-  }
-}
-```
-
 The module must belong to the TypeScript project, as everything in `src/` does in the starter's
 `tsconfig.json`. [`examples/queue-reminders/src/reminders.ts`](../../examples/queue-reminders/src/reminders.ts)
-and [`examples/worker-rpc/orders/src/pricing.ts`](../../examples/worker-rpc/orders/src/pricing.ts) do
-exactly this; [Worker RPC](worker-rpc.md) explains where a Worker's contract comes from. A binding to one
-of the Worker's own Durable Object classes needs none of it: `Env` types it by its class.
+does exactly this. Another Maximus Worker's methods need none of it: `services` types them from the RPC
+document that Worker publishes (see [Other Workers](#other-workers)). Nor does a binding to one of the
+Worker's own Durable Object classes: `Env` types it by its class.
 
 ## Workers KV, R2 and queues
 
@@ -166,22 +155,30 @@ binding by the class, so a stub's methods are checked. See [Durable Objects](dur
 
 ## Other Workers
 
-`bindings.worker` binds an entrypoint of another Worker of the same account. A Maximus Worker serves its RPC
-methods on the entrypoint `Service`, and admits the callers its `rpc.callers` names by the `caller` the
-binding's `props` carry:
+A Maximus Worker serves its RPC methods on the entrypoint `Service` and publishes them in its RPC document,
+`openapi.rpc.json`. Bind it in `services`, by its Worker's name and that document:
+
+```ts
+services: {
+  PRICING: { worker: 'example-pricing', openapi: '../pricing/openapi.rpc.json' },
+},
+```
+
+`maximus()` declares the binding to its `Service` entrypoint with the props `{ caller }`, this service's
+`name`, which the other Worker admits in its `rpc.callers`, and `maximus prepare` types `env.PRICING` from
+the document, in `.maximus/services/pricing.ts`. [Worker RPC](worker-rpc.md) covers both sides.
+
+`bindings.worker` binds an entrypoint of any other Worker of the same account, typed in the global `Env` by
+an interface of its methods:
 
 ```ts
 env: {
-  PRICING: bindings.worker({
-    worker: 'example-pricing',
-    exportName: 'Service',
-    props: { caller: 'orders' },
-  }),
+  SEARCH: bindings.worker({ worker: 'search', exportName: 'SearchEntrypoint' }),
 },
 ```
 
 Deploy the bound Worker first. Under `vp dev`, start its development server before this one's, and the
-binding reaches it on your machine. [Worker RPC](worker-rpc.md) covers both sides.
+binding reaches it on your machine.
 
 ## Browser Run
 

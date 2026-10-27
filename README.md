@@ -30,13 +30,20 @@ skill linked for coding agents. [Getting started](docs/getting-started.md) build
 ## A route is a file
 
 ```ts
-// routes/v1/notes/[noteId].get.ts: GET /api/v1/notes/{noteId}
+// routes/v1/notes/[noteId].get.ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Read one note of the organization by its id.',
     input: { noteId: UuidSchema },
@@ -131,7 +138,7 @@ Node and deployable to Cloudflare:
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [`tasks`](examples/tasks)                     | Routes as files, MCP tools, guides and an Agent Skill, and a React app on the same Worker. |
 | [`d1-notes`](examples/d1-notes)               | D1 with migrations, rows keyed by organization, keyset pages and search for agents.        |
-| [`worker-rpc`](examples/worker-rpc)           | Two Workers over native RPC, typed by the contract one of them publishes.                  |
+| [`worker-rpc`](examples/worker-rpc)           | Two Workers over native RPC, typed by the RPC document one of them publishes.              |
 | [`queue-reminders`](examples/queue-reminders) | A queue consumer that delivers once, a dead letter queue and a cron that recovers.         |
 | [`browser-pages`](examples/browser-pages)     | Browser Run: pages as Markdown for agents, or as PNG attachments.                          |
 | [`r2-documents`](examples/r2-documents)       | Byte uploads checked against their type, SHA-256 checksums and streamed downloads from R2. |

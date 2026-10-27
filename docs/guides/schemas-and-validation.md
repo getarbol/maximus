@@ -22,6 +22,7 @@ export const TaskSchema = t.Object(
   },
   { $id: 'Task', additionalProperties: false }
 );
+/** A task. */
 export type Task = Static<typeof TaskSchema>;
 ```
 
@@ -98,17 +99,24 @@ export const NotePageSchema = Page(NoteSchema, { $id: 'NotePage' });
 ```
 
 ```ts
-// routes/v1/notes/index.get.ts: GET /api/v1/notes
-import { defineHandler, PageQueryFields, t } from '@arbol-ai/maximus';
-import { inputSchema } from '@arbol-ai/maximus/schemas';
+// routes/v1/notes/index.get.ts
+import { defineHandler, PageQueryFields } from '@arbol-ai/maximus';
 
-import { NotePageSchema } from '../../../src/notes.ts';
+import { NotePageSchema } from '#src/notes.ts';
 
+/** GET /api/v1/notes, also the MCP tool list_notes: the organization's notes, a page at a time. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.page(input)) ?? fail('INVALID_CURSOR'),
+  async ({ input, notes, fail }) => {
+    const page = await notes.list(input);
+    if (!page) {
+      return fail('INVALID_CURSOR');
+    }
+    return page;
+  },
   {
-    description: "List the organization's notes, newest first. Pass pageInfo.nextCursor as cursor for more.",
-    input: inputSchema(t.Object(PageQueryFields, { additionalProperties: false })),
+    description:
+      "List the organization's notes, newest first, a page at a time. To read the next page, pass this page's pageInfo.nextCursor as cursor.",
+    input: PageQueryFields,
     output: NotePageSchema,
     failures: ['INVALID_CURSOR'],
     mcp: { name: 'list_notes' },
@@ -122,7 +130,7 @@ export default defineHandler(
   `t.Object({ ...PageQueryFields, done: t.Optional(t.Boolean()) }, { additionalProperties: false })`.
 - Decoding applies the defaults before the handler runs, so it always receives `direction` and `limit` (the
   type `PageQuery`), and the OpenAPI document and the MCP tool listing publish both as optional, since a
-  caller may leave them out. `inputSchema()` makes no difference to either.
+  caller may leave them out. Wrapping the input in `inputSchema()` changes neither.
 - `pageLimit()` gives a list whose items are costly a lower maximum:
   `{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }`. Its default becomes the smaller of 25 and the
   maximum, unless you pass `default`. It refuses
@@ -150,7 +158,7 @@ import { defaultSchema, inputSchema, normalizeSchema, refineSchema, t } from '@a
 
 const SearchSchema = t.Object(
   {
-    query: normalizeSchema(t.String({ minLength: 1, maxLength: 100 }), (value) => value.trim()),
+    query: normalizeSchema(t.String({ minLength: 1, maxLength: 100 }), (query) => query.trim()),
     limit: defaultSchema(t.Integer({ minimum: 1, maximum: 50 }), 20),
     from: t.String({ format: 'date' }),
     to: t.String({ format: 'date' }),
@@ -160,7 +168,7 @@ const SearchSchema = t.Object(
 
 /** A search of the organization's notes: trimmed text, at most 50 notes, a range that does not end early. */
 export const SearchInputSchema = inputSchema(
-  refineSchema(SearchSchema, (value) => value.from <= value.to, {
+  refineSchema(SearchSchema, (search) => search.from <= search.to, {
     message: 'The range must not end before it starts.',
     path: ['to'],
   })
@@ -168,14 +176,18 @@ export const SearchInputSchema = inputSchema(
 ```
 
 ```ts
-// routes/v1/notes/search.post.ts: POST /api/v1/notes/search
+// routes/v1/notes/search.post.ts
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
-import { SearchInputSchema } from '../../../src/search.ts';
+import { NoteSchema } from '#src/notes.ts';
+import { SearchInputSchema } from '#src/search.ts';
 
+/** POST /api/v1/notes/search: the organization's notes that contain a text. */
 export default defineHandler(
-  async ({ input, notes }) => ({ notes: await notes.search(input.query, input.limit) }),
+  async ({ input, notes }) => {
+    const matchingNotes = await notes.search(input.query, input.limit);
+    return { notes: matchingNotes };
+  },
   {
     description: "Find the organization's notes that contain a text.",
     effect: 'read',
@@ -259,8 +271,8 @@ const ListTasksQuery = t.Object(
     priority: t.Optional(
       t
         .Transform(t.String({ pattern: '^[1-5](,[1-5])*$' }))
-        .Decode((value) => value.split(',').map(Number))
-        .Encode((value) => value.join(','))
+        .Decode((text) => text.split(',').map(Number))
+        .Encode((priorities) => priorities.join(','))
     ),
   },
   { additionalProperties: false }
@@ -272,6 +284,7 @@ const ListTasksInput = t.Object(
   { additionalProperties: false }
 );
 
+/** The input of `GET /v1/tasks`: the query as it travels, decoded into what the handler receives. */
 export const ListTasksInputSchema = inputSchema(ListTasksInput, ListTasksQuery);
 ```
 
@@ -306,14 +319,17 @@ import { readSchema } from '@arbol-ai/maximus/schemas';
 import { TaskSchema } from './tasks.ts';
 import type { Task } from './tasks.ts';
 
-/** The organization's task with this id, or null when it has none. */
-export async function readTask(
-  store: KVNamespace,
+/** The organization's task with this id, or undefined when it has none. */
+export async function findTask(
+  namespace: KVNamespace,
   organizationId: string,
   taskId: string
-): Promise<Task | null> {
-  const stored = await store.get(`tasks/${organizationId}/${taskId}`);
-  return stored === null ? null : readSchema(TaskSchema, JSON.parse(stored));
+): Promise<Task | undefined> {
+  const stored = await namespace.get(`tasks/${organizationId}/${taskId}`);
+  if (stored === null) {
+    return undefined;
+  }
+  return readSchema(TaskSchema, JSON.parse(stored));
 }
 ```
 
@@ -321,14 +337,18 @@ export async function readTask(
 `{ code, message, path }`. Thrown in a handler, it answers `INTERNAL_ERROR`: a record that does not match its
 schema is never answered as one. `checkSchema` answers `{ success: true, data }` or
 `{ success: false, error }` with that same error instead, for a refusal the code handles itself, as the
-`orders` Worker of the [`worker-rpc`](../../examples/worker-rpc) example does with a failure's data:
+queue consumer of the [`queue-reminders`](../../examples/queue-reminders) example does with a message the
+service never sends:
 
 ```ts
-const unknown =
-  priced.error.code === 'UNKNOWN_SKU' ? checkSchema(UnknownSkuSchema, priced.error.data) : undefined;
-if (unknown?.success) {
-  return fail('UNKNOWN_ITEM', unknown.data);
+const checked = checkSchema(ReminderMessageSchema, message.body);
+if (!checked.success) {
+  // Retrying a message this service never sends cannot make it succeed.
+  reportUnexpected(checked.error, 'queue');
+  message.ack();
+  return;
 }
+const { organizationId, reminderId } = checked.data;
 ```
 
 Both apply the schema's codecs: defaults, normalizers before their checks, refinements, and the unknown keys

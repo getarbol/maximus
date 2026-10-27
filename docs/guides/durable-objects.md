@@ -16,39 +16,48 @@ A module of `durable-objects/` default-exports a class that extends `DurableObje
 import { readSchema } from '@arbol-ai/maximus/schemas';
 import { DurableObject } from 'cloudflare:workers';
 
-import { BookingSchema } from '../src/schedule.ts';
-import type { Booking } from '../src/schedule.ts';
+import { BookingSchema } from '#src/schedule.ts';
+import type { Booking, Slot } from '#src/schedule.ts';
 
 /** A row of the bookings table. */
 type BookingRow = { slot: string; booking_id: string; patient_ref: string; booked_at: string };
 
-/** One organization's schedule for one day: every booking of that day passes through it, one at a time. */
+/** The booking a row stores, checked against the booking's schema. */
+function bookingFromRow(row: BookingRow): Booking {
+  return readSchema(BookingSchema, {
+    bookingId: row.booking_id,
+    slot: row.slot,
+    patientRef: row.patient_ref,
+    bookedAt: row.booked_at,
+  });
+}
+
+/** Whether the day already has a booking that holds the slot. */
+function isSlotHeld(sql: SqlStorage, slot: Slot): boolean {
+  const bookings = sql.exec('SELECT 1 FROM bookings WHERE slot = ?', slot).toArray();
+  return bookings.length > 0;
+}
+
+/** One organization's schedule for one day: its bookings, changed one call at a time. */
 export default class DaySchedule extends DurableObject<Env> {
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    ctx.storage.sql.exec(
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env);
+    state.storage.sql.exec(
       'CREATE TABLE IF NOT EXISTS bookings (slot TEXT PRIMARY KEY, booking_id TEXT NOT NULL UNIQUE, patient_ref TEXT NOT NULL, booked_at TEXT NOT NULL)'
     );
   }
 
-  /** The day's bookings, by slot, each read back through the booking's schema. */
-  bookings(): Booking[] {
-    return this.ctx.storage.sql
+  /** The day's bookings, by slot. */
+  listBookings(): Booking[] {
+    const rows = this.ctx.storage.sql
       .exec<BookingRow>('SELECT slot, booking_id, patient_ref, booked_at FROM bookings ORDER BY slot')
-      .toArray()
-      .map((row) =>
-        readSchema(BookingSchema, {
-          bookingId: row.booking_id,
-          slot: row.slot,
-          patientRef: row.patient_ref,
-          bookedAt: row.booked_at,
-        })
-      );
+      .toArray();
+    return rows.map(bookingFromRow);
   }
 
   /** Books the slot for the patient: the new booking, or undefined when the slot is already held. */
-  book(slot: Booking['slot'], patientRef: string): Booking | undefined {
-    if (this.ctx.storage.sql.exec('SELECT 1 FROM bookings WHERE slot = ?', slot).toArray().length > 0) {
+  book(slot: Slot, patientRef: string): Booking | undefined {
+    if (isSlotHeld(this.ctx.storage.sql, slot)) {
       return undefined;
     }
     const booking: Booking = {
@@ -65,6 +74,12 @@ export default class DaySchedule extends DurableObject<Env> {
       booking.bookedAt
     );
     return booking;
+  }
+
+  /** Cancels the booking, and answers whether the day held one with this id. */
+  cancel(bookingId: string): boolean {
+    const { rowsWritten } = this.ctx.storage.sql.exec('DELETE FROM bookings WHERE booking_id = ?', bookingId);
+    return rowsWritten > 0;
   }
 }
 ```
@@ -120,8 +135,11 @@ organization's:
 import { defineContext } from '@arbol-ai/maximus';
 
 export default defineContext(({ env, principal }) => ({
-  /** The organization's schedule for the day: one object per organization and day. */
-  schedule: (date: string) => env.SCHEDULES.getByName(`${principal.organizationId}/${date}`),
+  /**
+   * The organization's schedule for the day: one Durable Object per organization and day, named after both,
+   * so a caller reaches only its own organization's.
+   */
+  daySchedule: (date: string) => env.SCHEDULES.getByName(`${principal.organizationId}/${date}`),
 }));
 ```
 
@@ -131,18 +149,28 @@ A route then calls the object as it would a store:
 // routes/v1/days/[date]/bookings.post.ts
 import { defineHandler } from '@arbol-ai/maximus';
 
-import { BookingSchema, DateSchema, PatientRefSchema, SlotSchema } from '../../../../src/schedule.ts';
+import { BookingSchema, DateSchema, PatientRefSchema, SlotSchema } from '#src/schedule.ts';
 
-/** POST /api/v1/days/{date}/bookings: books a free slot, or answers SLOT_TAKEN. */
+/**
+ * POST /api/v1/days/{date}/bookings, also the MCP tool book_slot: the booking of a slot of the day for a
+ * patient, or SLOT_TAKEN when someone holds the slot already, however many callers ask at once.
+ */
 export default defineHandler(
-  async ({ input, schedule, fail }) =>
-    (await schedule(input.date).book(input.slot, input.patientRef)) ?? fail('SLOT_TAKEN'),
+  async ({ input, daySchedule, fail }) => {
+    const booking = await daySchedule(input.date).book(input.slot, input.patientRef);
+    if (!booking) {
+      return fail('SLOT_TAKEN');
+    }
+    return booking;
+  },
   {
-    description: "Book a free slot of a day for a patient, named by your system's identifier for them.",
+    description:
+      "Book a free slot of a day for a patient, named by your system's identifier for them, never by their name.",
     input: { date: DateSchema, slot: SlotSchema, patientRef: PatientRefSchema },
     output: BookingSchema,
     failures: ['SLOT_TAKEN'],
     http: { successStatus: 201 },
+    mcp: { name: 'book_slot' },
   }
 );
 ```

@@ -51,15 +51,18 @@ See [MCP](https://github.com/getarbol/maximus/blob/main/docs/guides/mcp.md).
 
 ## Worker RPC
 
-The owner allows its callers and exposes routes:
+The owner names the services allowed to call it, by their names, and each route it serves over RPC says so:
 
 ```ts
-// vite.config.ts of pricing: maximus({ …, rpc: { callers: ['orders'] } })
-// routes/v1/quotes.post.ts of pricing, also the RPC method quoteItems
+// pricing/vite.config.ts: maximus({ name: 'example-pricing', …, rpc: { callers: ['example-orders'] } })
+// pricing/routes/v1/quotes.post.ts, also the RPC method quoteItems
 export default defineHandler(
   ({ input, fail }) => {
-    const priced = quote(input.items);
-    return 'quote' in priced ? priced.quote : fail('UNKNOWN_SKU', { index: priced.unknown });
+    const priced = priceItems(input.items);
+    if (!priced.ok) {
+      return fail('UNKNOWN_SKU', { index: priced.unknownIndex });
+    }
+    return priced.quote;
   },
   {
     description: 'Price a list of catalog items for the calling organization.',
@@ -74,44 +77,40 @@ export default defineHandler(
 );
 ```
 
-The generated Worker exports the methods as its `Service` entrypoint, one per route that declares `rpc`,
-named by the operation. The owner publishes a contract module that imports no route: the schemas and an
-interface of the entrypoint, which callers import, and a type test proves the routes serve it:
+The generated Worker exports the methods as its `Service` entrypoint, one per route or tool that declares
+`rpc`, named by the operation. `bunx maximus openapi` writes the owner's RPC document, `openapi.rpc.json`,
+beside `openapi.json`: each method as `POST /rpc/<method>` whose body is its whole input, its answer and
+failures as named components, and `x-rpc-callers`. Commit both; `maximus openapi --check` fails when the
+routes changed and the files did not.
+
+The caller binds the owner by its Worker's name and that document, and imports nothing of the owner's
+project:
 
 ```ts
-export interface PricingService extends WorkerEntrypoint {
-  quoteItems: (principal: Principal, input: { items: Items }) => Promise<Result<Quote, Failure>>;
-}
-
-// tests/quotes.test.ts of pricing; tsc checks it in bun run typecheck
-expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<
-  Omit<PricingService, keyof WorkerEntrypoint>
->();
+// orders/vite.config.ts
+maximus({
+  name: 'example-orders',
+  // …
+  services: { PRICING: { worker: 'example-pricing', openapi: '../pricing/openapi.rpc.json' } },
+});
 ```
 
-The caller binds the owner and types the binding with the contract:
-
-```ts
-// vite.config.ts of orders
-env: {
-  PRICING: bindings.worker({ worker: 'example-pricing', exportName: 'Service', props: { caller: 'orders' } }),
-},
-
-// src/pricing.ts of orders
-declare global {
-  interface Env {
-    PRICING: Service<PricingService>;
-  }
-}
-```
-
-A handler forwards its verified principal, translates the owner's failures into its own catalog and catches a
-call that throws: see [errors-and-results.md](errors-and-results.md#failures-of-other-services).
+`maximus()` binds `PRICING` to the owner's `Service` entrypoint with the props `{ caller: 'example-orders' }`,
+this service's name. `maximus prepare` writes `.maximus/services/pricing.ts` from the document:
+`PricingService`, and each method's input, output and failure union, so `env.PRICING` is
+`Service<PricingService>`. A handler imports those types from `#maximus/services/pricing`, forwards its
+verified principal, catches a call that throws and translates the owner's failures, narrowed by their code,
+into its own catalog: see [errors-and-results.md](errors-and-results.md#failures-of-other-services).
 
 - The owner admits a call only when the binding's props are exactly `{ caller }` with an allowed caller and
   the principal is exactly `{ actorId, actorKind, organizationId, requestId }`; otherwise `UNAUTHORIZED`.
 - No scope is checked and `authority` is absent: the calling deployment is trusted. When the owner must
   verify the original caller's token, call its HTTP route with that token (`authority.token`) instead.
+- Several services of one repository: one `services` entry per binding, each to the document the other
+  publishes, each typed in its own `.maximus/services/<binding>.ts`. A service can be both an owner
+  (`rpc.callers`) and a caller (`services`). From another repository, the document is a copy the owner's CI
+  publishes and the caller's updates.
+- The caller's type check fails the moment the owner's document changes in a way its calls do not follow.
 - Under `vp dev`, start the owner first, then the caller, which finds it by name. Deploy the owner first,
   too: the caller's binding names it.
 

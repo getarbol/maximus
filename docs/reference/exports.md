@@ -204,6 +204,7 @@ See [Authentication and scopes](../guides/authentication-and-scopes.md).
 | `retryAfterSeconds`       | function | The seconds a `Retry-After` value asks to wait, at most an hour by default; `undefined` when it is unreadable.        |
 | `isJsonMediaType`         | function | Whether a content type is `application/json` or a `+json` type.                                                       |
 | `createOpenApi`           | function | The application's OpenAPI 3.1 document.                                                                               |
+| `createRpcOpenApi`        | function | The OpenAPI 3.1 document of the operations it serves over native RPC, which callers type their bindings from.         |
 
 See [Routes](../guides/routes.md) and [Worker composition](../guides/worker-composition.md).
 
@@ -536,6 +537,7 @@ providers. See [Configuration](configuration.md).
 | `MaximusOptions`          | type     | What `maximus()` takes: the application's options and the Worker's settings, by Cloudflare's names.                                                 |
 | `Phase`                   | type     | `development` under `vp dev`, `production` for every build.                                                                                         |
 | `TokenOptions`            | type     | The `tokens` option: the token policy less what `auth.ts` states. Its audience defaults to the origin; `development` is the token `vp dev` accepts. |
+| `ServiceOptions`          | type     | An entry of the `services` option: the `worker` a service binding reaches and the `openapi` document that types it.                                 |
 | `WebAppOptions`           | type     | The `webApp` option: the headers of a web app's pages and files.                                                                                    |
 | `auth0`                   | function | The `tokens` options of an API whose access tokens Auth0 issues: its issuer, from its domain or domains, its audience and its algorithms.           |
 | `cloudflareAccess`        | function | The `tokens` options of an application behind Cloudflare Access: the Access source, the team's issuer and keys, the AUD tag and what callers hold.  |

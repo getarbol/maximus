@@ -4,12 +4,12 @@ A route can also be a method that other Workers of your Cloudflare account call 
 [Service Binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/),
 with no HTTP request, token or JSON body in between. This guide follows
 [`examples/worker-rpc`](../../examples/worker-rpc), where the Worker `orders` prices an order by calling
-the Worker `pricing`: how the owner serves a route over RPC, publishes its contract and keeps it in step,
-and how a caller binds it, types it and calls it.
+the Worker `pricing`: how the owner serves a route over RPC and publishes the document its callers bind to,
+and how a caller binds it, typed, without importing anything of the owner's project.
 
 ## Serve a route over RPC
 
-The owner names the Workers allowed to call it in `maximus()`, by the caller name their bindings carry:
+The owner names the services allowed to call it in `maximus()`, by the name each one has:
 
 ```ts
 // pricing/vite.config.ts
@@ -24,7 +24,7 @@ export default defineConfig({
       origin: 'https://example-pricing.example.workers.dev',
       tokens: { issuer: 'https://auth.example.com/' },
       compatibilityDate: '2026-10-26',
-      rpc: { callers: ['orders'] },
+      rpc: { callers: ['example-orders'] },
     }),
   ],
 });
@@ -36,14 +36,17 @@ and each route it serves over RPC says so in its contract:
 // pricing/routes/v1/quotes.post.ts
 import { defineHandler } from '@arbol-ai/maximus';
 
-import { quote } from '../../src/catalog.ts';
-import { ItemsSchema, QuoteSchema } from '../../src/contract.ts';
+import { priceItems } from '#src/catalog.ts';
+import { ItemsSchema, QuoteSchema } from '#src/quotes.ts';
 
 /** POST /api/v1/quotes, and the RPC method quoteItems the orders Worker calls. */
 export default defineHandler(
   ({ input, fail }) => {
-    const priced = quote(input.items);
-    return 'quote' in priced ? priced.quote : fail('UNKNOWN_SKU', { index: priced.unknown });
+    const priced = priceItems(input.items);
+    if (!priced.ok) {
+      return fail('UNKNOWN_SKU', { index: priced.unknownIndex });
+    }
+    return priced.quote;
   },
   {
     description: 'Price a list of catalog items for the calling organization.',
@@ -58,8 +61,8 @@ export default defineHandler(
 );
 ```
 
-`rpc: true` admits every caller of `rpc.callers`; `rpc: { callers: ['orders'] }` admits only those it
-lists, each of which `rpc.callers` must name, or the Worker does not start:
+`rpc: true` admits every caller of `rpc.callers`; `rpc: { callers: ['example-orders'] }` admits only those
+it lists, each of which `rpc.callers` must name, or the Worker does not start:
 `Operation "<name>": RPC callers must be allowed by the application.` A tool of `mcp/tools/` takes `rpc`
 too.
 
@@ -99,97 +102,32 @@ When the owner must verify the original caller's token and scopes itself, call i
 the caller's own token, `authority.token` (see
 [Context and middleware](middleware-and-context.md#what-a-handler-receives)).
 
-## Publish a contract
+## Publish the RPC document
 
-The caller never imports the owner's routes: their types depend on the owner's generated registry. The
-owner publishes a contract module instead, which imports no module of its project: the schemas a caller
-shares, the data of the failures it may need to read, and the type of the entrypoint.
+The owner publishes what its callers bind to as an OpenAPI document, written from its routes:
 
-```ts
-// pricing/src/contract.ts
-import { t } from '@arbol-ai/maximus';
-import type { Failure, Principal, Result, Static } from '@arbol-ai/maximus';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-
-/** One line of an order: a catalog SKU and how many units of it. */
-export const ItemSchema = t.Object(
-  {
-    sku: t.String({ pattern: '^[A-Z]{3}-[0-9]{3}$' }),
-    quantity: t.Integer({ minimum: 1, maximum: 1000 }),
-  },
-  { additionalProperties: false }
-);
-
-/** The items of one quote: at least one, at most 50. */
-export const ItemsSchema = t.Array(ItemSchema, { minItems: 1, maxItems: 50 });
-export type Items = Static<typeof ItemsSchema>;
-
-/** A quote: each line's unit and total price, and the order's total, in US cents. */
-export const QuoteSchema = t.Object(
-  {
-    currency: t.Literal('USD'),
-    lines: t.Array(
-      t.Object(
-        { sku: t.String(), quantity: t.Integer(), unitCents: t.Integer(), totalCents: t.Integer() },
-        { additionalProperties: false }
-      )
-    ),
-    totalCents: t.Integer({ minimum: 0 }),
-  },
-  { $id: 'Quote', additionalProperties: false }
-);
-export type Quote = Static<typeof QuoteSchema>;
-
-/** The data of `UNKNOWN_SKU`: the position of the first item the catalog does not list. */
-export const UnknownSkuSchema = t.Object(
-  { index: t.Integer({ minimum: 0 }) },
-  { additionalProperties: false }
-);
-
-/** Pricing's `Service` entrypoint: one method per route that declares `rpc`. */
-export interface PricingService extends WorkerEntrypoint {
-  quoteItems: (principal: Principal, input: { items: Items }) => Promise<Result<Quote, Failure>>;
-}
+```sh
+cd pricing && bunx maximus openapi
+# openapi.json was written: 0 operations. openapi.rpc.json was written: 1 operation.
 ```
 
-Callers import it as a package export of the owner, `"./contract": "./src/contract.ts"` in its
-`package.json`, or from a package the two share.
-
-### Keep the contract in step
-
-The contract repeats what the routes declare, so the owner proves the two agree with a type test.
-`RpcMethods<typeof app.operations>`, from `@arbol-ai/maximus/workers`, is the type of the methods the
-routes serve:
-
-```ts
-// pricing/tests/quotes.test.ts
-import type { RpcMethods } from '@arbol-ai/maximus/workers';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-import { expectTypeOf, it } from 'vite-plus/test';
-
-import type { app } from '#maximus/app';
-
-import type { PricingService } from '../src/contract.ts';
-
-it('serves over RPC exactly the methods its contract declares', () => {
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<
-    Omit<PricingService, keyof WorkerEntrypoint>
-  >();
-});
-```
-
-The test fails to type-check the moment a route and the contract differ: a method added or removed, an
-input or an output changed.
+`openapi.json` is the public document the Worker serves. `openapi.rpc.json` lists every operation the
+Worker serves over native RPC, internal ones and tools included, each as `POST /rpc/<method>` whose body is
+the method's whole input, with its answer and its failures named as in the HTTP document
+(`QuoteItemsInput`, `QuoteResponse`, `UnknownSkuError`) and `x-rpc-callers` naming who may call it.
+[Wire formats](../reference/wire-formats.md#the-rpc-document) describes it. Commit both files and check
+them in CI with `bunx maximus openapi --check`, which fails when the routes changed and the files did not:
+the examples run it in their `openapi` script.
 
 ## Bind and call the owner
 
-The caller declares a Service Binding to the owner's Worker, by its name, and to its `Service`
-entrypoint. Its `props` name the caller:
+The caller names the owner's Worker and its RPC document in `services`. The document is a file of the
+caller's repository: in a monorepo, the path to the owner's own; in another repository, a copy the
+owner's CI publishes and yours updates.
 
 ```ts
 // orders/vite.config.ts
 import { maximus } from '@arbol-ai/maximus/vite';
-import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
@@ -200,46 +138,56 @@ export default defineConfig({
       origin: 'https://example-orders.example.workers.dev',
       tokens: { issuer: 'https://auth.example.com/' },
       compatibilityDate: '2026-10-26',
-      env: {
-        PRICING: bindings.worker({
-          worker: 'example-pricing',
-          exportName: 'Service',
-          props: { caller: 'orders' },
-        }),
+      services: {
+        PRICING: { worker: 'example-pricing', openapi: '../pricing/openapi.rpc.json' },
       },
     }),
   ],
 });
 ```
 
-The props belong to the deployment, never to a request. A binding that names the owner's Worker carries
-no types of its methods, so the caller types it once, with the contract, in a global `Env` declaration:
+`maximus()` binds `PRICING` to the owner Worker's `Service` entrypoint, with props that name this service,
+`{ caller: 'example-orders' }`, the name the owner admits in its `rpc.callers`. The props belong to the
+deployment, never to a request. `maximus prepare` reads the document and writes
+`.maximus/services/pricing.ts`, which types the binding, so `env.PRICING` is
+`Service<PricingService>`:
 
 ```ts
-// orders/src/pricing.ts
-import type { PricingService } from '@maximus-examples/pricing/contract';
+// .maximus/services/pricing.ts (generated)
+export interface PricingService extends WorkerEntrypoint {
+  /** Create a quote: Price a list of catalog items for the calling organization. */
+  quoteItems(principal: Principal, input: QuoteItemsInput): Promise<Result<Quote, QuoteItemsFailure>>;
+}
 
-declare global {
-  interface Env {
-    /** Pricing's `Service` entrypoint, called as `orders`. */
-    PRICING: Service<PricingService>;
-  }
+export type QuoteItemsFailure =
+  | InvalidInputFailure
+  | UnknownSkuFailure
+  | …;
+
+export interface UnknownSkuFailure {
+  code: 'UNKNOWN_SKU';
+  message: string;
+  retryable: false;
+  data: UnknownSkuFailureData;
 }
 ```
 
-A route of the caller then calls the method with the principal its own call was verified with, and
-answers in its own catalog:
+Every type comes from the document: the caller imports nothing of the owner's project, and its type check
+fails the moment the owner's document changes in a way its calls do not follow. A route of the caller then
+calls the method with the principal its own call was verified with, and answers in its own catalog:
 
 ```ts
 // orders/routes/v1/quotes.post.ts
 import { defineHandler, t } from '@arbol-ai/maximus';
-import { checkSchema } from '@arbol-ai/maximus/schemas';
-import { ItemsSchema, UnknownSkuSchema } from '@maximus-examples/pricing/contract';
+import type { Result } from '@arbol-ai/maximus';
+
+import type { Quote, QuoteItemsFailure } from '#maximus/services/pricing';
+import { OrderItemsSchema } from '#src/items.ts';
 
 /** POST /api/v1/quotes: what an order of these items would cost, as the pricing Worker prices them. */
 export default defineHandler(
   async ({ env, principal, input, fail }) => {
-    let priced;
+    let priced: Result<Quote, QuoteItemsFailure>;
     try {
       // The caller's verified principal travels as it is; pricing checks it and the items again.
       priced = await env.PRICING.quoteItems(principal, input);
@@ -249,17 +197,19 @@ export default defineHandler(
     if (priced.ok) {
       return { currency: priced.value.currency, totalCents: priced.value.totalCents };
     }
-    const unknown =
-      priced.error.code === 'UNKNOWN_SKU' ? checkSchema(UnknownSkuSchema, priced.error.data) : undefined;
-    if (unknown?.success) {
-      return fail('UNKNOWN_ITEM', unknown.data);
+    const failure = priced.error;
+    if (failure.code === 'UNKNOWN_SKU') {
+      return fail('UNKNOWN_ITEM', { index: failure.data.index });
     }
-    return fail(priced.error.retryable ? 'UPSTREAM_UNAVAILABLE' : 'INTERNAL_ERROR');
+    if (failure.retryable) {
+      return fail('UPSTREAM_UNAVAILABLE');
+    }
+    return fail('INTERNAL_ERROR');
   },
   {
     description: 'Price the items of a prospective order. Nothing is reserved or charged.',
     effect: 'read',
-    input: { items: ItemsSchema },
+    input: { items: OrderItemsSchema },
     output: { currency: t.Literal('USD'), totalCents: t.Integer({ minimum: 0 }) },
     failures: ['UNKNOWN_ITEM'],
   }
@@ -272,10 +222,18 @@ export default defineHandler(
   no `Result`, so catch it.
 - A failure from the owner belongs to the owner's catalog, which the caller's output check would refuse
   unless the caller's catalog declares the same code. Translate it: name what the caller can fix in your
-  own failure, keep what the owner may recover from retryable, and answer the rest as your own fault. Read
-  a failure's `data` through its schema before you use it.
+  own failure, keep what the owner may recover from retryable, and answer the rest as your own fault. Its
+  code narrows its `data`, as the document types it; the caller's `fail` still checks the data its own
+  failure declares, so an owner deployed with another contract than the document's answers
+  `INTERNAL_ERROR`, never wrong data.
+- The caller's input is its own API's, declared with its own schemas: the compiler holds it to the owner's
+  input type where the caller passes it.
 - The principal carries the caller's `requestId`, so the owner's logs and observations of the call carry
   the same request id as the caller's.
+
+Several services in one repository each bind the others the same way, each to the document the other
+publishes: one `services` entry per binding, typed in its own `.maximus/services/<binding>.ts`. A service
+that is both an owner and a caller lists its callers in `rpc.callers` and its owners in `services`.
 
 ## Run and test both
 
@@ -287,14 +245,35 @@ cd examples/worker-rpc/pricing && bun run dev   # http://localhost:5174
 cd examples/worker-rpc/orders && bun run dev    # http://localhost:5173
 ```
 
-The owner's tests call its route over HTTP in Node, as any route's tests do, beside the type test above.
-The caller's tests stand in for the binding with an object that has the method, typed by the contract,
-and check what it was called with:
+The owner's tests call its route over HTTP in Node, as any route's tests do, and check that the committed
+RPC document is the one its routes declare:
+
+```ts
+// pricing/tests/quotes.test.ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { createRpcOpenApi } from '@arbol-ai/maximus';
+import { expect, it } from 'vite-plus/test';
+
+import { app } from '#maximus/app';
+
+it('publishes the RPC document its callers bind to, current with its routes', () => {
+  const published: unknown = JSON.parse(
+    readFileSync(join(import.meta.dirname, '../openapi.rpc.json'), 'utf-8')
+  );
+  expect(published).toStrictEqual(createRpcOpenApi(app));
+});
+```
+
+The caller's tests stand in for the binding with an object that has the method, typed by the generated
+module, and check what it was called with:
 
 ```ts
 // orders/tests/quotes.test.ts
-import type { PricingService } from '@maximus-examples/pricing/contract';
 import { vi } from 'vite-plus/test';
+
+import type { PricingService } from '#maximus/services/pricing';
 
 const token = 'test-development-token-for-local-tests';
 /** The pricing binding as the tests stand it in: its one RPC method, which records each call. */
@@ -308,6 +287,8 @@ const env = { DEVELOPMENT_TOKEN: token, PRICING: pricing } as unknown as Env;
 
 A Worker composed by hand serves the same entrypoint: `createWorker(app).entrypoint`, exported under the
 name the callers' bindings give as `exportName`. The operations declare `rpc` as routes do, and the
-application's configuration lists `rpc.callers`. The same Worker can wrap its own entrypoint classes and
-Durable Objects so they run inside the application's diagnostics; see
+application's configuration lists `rpc.callers`; `createRpcOpenApi(app)` builds its RPC document. A caller
+composed by hand declares the binding with `bindings.worker({ worker, exportName: 'Service', props: { caller } })`
+and types it itself. The same Worker can wrap its own entrypoint classes and Durable Objects so they run
+inside the application's diagnostics; see
 [Worker composition](worker-composition.md#entrypoints-and-durable-objects).

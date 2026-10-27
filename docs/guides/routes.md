@@ -87,18 +87,26 @@ A route file default-exports `defineHandler(handler, contract)`. This is the PAT
 [`d1-notes`](../../examples/d1-notes) example:
 
 ```ts
-// routes/v1/notes/[noteId].patch.ts: PATCH /api/v1/notes/{noteId}
+// routes/v1/notes/[noteId].patch.ts
 import { defineHandler, t, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteFields, NoteSchema } from '../../../src/notes.ts';
+import { NoteFields, NoteSchema } from '#src/notes.ts';
 
+/** PATCH /api/v1/notes/{noteId}: the note, with its title, its body or both changed. */
 export default defineHandler(
-  async ({ input: { noteId, ...fields }, notes, fail }) =>
-    (await notes.update(noteId, fields)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const { noteId, ...changes } = input;
+    const note = await notes.update(noteId, changes);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Change the title, the body or both of a note.',
     input: t.Object(
       { noteId: UuidSchema, title: t.Optional(NoteFields.title), body: t.Optional(NoteFields.body) },
+      // Besides the path's id, at least one field to change.
       { additionalProperties: false, minProperties: 2 }
     ),
     output: NoteSchema,
@@ -230,25 +238,18 @@ Only a [byte upload](#byte-uploads) reads input fields from request headers.
 A route answers its output in the envelope, with `200 OK` unless `http.successStatus` says `201` or `202`:
 
 ```ts
-// routes/v1/tasks/index.post.ts: POST /api/v1/tasks, answered with 201 Created
-import { defineHandler, t } from '@arbol-ai/maximus';
+// routes/v1/tasks/index.post.ts
+import { defineHandler } from '@arbol-ai/maximus';
 
-import { TaskSchema } from '../../../src/tasks.ts';
+import { TaskSchema, TaskTitleSchema } from '#src/tasks.ts';
 
-export default defineHandler(
-  ({ input, tasks }) =>
-    tasks.put({
-      taskId: crypto.randomUUID(),
-      title: input.title,
-      done: false,
-      createdAt: new Date().toISOString(),
-    }),
-  {
-    input: { title: t.String({ minLength: 1, maxLength: 200 }) },
-    output: TaskSchema,
-    http: { successStatus: 201 },
-  }
-);
+/** POST /api/v1/tasks: a new open task, answered with 201 Created. */
+export default defineHandler(({ input, tasks }) => tasks.create(input.title), {
+  description: 'Add an open task to the organization.',
+  input: { title: TaskTitleSchema },
+  output: TaskSchema,
+  http: { successStatus: 201 },
+});
 ```
 
 ```json
@@ -277,26 +278,28 @@ A route that receives a file declares `http.body: 'bytes'`, and its handler read
 itself. This is the upload route of the [`r2-documents`](../../examples/r2-documents) example:
 
 ```ts
-// routes/v1/documents/index.post.ts: POST /api/v1/documents?filename=…
+// routes/v1/documents/index.post.ts
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-import { DocumentSchema, FilenameSchema } from '../../../src/documents.ts';
-import { acceptedFormat } from '../../../src/formats.ts';
+import { DocumentSchema, FilenameSchema, MAX_DOCUMENT_BYTES } from '#src/documents.ts';
+import { acceptedFormat } from '#src/formats.ts';
 
-/** The largest document the service accepts, in bytes. */
-const MAX_DOCUMENT = 10 * 1024 * 1024;
-
+/**
+ * POST /api/v1/documents?filename=…: the request's bytes, as a new document of its `content-type`, answered
+ * with 201 Created. The bytes are read within the limit, then must match the type before anything is stored.
+ */
 export default defineHandler(
   async ({ input, body, documents, fail }) => {
-    const bytes = await body.read();
-    if (!bytes.ok) {
-      return bytes.error;
+    const upload = await body.read();
+    if (!upload.ok) {
+      return upload.error;
     }
-    const format = acceptedFormat(input.contentType, bytes.value);
+    const bytes = upload.value;
+    const format = acceptedFormat(input.contentType, bytes);
     if (!format) {
       return fail('DOCUMENT_NOT_ACCEPTED');
     }
-    return documents.create(input.filename, format, bytes.value);
+    return documents.create(input.filename, format, bytes);
   },
   {
     description: 'Upload a document: a PDF, PNG, JPEG or UTF-8 text file of at most 10 MiB.',
@@ -307,7 +310,7 @@ export default defineHandler(
     output: DocumentSchema,
     failures: ['DOCUMENT_NOT_ACCEPTED'],
     http: { body: 'bytes', headers: { contentType: 'content-type' }, successStatus: 201 },
-    maxBodyBytes: MAX_DOCUMENT,
+    maxBodyBytes: MAX_DOCUMENT_BYTES,
   }
 );
 ```
@@ -338,9 +341,15 @@ A route that answers a file declares `output: AttachmentOutputSchema` and `http.
 returns the file's bytes, media type, name and exact length:
 
 ```ts
-// routes/v1/documents/[documentId]/content.get.ts: GET /api/v1/documents/{documentId}/content
+// routes/v1/documents/[documentId]/content.get.ts
 import { AttachmentOutputSchema, defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
+import { MAX_DOCUMENT_BYTES } from '#src/documents.ts';
+
+/**
+ * GET /api/v1/documents/{documentId}/content: the document's bytes as an attachment, streamed from R2 with
+ * the exact length its metadata states.
+ */
 export default defineHandler(
   async ({ input, documents, fail }) => {
     const opened = await documents.open(input.documentId);
@@ -361,7 +370,7 @@ export default defineHandler(
     output: AttachmentOutputSchema,
     failures: ['DOCUMENT_NOT_FOUND'],
     http: { response: 'attachment' },
-    maxOutputBytes: 10 * 1024 * 1024,
+    maxOutputBytes: MAX_DOCUMENT_BYTES,
   }
 );
 ```
@@ -439,20 +448,29 @@ This route of the [`worker-rpc`](../../examples/worker-rpc) example is named for
 over RPC, and is internal:
 
 ```ts
-// pricing/routes/v1/quotes.post.ts: POST /api/v1/quotes, and the RPC method quoteItems
+// pricing/routes/v1/quotes.post.ts
 import { defineHandler } from '@arbol-ai/maximus';
 
-import { quote } from '../../src/catalog.ts';
-import { ItemsSchema, QuoteSchema } from '../../src/contract.ts';
+import { priceItems } from '#src/catalog.ts';
+import { ItemsSchema, QuoteSchema } from '#src/quotes.ts';
 
+/**
+ * POST /api/v1/quotes, and the RPC method quoteItems the orders Worker calls. Internal: the public OpenAPI
+ * document leaves it out, though its scope still admits a caller over HTTP, and openapi.rpc.json, the RPC
+ * document its callers bind to, lists it.
+ */
 export default defineHandler(
   ({ input, fail }) => {
-    const priced = quote(input.items);
-    return 'quote' in priced ? priced.quote : fail('UNKNOWN_SKU', { index: priced.unknown });
+    const priced = priceItems(input.items);
+    if (!priced.ok) {
+      return fail('UNKNOWN_SKU', { index: priced.unknownIndex });
+    }
+    return priced.quote;
   },
   {
     description: 'Price a list of catalog items for the calling organization.',
     effect: 'read',
+    // The RPC method's name: what it does reads better than the derived createQuote.
     operationId: 'quoteItems',
     input: { items: ItemsSchema },
     output: QuoteSchema,

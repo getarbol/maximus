@@ -102,13 +102,19 @@ rewrite, the parameters as `input` and `output`, and `mcp` with `--tool`:
 ```ts
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-/** GET /v1/notes/{noteId} below the API's base path, and the MCP tool get_note. */
-export default defineHandler(({ input }) => ({ noteId: input.noteId }), {
-  description: 'Describe what GET /v1/notes/{noteId} does for its caller.',
-  input: { noteId: t.String() },
-  output: { noteId: t.String() },
-  mcp: { name: 'get_note' },
-});
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: what it answers, in a few words. */
+export default defineHandler(
+  ({ input }) => {
+    const { noteId } = input;
+    return { noteId };
+  },
+  {
+    description: 'Write one sentence that tells callers what GET /api/v1/notes/{noteId} does.',
+    input: { noteId: t.String() },
+    output: { noteId: t.String() },
+    mcp: { name: 'get_note' },
+  }
+);
 ```
 
 ```text
@@ -224,23 +230,26 @@ and those of `maximus()`'s options in [Configuration](configuration.md#refusals)
 maximus openapi [directory] [--out <file>] [--check] [--json]
 ```
 
-Writes the OpenAPI document the project's Worker serves to `openapi.json` at its root, or to `--out`. It
-prepares the project for production, as a build does, runs its generated API in Node with the stand-in for
-`cloudflare:workers` its tests use, and asks it for `<basePath>/openapi.json`, so the file is exactly the
-document the Worker serves. The file is JSON indented by two spaces; the format preset leaves every
-`openapi.json` as it is written.
+Writes the OpenAPI document the project's Worker serves to `openapi.json` at its root, or to `--out`, and,
+when an operation declares `rpc`, the RPC document beside it, `openapi.rpc.json` (or `<out>.rpc.json`). It
+prepares the project for production, as a build does, runs its generated modules in Node with the stand-in
+for `cloudflare:workers` its tests use, and asks the API for `<basePath>/openapi.json`, so the file is
+exactly the document the Worker serves; the RPC document is `createRpcOpenApi` of the same application.
+Each file is JSON indented by two spaces; the format preset leaves every `openapi*.json` as it is written.
 
 ```text
 openapi.json was written: 5 operations.
 ```
 
-It says `was written` when the file changed and `was current` when it did not. With `--check` it writes
-nothing: it says `matches the routes`, or that the file `differs from what the routes declare; run maximus
-openapi.` and exits with status 1, which keeps a committed document current in CI. With `--json` it prints
-`{ file, operations, changed }`.
+It says `was written` when a file changed and `was current` when it did not, for each document. With
+`--check` it writes nothing: it says `matches the routes`, or that a file `differs from what the routes
+declare; run maximus openapi.` and exits with status 1, which keeps committed documents current in CI. With
+`--json` it prints `{ file, operations, changed, rpc? }`, `rpc` holding the same fields for the RPC
+document.
 
-Commit `openapi.json`: SDK generators read it, as [Generate clients](../guides/routes.md#generate-clients)
-shows, and another service's typed RPC binding reads it, as [Worker RPC](../guides/worker-rpc.md) shows.
+Commit both files: SDK generators read `openapi.json`, as [Generate clients](../guides/routes.md#generate-clients)
+shows, and another service types its binding from `openapi.rpc.json`, as [Worker RPC](../guides/worker-rpc.md)
+shows.
 
 ## create-maximus
 

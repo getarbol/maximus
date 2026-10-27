@@ -54,7 +54,8 @@ async function call(method: string, path: string, body?: unknown) {
 - Test each refusal by its status and `error.code`: `400 INVALID_INPUT`, `401` without a token, the route's
   own failures.
 - Test tenant isolation through the store, with two organization ids:
-  `noteStore(kv, 'org_1234567890abcdef')` never reads what `noteStore(kv, 'org_abcdef1234567890')` wrote.
+  `noteStore(namespace, 'org_1234567890abcdef').find(noteId)` never reads what
+  `noteStore(namespace, 'org_abcdef1234567890')` wrote.
 - Calling `handler(request, env)` without a third argument records no observation; pass `{ waitUntil }` to
   test observers.
 
@@ -65,9 +66,9 @@ Implement the methods the code calls, cast once (`as unknown as KVNamespace`), a
 (`tasks`), D1 over `node:sqlite` with the project's migrations applied (`d1-notes`), R2 with SHA-256 checks
 (`r2-documents`), a queue that records what it is sent and a batch that records `ack()` and `retry()`
 (`queue-reminders`), a Durable Object namespace whose `getByName` constructs the class over `node:sqlite`
-(`do-appointments`), and another Worker's binding as an object of `vi.fn()` methods typed by its contract
-(`worker-rpc/orders`). A queue or cron module is tested by calling its default export with the event, `env`
-and an execution context.
+(`do-appointments`), and another Worker's binding as an object of `vi.fn()` methods typed by the module
+`maximus prepare` writes from its RPC document (`worker-rpc/orders`). A queue or cron module is tested by
+calling its default export with the event, `env` and an execution context.
 
 Under Vitest, `maximus()` resolves `cloudflare:workers` to a stand-in: `WorkerEntrypoint` and
 `DurableObject` keep the `ctx` and `env` they are constructed with, `RpcTarget` is an empty class and
@@ -78,7 +79,7 @@ Under Vitest, `maximus()` resolves `cloudflare:workers` to a stand-in: `WorkerEn
 
 ```ts
 /** Sends one JSON-RPC request to the MCP server, signed in, and answers its result. */
-async function mcp(method: string, params: object = {}) {
+async function callMcp(method: string, params: object = {}) {
   const response = await handler(
     new Request('http://localhost/mcp', {
       method: 'POST',
@@ -104,29 +105,31 @@ async function mcp(method: string, params: object = {}) {
 A tool's output is `result.structuredContent`; a failure is a result with `isError: true` whose text is the
 failure.
 
-## RPC types
+## RPC documents and bindings
 
-An owner proves its routes serve the contract its callers import:
+An owner proves the RPC document it commits, the one its callers bind to, is the one its routes declare:
 
 ```ts
-import type { RpcMethods } from '@arbol-ai/maximus/workers';
-import type { WorkerEntrypoint } from 'cloudflare:workers';
-import { expectTypeOf, it } from 'vite-plus/test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-import type { app } from '#maximus/app';
+import { createRpcOpenApi } from '@arbol-ai/maximus';
+import { expect, it } from 'vite-plus/test';
 
-import type { NotesService } from '../src/contract.ts';
+import { app } from '#maximus/app';
 
-it('serves over RPC exactly the methods its contract declares', () => {
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<
-    Omit<NotesService, keyof WorkerEntrypoint>
-  >();
-  // @ts-expect-error A contract without summarizeNote is not the one the routes serve.
-  expectTypeOf<RpcMethods<typeof app.operations>>().toEqualTypeOf<Record<never, never>>();
+it('publishes the RPC document its callers bind to, current with its routes', () => {
+  const published: unknown = JSON.parse(
+    readFileSync(join(import.meta.dirname, '../openapi.rpc.json'), 'utf-8')
+  );
+  expect(published).toStrictEqual(createRpcOpenApi(app));
 });
 ```
 
-`tsc` checks it; the `@ts-expect-error` line is the negative control, which proves the comparison can fail.
+`bunx maximus openapi --check` proves the same in CI. A caller's tests stand in for the binding with an object
+typed by the generated module, `{ quoteItems: vi.fn<PricingService['quoteItems']>() }` with `PricingService`
+from `#maximus/services/pricing`; a compile-only file with `@ts-expect-error` lines proves a call the owner's
+document does not allow fails `tsc`.
 
 ## The contract check
 

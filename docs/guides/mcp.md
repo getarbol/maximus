@@ -25,11 +25,17 @@ A route is a tool when its contract names one in `mcp`:
 // routes/v1/notes/[noteId].get.ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
-/** GET /api/v1/notes/{noteId}, and the MCP tool get_note. */
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Read one note of the organization by its id.',
     input: { noteId: UuidSchema },
@@ -64,11 +70,12 @@ A tool that has no HTTP route is a file of `mcp/tools/`, whose default export is
 // mcp/tools/summarize-notes.ts
 import { defineTool, t } from '@arbol-ai/maximus';
 
-/** The MCP tool summarize_notes: agents call it, and no HTTP route serves it. */
+/** The MCP tool summarize_notes, which no HTTP route serves: how many notes the organization has. */
 export default defineTool(
   async ({ notes }) => {
-    const all = await notes.list();
-    return { count: all.length, summary: `${all.length} notes.` };
+    const organizationNotes = await notes.list();
+    const count = organizationNotes.length;
+    return { count, summary: `${count} notes.` };
   },
   {
     description: "Count the organization's notes for a review. It never changes a note.",

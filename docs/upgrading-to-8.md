@@ -4,8 +4,9 @@ This guide moves a 7.x service to Maximus 8.0. In 8.0 a service is a project con
 `vite.config.ts`, whose routes are files: the service layout of 7.0 to 7.2 (`src/app.ts`, `src/index.ts`
 and `cloudflare.config.ts`) and the project layout of 7.3 and 7.4 (`maximus.config.ts`, route modules that
 export `GET` or a factory, `defineRoute`) are gone. What callers see does not change unless a section
-below says so: the HTTP envelope, the OpenAPI document, MCP and RPC keep their shapes, and the operation
-names and scopes clients depend on can be kept exactly.
+below says so: the HTTP envelope, MCP and RPC keep their shapes, the operation names and scopes clients
+depend on can be kept exactly, and the OpenAPI document lists the same operations with components named
+for client generators (see [The OpenAPI document](#the-openapi-document)).
 
 Work on a branch, and save the OpenAPI document your service serves today (`/openapi.json` or
 `/api/openapi.json`) before you start: comparing it with the one 8.0 serves is the quickest way to prove
@@ -103,8 +104,11 @@ base.operation(
     mcp: { name: 'get_note', idempotent: true },
   },
   async ({ notes }, input) => {
-    const note = await notes.get(input.noteId);
-    return note ? ok(note) : err(errors.noteNotFound.create());
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return err(errors.noteNotFound.create());
+    }
+    return ok(note);
   }
 );
 ```
@@ -115,13 +119,18 @@ becomes `routes/v1/notes/[noteId].get.ts`:
 // 8.0
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
-    operationId: 'getNote',
-    title: 'Get a note',
     description: 'Read one note by its identifier.',
     input: { noteId: UuidSchema },
     output: NoteSchema,
@@ -139,10 +148,12 @@ What changes:
   answers the folder's own path. Write one file per method.
 - `input` and `output` take a schema or the fields of a strict object.
 - What a contract leaves out is derived from the method and path: the operation's name (`getNote` for
-  `GET /v1/notes/{noteId}`, as [Derived names](reference/operations.md#derived-names) describes), its effect (`GET` reads, `DELETE` deletes, the others write), its scope
-  (`notes:notes:read`) and its title. **Keep every name and scope your clients and tokens depend on** by
-  declaring `operationId` and `scope` where the derived ones differ: the operation's name is its OpenAPI
-  `operationId` and its RPC method, and a token holds scopes by their exact text.
+  `GET /v1/notes/{noteId}`, as [Derived names](reference/operations.md#derived-names) describes), its effect
+  (`GET` reads, `DELETE` deletes, the others write), its scope (`notes:notes:read`) and its title
+  (`Get a note`). Here they are the name, scope and title the 7.x operation declared, so the route states
+  none of them. **Keep every name and scope your clients and tokens depend on** by declaring `operationId`
+  and `scope` where the derived ones differ: the operation's name is its OpenAPI `operationId` and its RPC
+  method, and a token holds scopes by their exact text.
 - A route's tool is idempotent by default for `GET`, `PUT` and `DELETE`, and a tool of `mcp/tools/` when it
   reads; `mcp: { name, idempotent, openWorld }` states otherwise.
 
@@ -158,6 +169,11 @@ field.
   answers is held to the route's declared `failures`, as a handler's is.
 - **The error catalog** moves to `errors.ts`, `export default defineErrors({ … })`, which types every
   handler's `fail`.
+- **`fail`** no longer takes the failures routing, admission and reading a body answer before a handler
+  could: `NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED`, `UNAUTHORIZED`, `REQUEST_TOO_LARGE` and
+  `UNSUPPORTED_MEDIA_TYPE`. Answer what the handler finds with a failure of the catalog instead, such as
+  `NOTE_NOT_FOUND` for a missing note; one of the five that a handler, context or middleware answers anyway
+  is `INTERNAL_ERROR`.
 - **A token resolver** moves to `auth.ts`, `export default defineAuth({ resolve })`. `defineAuth` takes
   `resolve`, `resources` and `resourceMetadataUrl` only; the issuer, audience and every other token setting
   stay in `vite.config.ts`.
@@ -208,14 +224,35 @@ The Worker serves `/mcp` when a route or tool declares MCP or any of these files
 - Tests run with `vp test`. A test calls the API as the Worker serves it through `handler` from
   `#maximus/http`, which `.maximus/http.ts` generates, with an `env` of its own: see
   [Testing](guides/testing.md).
-- The RPC entrypoint is exported as `Service`. A calling Worker's binding names it:
-  `bindings.worker({ worker: 'example-notes', exportName: 'Service', props: { caller: 'billing' } })`.
+- The RPC entrypoint is exported as `Service`. A calling project binds it in `services`, by the owner's
+  Worker and the RPC document the owner publishes with `bunx maximus openapi`:
+  `services: { NOTES: { worker: 'example-notes', openapi: '../notes/openapi.rpc.json' } }`. The binding's
+  props name the calling service by its `name`, which the owner's `rpc.callers` lists. See
+  [Worker RPC](guides/worker-rpc.md).
 
 ## The typed HTTP client
 
 `@arbol-ai/maximus/client` and `createClient` are removed. Call a service over HTTP with `fetch` and the
 caller's token, typing each call with `Static` of the route's schemas, or, between Workers of one account,
 over native RPC (see [Worker RPC](guides/worker-rpc.md)).
+
+## The OpenAPI document
+
+The document lists the same operations, paths, scopes and tools, described for client generators:
+
+- Every request body, answer and failure is a named component: `CreateNoteBody`, `NoteResponse`, and
+  `NoteNotFoundFailure` with its answer `NoteNotFoundError`. The shared `Failure` and `FailureResponse`
+  components give way to one component per code, and a status that several codes share answers a union
+  with a discriminator on `code`, such as `ListNotesBadRequestError`.
+- Each operation has one tag, its group, which `groups` in `maximus()` describes; `description` describes
+  the service.
+- `x-failure-codes` names the codes of each failure status. An operation lists only the failures it can
+  meet: never routing's `NOT_FOUND` and `HTTP_METHOD_NOT_ALLOWED`, and a body's `REQUEST_TOO_LARGE` and
+  `UNSUPPORTED_MEDIA_TYPE` only when it sends one.
+
+Regenerate clients from the new document: code that imported `Failure` names each code's failure instead.
+`bunx maximus openapi` writes the document to `openapi.json`, so a diff shows what changed. See
+[Wire formats](reference/wire-formats.md#named-components).
 
 ## Behavior that changed
 
@@ -290,7 +327,8 @@ The CLI:
 
 1. `bun run verify` passes: types, lint and format, tests and the build.
 2. The OpenAPI document `vp dev` serves at `/api/openapi.json` lists the same `operationId`s, paths,
-   scopes and `x-mcp-tool` names as the one you saved, or differs only where you meant it to.
+   scopes and `x-mcp-tool` names as the one you saved, or differs only where you meant it to; its
+   components have their new names.
 3. An MCP client lists the same tools, and a Worker that calls this one over RPC still type-checks against
-   its contract.
+   the RPC document this one publishes.
 4. Deploy to a staging Worker first, and call it with a real access token before you deploy production.

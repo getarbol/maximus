@@ -28,11 +28,17 @@ makes it an MCP tool too.
 // routes/v1/notes/[noteId].get.ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
-/** GET /api/v1/notes/{noteId}, and the MCP tool get_note. */
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Read one note of the organization by its id.',
     input: { noteId: UuidSchema },
@@ -49,7 +55,7 @@ What the contract leaves out, binding derives from the method and the path:
 
 | Field            | Derived                                                                                                                                 | For the file above |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Operation name   | What the method does to what the path names: the `operationId` and the RPC method. `listNotes`, `createNote`, `archiveNote`.             | `getNote`          |
+| Operation name   | What the method does to what the path names: the `operationId` and the RPC method. `listNotes`, `createNote`, `archiveNote`.            | `getNote`          |
 | `effect`         | `GET` reads, `DELETE` deletes, every other method writes.                                                                               | `read`             |
 | `scope`          | `<namespace>:<resource>:read` for a read, `:write` otherwise; the resource is the first fixed segment after the version, in kebab-case. | `notes:notes:read` |
 | `title`          | The operation's words as a sentence: the OpenAPI `summary` and the MCP tool's title.                                                    | `Get a note`       |
@@ -65,7 +71,8 @@ A route whose path has no fixed segment after the version must declare its `scop
 
 - `input`: decoded and checked against the contract's `input`, path parameters included.
 - `fail(code, data?)`: answers a failure of the catalog; only the route's `failures` and the standard codes
-  type-check.
+  an operation answers itself type-check, not `NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED`, `UNAUTHORIZED`,
+  `REQUEST_TOO_LARGE` or `UNSUPPORTED_MEDIA_TYPE`.
 - `principal`: `{ actorId, actorKind, organizationId, requestId }`, the verified caller.
 - `env`: the Worker's bindings.
 - `authority`: the verified token's `{ surface, scopes, client, token }`, on HTTP and MCP calls whose token
@@ -140,10 +147,17 @@ A route that answers many items answers one page of them:
 // routes/v1/notes/index.get.ts
 import { defineHandler, Page, PageQueryFields } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
+/** GET /api/v1/notes: the organization's notes, a page at a time. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.page(input)) ?? fail('INVALID_CURSOR'),
+  async ({ input, notes, fail }) => {
+    const page = await notes.list(input);
+    if (!page) {
+      return fail('INVALID_CURSOR');
+    }
+    return page;
+  },
   {
     description: "List the organization's notes, newest first. Pass pageInfo.nextCursor as cursor for more.",
     input: PageQueryFields,
@@ -164,12 +178,12 @@ An upload declares `http: { body: 'bytes' }`. Its input comes from the path, the
 headers its `http.headers` maps, and the handler reads the body when it has checked the request:
 
 ```ts
-async ({ input, body, documents, fail }) => {
-  const bytes = await body.read();
-  if (!bytes.ok) {
-    return bytes.error; // REQUEST_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE or INVALID_INPUT
+async ({ input, body, documents }) => {
+  const upload = await body.read();
+  if (!upload.ok) {
+    return upload.error; // REQUEST_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE or INVALID_INPUT
   }
-  return documents.create(input.filename, input.contentType, bytes.value);
+  return documents.create(input.filename, input.contentType, upload.value);
 },
 // contract: http: { body: 'bytes', headers: { contentType: 'content-type' }, successStatus: 201 }
 ```
@@ -185,14 +199,25 @@ A file of `mcp/tools/`, named in kebab-case, default-exports `defineTool(handler
 // mcp/tools/search-notes.ts: the tool search_notes, operation searchNotes
 import { defineTool, t } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
-export default defineTool(async ({ input, notes }) => ({ notes: await notes.search(input.text, 20) }), {
-  description: "Find the organization's notes whose text contains a word, newest first, at most twenty.",
-  effect: 'read',
-  input: { text: t.String({ minLength: 2, maxLength: 100 }) },
-  output: { notes: t.Array(NoteSchema) },
-});
+/** The most notes one search answers. */
+const MAX_NOTES = 20;
+
+/** The MCP tool search_notes, which no HTTP route serves: the newest notes that contain a text. */
+export default defineTool(
+  async ({ input, notes }) => {
+    const matchingNotes = await notes.search(input.text, MAX_NOTES);
+    return { notes: matchingNotes };
+  },
+  {
+    description:
+      "Find the organization's notes whose title or body contains a text, newest first, at most twenty.",
+    effect: 'read',
+    input: { text: t.String({ minLength: 2, maxLength: 100 }) },
+    output: { notes: t.Array(NoteSchema) },
+  }
+);
 ```
 
 A tool requires `description` and `effect`. Its default scope is `<namespace>:<file name>:read` for a read and
@@ -204,10 +229,12 @@ A tool requires `description` and `effect`. Its default scope is `<namespace>:<f
 `context.ts` prepares what every handler receives, after admission:
 
 ```ts
+// context.ts
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
+/** What every handler receives besides its input: the caller's organization's notes. */
 export default defineContext(({ env, principal }) => ({
   notes: noteStore(env.NOTES, principal.organizationId),
 }));

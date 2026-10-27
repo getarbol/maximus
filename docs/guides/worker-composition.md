@@ -74,7 +74,9 @@ export const app = maximus<Env>({
   rpc: { callers: [] },
   mcp: { instructions: 'notes keeps short notes for the organization your token belongs to.' },
 })
-  .derive(async ({ env, principal }) => ok({ kv: env.NOTES, prefix: `notes/${principal.organizationId}/` }))
+  .derive(async ({ env, principal }) =>
+    ok({ notes: env.NOTES, prefix: `notes/${principal.organizationId}/` })
+  )
   .operation(
     'countNotes',
     {
@@ -87,7 +89,10 @@ export const app = maximus<Env>({
       http: { method: 'GET', path: '/v1/notes/count' },
       mcp: { name: 'count_notes', idempotent: true },
     },
-    async ({ kv, prefix }) => ok({ count: (await kv.list({ prefix })).keys.length })
+    async ({ notes, prefix }) => {
+      const { keys } = await notes.list({ prefix });
+      return ok({ count: keys.length });
+    }
   )
   .build();
 
@@ -98,11 +103,10 @@ const paymentWebhook: HttpRoute<Env> = async (request, env, context) => {
   }
   const body = await readBodyBytes(request, { maxBytes: 64 * 1024 });
   if (!body.ok) {
-    return context.fail(
-      body.error.data.reason === 'too_large'
-        ? standardErrors.tooLarge.create()
-        : standardErrors.invalidInput.create()
-    );
+    if (body.error.data.reason === 'too_large') {
+      return context.fail(standardErrors.tooLarge.create());
+    }
+    return context.fail(standardErrors.invalidInput.create());
   }
   const verified = await verifyStandardWebhook({
     body: body.value,
@@ -282,11 +286,12 @@ Worker serves one MCP transport at most.
 ```ts
 http: {
   origins: ['https://notes.example.com'],
-  before: async (request) => {
+  before: (request) => {
     const url = new URL(request.url);
-    return url.hostname === 'www.notes.example.com'
-      ? Response.redirect(`https://notes.example.com${url.pathname}${url.search}`, 308)
-      : null;
+    if (url.hostname !== 'www.notes.example.com') {
+      return null;
+    }
+    return Response.redirect(`https://notes.example.com${url.pathname}${url.search}`, 308);
   },
 },
 ```

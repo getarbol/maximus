@@ -22,19 +22,21 @@ export default defineConfig({
 });
 ```
 
-| Option                           | Meaning, and default                                                                                                                                                                                                                                                  |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `origin`                         | Required. The public HTTPS URL that OpenAPI, MCP resources and OAuth discovery advertise, and the default token audience. A `workers.dev` origin is served there; any other host becomes the Worker's custom domain unless `domains` or a fetch trigger route it.     |
-| `tokens`                         | `issuer`, the OAuth authorization server; `audience`, the origin by default; `jwksUri`, `algorithms`, `claims`, `scheme`, `authorizationEndpoint`, `tokenEndpoint`; `development`, the development token's binding, `DEVELOPMENT_TOKEN` by default, `false` for none. |
-| `name`                           | The Worker's name, the MCP server's and the scopes' prefix: lowercase letters, digits and single hyphens. By default, the package's name without its scope.                                                                                                           |
-| `namespace`, `title`, `version`  | The scopes' prefix (the name), the human name (the name), the version `/health` reports (the package's).                                                                                                                                                              |
-| `rpc`                            | `{ callers: ['billing'] }`: the deployments allowed to call RPC methods, by the `caller` their binding's props name. None by default.                                                                                                                                 |
-| `http`                           | `{ basePath, healthPath }`: `/api` and `/health` by default.                                                                                                                                                                                                          |
-| `maxBodyBytes`, `maxOutputBytes` | The limits of every operation that sets none: 32 KiB and 256 KiB.                                                                                                                                                                                                     |
-| `rateLimit`                      | `{ binding, retryAfter }`: a rate limiting binding every HTTP and MCP call passes, per organization and actor.                                                                                                                                                        |
-| `env`                            | The Worker's bindings, from `cf/config`'s `bindings`.                                                                                                                                                                                                                 |
-| `webApp`                         | `{ headers }` for a web app's pages and files.                                                                                                                                                                                                                        |
-| Any other key                    | A Worker setting as Cloudflare names it: `compatibilityDate`, `compatibilityFlags`, `triggers`, `exports`, `observability`, `placement`, `limits`, `domains`, `workersDev`, `previewUrls`.                                                                            |
+| Option                           | Meaning, and default                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `origin`                         | Required. The public HTTPS URL that OpenAPI, MCP resources and OAuth discovery advertise, and the default token audience. A `workers.dev` origin is served there; any other host becomes the Worker's custom domain unless `domains` or a fetch trigger route it.                                                                            |
+| `tokens`                         | `issuer`, the OAuth authorization server; `audience`, the origin by default; `jwksUri`, `algorithms`, `claims`, `scheme`, `authorizationEndpoint`, `tokenEndpoint`; `source` and `access` behind Cloudflare Access; `development`, the development token's binding, `DEVELOPMENT_TOKEN` by default, `false` for none. See [Tokens](#tokens). |
+| `name`                           | The Worker's name, the MCP server's and the scopes' prefix: lowercase letters, digits and single hyphens. By default, the package's name without its scope.                                                                                                                                                                                  |
+| `namespace`, `title`, `version`  | The scopes' prefix (the name), the human name (the name), the version `/health` reports (the package's).                                                                                                                                                                                                                                     |
+| `description`, `groups`          | The OpenAPI document's description of the service, and of each group of routes by its name: `{ Notes: "The notes of the caller's organization." }`.                                                                                                                                                                                          |
+| `rpc`                            | `{ callers: ['example-orders'] }`: the services allowed to call RPC methods, by the `caller` their binding's props name, which is the calling service's `name`. None by default.                                                                                                                                                             |
+| `services`                       | `{ PRICING: { worker: 'example-pricing', openapi: '../pricing/openapi.rpc.json' } }`: other Maximus services this one calls over RPC, each bound to its Worker's `Service` entrypoint with this service as the caller, and typed from the RPC document it publishes. See [transports.md](transports.md#worker-rpc).                          |
+| `http`                           | `{ basePath, healthPath }`: `/api` and `/health` by default.                                                                                                                                                                                                                                                                                 |
+| `maxBodyBytes`, `maxOutputBytes` | The limits of every operation that sets none: 32 KiB and 256 KiB.                                                                                                                                                                                                                                                                            |
+| `rateLimit`                      | `{ binding, retryAfter }`: a rate limiting binding every HTTP and MCP call passes, per organization and actor.                                                                                                                                                                                                                               |
+| `env`                            | The Worker's bindings, from `cf/config`'s `bindings`.                                                                                                                                                                                                                                                                                        |
+| `webApp`                         | `{ headers }` for a web app's pages and files.                                                                                                                                                                                                                                                                                               |
+| Any other key                    | A Worker setting as Cloudflare names it: `compatibilityDate`, `compatibilityFlags`, `triggers`, `exports`, `observability`, `placement`, `limits`, `domains`, `workersDev`, `previewUrls`.                                                                                                                                                   |
 
 `maximus()` owns the Worker's entry (`.maximus/entry.ts`) and a web app's assets, always adds
 `nodejs_compat`, turns preview URLs off unless the options turn them on, sets Workers Logs and traces on with
@@ -43,6 +45,52 @@ cron and queue module, and declares the development token under `vp dev` alone. 
 `cloudflare.config.ts` or `maximus.config.ts` beside it, an `assets` option and a `DEVELOPMENT_TOKEN` binding in
 `env`. It also brings the lint and format presets when the configuration sets no `lint` or `fmt`.
 `vite.config.ts` runs in Node, so it may read `process.env`, for a database's id for instance.
+
+## Tokens
+
+`tokens` states which tokens the API admits: by default, OAuth access tokens of the `issuer` it names, for
+the `origin` as their audience. `auth0()` and `cloudflareAccess()` from `@arbol-ai/maximus/vite` state the
+options for those providers, as plain data:
+
+```ts
+import { auth0, cloudflareAccess, maximus } from '@arbol-ai/maximus/vite';
+
+// Access tokens that Auth0 issues for the API whose identifier is the audience.
+tokens: auth0({ domain: 'acme.us.auth0.com', audience: 'https://notes.example.com' }),
+
+// The application token Cloudflare Access adds to each request it lets through.
+tokens: cloudflareAccess({
+  team: 'acme',
+  aud: '4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2',
+  organizationId: 'org_acme',
+  scopes: {
+    people: ['notes:notes:read', 'notes:notes:write'],
+    services: { '88bf3b6d86161464f6509f7219099e57.access': ['notes:notes:read'] },
+  },
+}),
+```
+
+- `auth0({ domain, audience, algorithms? })`: `domain` is the tenant's host name, or a list of its domains,
+  the canonical one first, when it has a custom domain; `audience` is the API's identifier in Auth0. It
+  answers the issuer `https://<domain>/`, the audience and `algorithms`: `['RS256']` by default, `RS512` or
+  `PS256`. It throws for `HS256` and for a domain with a scheme, port or path. Turn on **Enable RBAC** and
+  **Add Permissions in the Access Token** in the API's settings: a person holds only the granted scopes their
+  `permissions` also list. A token without `org_id` is refused.
+- `cloudflareAccess({ team, aud, organizationId?, scopes })`: `team` is the Zero Trust team name, `acme` for
+  `acme.cloudflareaccess.com`, and `aud` the Access application's AUD tag. Access tokens carry no scope:
+  `scopes.people` is what every person Access lets through holds, and `scopes.services` what each service
+  token holds, by its client id; one it does not list holds none. Each scope belongs to the service's own
+  namespace. Every caller acts in `organizationId`; for several organizations, leave it out and name the claim
+  that holds each caller's in `claims.organization`, beside the spread preset. The Worker then reads the
+  token from `cf-access-jwt-assertion` alone and verifies it against the team's keys; a production build
+  answers `404` to any host but `origin`; a write another site's page sends answers `403`; `authority.token`
+  is absent; and the Worker serves no OAuth discovery and no MCP, so `prepare` refuses a route or a file of
+  `mcp/` that declares MCP. Under `vp dev` and in tests, the development token still signs in as a bearer
+  token.
+- Spread a preset to add what it leaves out: `tokens: { ...auth0({ domain, audience }), development: false }`.
+
+Tokens that no issuer signs, such as keys the service issues itself, are verified by `auth.ts`. See
+[Authentication and scopes](https://github.com/getarbol/maximus/blob/main/docs/guides/authentication-and-scopes.md).
 
 ## Root modules
 
@@ -76,19 +124,18 @@ env: {
   DOCUMENTS: bindings.r2({ name: 'notes-documents' }),
   DIGESTS: bindings.queue({ name: 'note-digests' }),
   COUNTERS: bindings.durableObject({ worker: 'notes', exportName: 'NoteCounter' }),
-  BILLING: bindings.worker({ worker: 'billing', exportName: 'Service', props: { caller: 'notes' } }),
   PARTNER_API_KEY: bindings.secret(),
 },
 ```
 
 A binding to one of the Worker's own Durable Object classes is typed as `DurableObjectNamespace` of that
-class. What inference cannot know, a queue's message type or another Worker's entrypoint, a module declares:
+class, and another Maximus service of `services` by the RPC document it publishes. What inference cannot
+know, such as a queue's message type, a module declares:
 
 ```ts
 declare global {
   interface Env {
     DIGESTS: Queue<DigestMessage>;
-    BILLING: Service<BillingService>;
   }
 }
 ```
@@ -124,6 +171,7 @@ every change), `vp build`, `vp test` and `bun run typecheck` run it. It parses m
 | `worker.ts`, `entry.ts`   | The Worker: `export default` its handler, `export const Service` its RPC entrypoint, and the Durable Object classes.              |
 | `http.ts`                 | `handler`: the API as the Worker serves it, for tests in Node.                                                                    |
 | `mcp.ts`, `app-routes.ts` | The MCP Markdown, and a web app's pages, when the project has them.                                                               |
+| `services/<binding>.ts`   | The RPC methods of each service of `services`, typed from its document: `#maximus/services/pricing`.                              |
 
 The starter's `package.json` maps `#maximus/*` to `.maximus/*.ts`, so tests import `handler` from
 `#maximus/http` and `app` from `#maximus/app`. A refusal of `prepare` names the file and keeps the previous

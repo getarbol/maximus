@@ -12,27 +12,29 @@ the scheduled handler:
 
 ```ts
 // crons/sweep.ts
-import { overdueReminders } from '../src/reminders.ts';
+import { findOverdueReminders, sendInBatches } from '#src/reminders.ts';
 
-/** Every quarter of an hour. */
+/** When the sweep runs: every quarter of an hour. */
 export const cron = '*/15 * * * *';
 
 /** How long past due a pending reminder waits for its own message before the sweep queues it again. */
-const GRACE = 15 * 60 * 1000;
+const GRACE_PERIOD_MS = 15 * 60 * 1000;
 
-/** Queues again each reminder still pending a quarter of an hour after it was due. */
+/** Queues again each reminder still pending once its grace period is over. */
 const sweep: ExportedHandlerScheduledHandler<Env> = async (controller, env) => {
-  const overdue = await overdueReminders(env.REMINDER_STATE, controller.scheduledTime - GRACE);
-  for (let start = 0; start < overdue.length; start += 100) {
-    await env.REMINDERS.sendBatch(overdue.slice(start, start + 100).map((body) => ({ body })));
-  }
+  const dueBeforeMs = controller.scheduledTime - GRACE_PERIOD_MS;
+  const overdueReminders = await findOverdueReminders(env.REMINDER_STATE, dueBeforeMs);
+  await sendInBatches(env.REMINDERS, overdueReminders);
 };
 
 export default sweep;
 ```
 
 The handler receives the event's controller (its `cron` and `scheduledTime`), the bindings and the execution
-context. From the files, Maximus gives the Worker its cron triggers:
+context. `findOverdueReminders` and `sendInBatches` come from `src/reminders.ts` of
+[`examples/queue-reminders`](../../examples/queue-reminders): the first lists the reminders still pending
+though due before a time, and the second sends their messages in batches of a hundred, the most one
+`sendBatch` takes. From the files, Maximus gives the Worker its cron triggers:
 
 - Each distinct schedule becomes one trigger. Modules that state the same schedule share it, and every one
   of them runs when it fires, side by side; when one fails, the event fails, and the others still run.
@@ -62,26 +64,37 @@ env: {
 import { reportUnexpected } from '@arbol-ai/maximus';
 import { checkSchema } from '@arbol-ai/maximus/schemas';
 
-import { ReminderMessageSchema, reminderStore } from '../src/reminders.ts';
+import { ReminderMessageSchema, reminderStore } from '#src/reminders.ts';
 
-/** Delivers the reminder each message names, once however often the message arrives. */
+/** How long a message waits before its next attempt: 30 seconds, doubled for each attempt made. */
+function retryDelaySeconds(attempts: number): number {
+  return 30 * 2 ** (attempts - 1);
+}
+
+/** Delivers the reminder a message names and acknowledges the message, or retries it when delivery fails. */
+async function deliverMessage(message: Message<unknown>, env: Env): Promise<void> {
+  const checked = checkSchema(ReminderMessageSchema, message.body);
+  if (!checked.success) {
+    // Retrying a message this service never sends cannot make it succeed.
+    reportUnexpected(checked.error, 'queue');
+    message.ack();
+    return;
+  }
+  const { organizationId, reminderId } = checked.data;
+  try {
+    // A reminder deleted since its message was sent has nothing left to deliver.
+    await reminderStore(env.REMINDER_STATE, env.REMINDERS, organizationId).deliver(reminderId);
+    message.ack();
+  } catch (error) {
+    reportUnexpected(error, 'queue');
+    message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+  }
+}
+
+/** Delivers each message of the batch in turn. */
 const consume: ExportedHandlerQueueHandler<Env, unknown> = async (batch, env) => {
   for (const message of batch.messages) {
-    const checked = checkSchema(ReminderMessageSchema, message.body);
-    if (!checked.success) {
-      // A message this service never sends cannot succeed: acknowledge it, and report it.
-      reportUnexpected(checked.error, 'queue');
-      message.ack();
-      continue;
-    }
-    const { organizationId, reminderId } = checked.data;
-    try {
-      await reminderStore(env.REMINDER_STATE, organizationId).deliver(reminderId);
-      message.ack();
-    } catch (error) {
-      reportUnexpected(error, 'queue');
-      message.retry({ delaySeconds: 30 * 2 ** (message.attempts - 1) });
-    }
+    await deliverMessage(message, env);
   }
 };
 
@@ -185,7 +198,7 @@ A handler's `background` keeps work running after the response is sent:
 // routes/v1/notes/index.post.ts
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
 /** POST /api/v1/notes: a new note, and, after the response, when the organization last wrote one. */
 export default defineHandler(
@@ -256,36 +269,40 @@ calls it directly, with stand-ins for what the module uses:
 // tests/reminders.test.ts
 import { expect, it } from 'vite-plus/test';
 
+import { reminderStore } from '#src/reminders.ts';
+import type { ReminderMessage } from '#src/reminders.ts';
+
 import sweep from '../crons/sweep.ts';
 import consume from '../queues/reminders.ts';
-import { reminderStore } from '../src/reminders.ts';
-import type { ReminderMessage } from '../src/reminders.ts';
-import { testBatch, testNamespace, testQueue } from './stand-ins.ts';
-
-const context = {} as ExecutionContext;
+import { executionContext, testBatch, testNamespace, testQueue } from './stand-ins.ts';
 
 it('delivers a reminder once, however often its message arrives', async () => {
   const env = { REMINDERS: testQueue<ReminderMessage>(), REMINDER_STATE: testNamespace() } as unknown as Env;
-  const reminder = await reminderStore(env.REMINDER_STATE, 'org_1234567890abcdef').create('Call back', 0);
+  const reminders = reminderStore(env.REMINDER_STATE, env.REMINDERS, 'org_1234567890abcdef');
+  const reminder = await reminders.schedule('Call back');
   const message = { organizationId: 'org_1234567890abcdef', reminderId: reminder.reminderId };
   const { batch, outcomes } = testBatch([message, message]);
-  await consume(batch, env, context);
+  await consume(batch, env, executionContext);
   expect(outcomes).toEqual(['ack', 'ack']);
 });
 
 it('queues again a reminder still pending after its grace period', async () => {
   const queue = testQueue<ReminderMessage>();
   const env = { REMINDERS: queue, REMINDER_STATE: testNamespace() } as unknown as Env;
-  const reminder = await reminderStore(env.REMINDER_STATE, 'org_1234567890abcdef').create('Call back', 0);
-  await sweep({ cron: '*/15 * * * *', scheduledTime: Date.now() + 20 * 60_000, noRetry() {} }, env, context);
+  const reminders = reminderStore(env.REMINDER_STATE, env.REMINDERS, 'org_1234567890abcdef');
+  const reminder = await reminders.schedule('Call back');
+  // From here on, the queue records only what the sweep sends.
+  queue.sent.length = 0;
+  const controller = { cron: '*/15 * * * *', scheduledTime: Date.now() + 20 * 60_000, noRetry() {} };
+  await sweep(controller, env, executionContext);
   expect(queue.sent.map(({ body }) => body.reminderId)).toEqual([reminder.reminderId]);
 });
 ```
 
 [`examples/queue-reminders/tests/stand-ins.ts`](../../examples/queue-reminders/tests/stand-ins.ts) holds
-the stand-ins: a KV namespace with metadata, a queue that records what it is sent, and a batch that records
-what the consumer did with each message. An email handler is tested the same way, with a message whose
-`setReject` and `forward` record their calls.
+the stand-ins: a KV namespace with metadata, a queue that records what it is sent, a batch that records
+what the consumer did with each message, and the execution context. An email handler is tested the same
+way, with a message whose `setReject` and `forward` record their calls.
 
 End to end, [`e2e/reminders.e2e.test.ts`](../../e2e/reminders.e2e.test.ts) schedules a reminder through
 the running Worker's API and waits until its consumer has delivered it. See [Testing](testing.md).

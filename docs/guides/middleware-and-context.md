@@ -47,7 +47,7 @@ default export is `defineContext(prepare)`:
 // context.ts
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
 /** What every handler receives besides its input: the caller's organization's notes. */
 export default defineContext(({ env, principal }) => ({
@@ -72,7 +72,7 @@ organization enables notes in a settings namespace:
 // context.ts
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
 /** The caller's organization's notes, once the organization has enabled them. */
 export default defineContext(async ({ env, principal, fail }) => {
@@ -121,6 +121,10 @@ A file of `middleware/` whose default export is `defineMiddleware(handle)`, from
 // middleware/10-response.ts
 import { defineMiddleware } from '@arbol-ai/maximus/config';
 
+/**
+ * Request middleware, run in filename order around every request before its token is verified: it can add
+ * headers, never authenticate a caller. Policy that needs the verified caller is defineOperationMiddleware's.
+ */
 export default defineMiddleware<Env>(async (_request, _env, _context, proceed) => {
   const response = await proceed();
   // Rebuilding a WebSocket upgrade would lose its socket.
@@ -177,10 +181,13 @@ import type context from '../context.ts';
 
 /** An organization an operator has frozen answers FORBIDDEN on every route and tool. */
 export default defineOperationMiddleware<PreparedContext<typeof context>>(
-  async ({ env, principal }, proceed) =>
-    (await env.ORGANIZATIONS.get(`${principal.organizationId}/frozen`)) === 'true'
-      ? err(standardErrors.forbidden.create())
-      : proceed()
+  async ({ env, principal }, proceed) => {
+    const isFrozen = (await env.ORGANIZATIONS.get(`${principal.organizationId}/frozen`)) === 'true';
+    if (isFrozen) {
+      return err(standardErrors.forbidden.create());
+    }
+    return proceed();
+  }
 );
 ```
 
@@ -268,11 +275,13 @@ const base = maximus<Env>({
 });
 
 /** The caller's organization's notes, once the organization has enabled them. */
-const withNotes = base.derive(async ({ env, principal }) =>
-  (await env.ORGANIZATIONS.get(`${principal.organizationId}/notes-enabled`)) === 'true'
-    ? ok({ notes: noteStore(env.NOTES, principal.organizationId) })
-    : err(errors.notesNotEnabled.create())
-);
+const withNotes = base.derive(async ({ env, principal }) => {
+  const enabled = await env.ORGANIZATIONS.get(`${principal.organizationId}/notes-enabled`);
+  if (enabled !== 'true') {
+    return err(errors.notesNotEnabled.create());
+  }
+  return ok({ notes: noteStore(env.NOTES, principal.organizationId) });
+});
 
 const noteOperations = withNotes.operation(
   'getNote',
@@ -287,8 +296,11 @@ const noteOperations = withNotes.operation(
     http: { method: 'GET', path: '/v1/notes/{noteId}' },
   },
   async ({ notes }, input) => {
-    const note = await notes.get(input.noteId);
-    return note ? ok(note) : err(errors.noteNotFound.create());
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return err(errors.noteNotFound.create());
+    }
+    return ok(note);
   }
 );
 
@@ -338,11 +350,13 @@ middleware does, and with the same rules: `middleware` receives the context and 
 import { err, standardErrors } from '@arbol-ai/maximus';
 
 /** A frozen organization answers FORBIDDEN on every operation declared after this. */
-const guarded = withNotes.use(async ({ env, principal }, proceed) =>
-  (await env.ORGANIZATIONS.get(`${principal.organizationId}/frozen`)) === 'true'
-    ? err(standardErrors.forbidden.create())
-    : proceed()
-);
+const guarded = withNotes.use(async ({ env, principal }, proceed) => {
+  const isFrozen = (await env.ORGANIZATIONS.get(`${principal.organizationId}/frozen`)) === 'true';
+  if (isFrozen) {
+    return err(standardErrors.forbidden.create());
+  }
+  return proceed();
+});
 ```
 
 Several `.use()` calls run in the order they were declared, around the handler and after every

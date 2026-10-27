@@ -60,10 +60,17 @@ contract)`:
 // routes/v1/notes/[noteId].get.ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Read one note of the organization by its id.',
     input: { noteId: UuidSchema },
@@ -204,8 +211,11 @@ it with `createWorker`, which is what `.maximus/` does for a project:
 const app = maximus<Env>(configuration)
   .derive(async ({ env, principal }) => ok({ notes: noteStore(env.NOTES, principal.organizationId) }))
   .operation('getNote', definition, async ({ notes }, input) => {
-    const note = await notes.get(input.noteId);
-    return note ? ok(note) : err(errors.noteNotFound.create());
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return err(errors.noteNotFound.create());
+    }
+    return ok(note);
   })
   .build();
 ```

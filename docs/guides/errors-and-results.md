@@ -66,12 +66,14 @@ A handler answers a failure with `fail(code)`, or `fail(code, data)` when the co
 what `fail` returns. This is the DELETE route of the [`d1-notes`](../../examples/d1-notes) example:
 
 ```ts
-// routes/v1/notes/[noteId].delete.ts: DELETE /api/v1/notes/{noteId}
+// routes/v1/notes/[noteId].delete.ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
+/** DELETE /api/v1/notes/{noteId}: answers the empty object once the note is gone. */
 export default defineHandler(
   async ({ input, notes, fail }) => {
-    if (!(await notes.remove(input.noteId))) {
+    const wasDeleted = await notes.delete(input.noteId);
+    if (!wasDeleted) {
       return fail('NOTE_NOT_FOUND');
     }
   },
@@ -114,16 +116,17 @@ field paths. Never put a submitted value, a credential or a provider's answer in
 // context.ts
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
 /** What every handler receives: the notes of the caller's organization, unless its plan has ended. */
 export default defineContext(async ({ env, principal, fail }) => {
   const plan = await env.NOTES_DB.prepare('SELECT status FROM plans WHERE organization_id = ?')
     .bind(principal.organizationId)
     .first<{ status: string }>();
-  return plan?.status === 'ended'
-    ? fail('PLAN_ENDED')
-    : { notes: noteStore(env.NOTES_DB, principal.organizationId) };
+  if (plan?.status === 'ended') {
+    return fail('PLAN_ENDED');
+  }
+  return { notes: noteStore(env.NOTES_DB, principal.organizationId) };
 });
 ```
 
@@ -131,7 +134,7 @@ export default defineContext(async ({ env, principal, fail }) => {
 
 `failures` lists the domain failures a route may answer, each once, besides the standard ones:
 
-- `fail` then accepts only those codes and the standard ones, as a type.
+- `fail` then accepts only those codes and the standard ones an operation may answer, as a type.
 - The OpenAPI document lists only those and the standard failures for the route.
 - Any other domain failure the route answers, from its handler, from `context.ts` or from operation
   middleware, is the service's error. The caller receives `500 INTERNAL_ERROR`, never the undeclared code,
@@ -154,8 +157,13 @@ the service's error too, and answers `INTERNAL_ERROR`.
 The standard failures are the ones Maximus answers itself, for a refused token, a scope the token lacks, an
 unknown route, an input its schema refuses, a body beyond its limit, the rate limit and the service's own
 errors, and three that only handlers answer: `UPSTREAM_UNAVAILABLE`, `UPSTREAM_TIMEOUT` and
-`OUTCOME_UNKNOWN`. A handler answers any of them with `fail`, whatever its `failures` list. [Standard
-failures](../reference/standard-failures.md) gives each one's status, message, data and when it is answered.
+`OUTCOME_UNKNOWN`. A handler and `context.ts` answer any of them with `fail`, whatever the route's
+`failures` list, except five. Routing and admission alone answer `NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED` and
+`UNAUTHORIZED`, before an operation runs. `REQUEST_TOO_LARGE` and `UNSUPPORTED_MEDIA_TYPE` are answered
+when a body is read: admission reads a JSON body, and a byte route returns the failure its body's `read()`
+gives, as it is. `fail` accepts none of the five; an operation that answers one in any other way answers
+`INTERNAL_ERROR` instead. [Standard failures](../reference/standard-failures.md) gives each one's status,
+message, data and when it is answered.
 
 ## Invalid input
 
@@ -200,8 +208,11 @@ An operation declared with the builder, and every native RPC method, answers a `
 import { err, ok } from '@arbol-ai/maximus';
 
 base.operation('getNote', definition, async ({ notes }, input) => {
-  const note = await notes.get(input.noteId);
-  return note ? ok(note) : err(errors.noteNotFound.create());
+  const note = await notes.find(input.noteId);
+  if (!note) {
+    return err(errors.noteNotFound.create());
+  }
+  return ok(note);
 });
 ```
 
@@ -271,14 +282,20 @@ keep a failure the dependency may recover from retryable, and answer the rest as
 pricing Worker it calls over RPC:
 
 ```ts
-// orders/routes/v1/quotes.post.ts: POST /api/v1/quotes
+// orders/routes/v1/quotes.post.ts
 import { defineHandler, t } from '@arbol-ai/maximus';
-import { checkSchema } from '@arbol-ai/maximus/schemas';
-import { ItemsSchema, UnknownSkuSchema } from '@maximus-examples/pricing/contract';
+import type { Result } from '@arbol-ai/maximus';
 
+import type { Quote, QuoteItemsFailure } from '#maximus/services/pricing';
+import { OrderItemsSchema } from '#src/items.ts';
+
+/**
+ * POST /api/v1/quotes: what an order of these items would cost, as the pricing Worker prices them. Nothing
+ * is reserved or charged.
+ */
 export default defineHandler(
   async ({ env, principal, input, fail }) => {
-    let priced;
+    let priced: Result<Quote, QuoteItemsFailure>;
     try {
       // The caller's verified principal travels as it is; pricing checks it and the items again.
       priced = await env.PRICING.quoteItems(principal, input);
@@ -288,22 +305,31 @@ export default defineHandler(
     if (priced.ok) {
       return { currency: priced.value.currency, totalCents: priced.value.totalCents };
     }
-    const unknown =
-      priced.error.code === 'UNKNOWN_SKU' ? checkSchema(UnknownSkuSchema, priced.error.data) : undefined;
-    if (unknown?.success) {
-      return fail('UNKNOWN_ITEM', unknown.data);
+    // Name the item a caller can fix, keep a failure pricing may recover from retryable, and answer the rest,
+    // a refusal included, as this service's own fault.
+    const failure = priced.error;
+    if (failure.code === 'UNKNOWN_SKU') {
+      return fail('UNKNOWN_ITEM', { index: failure.data.index });
     }
-    return fail(priced.error.retryable ? 'UPSTREAM_UNAVAILABLE' : 'INTERNAL_ERROR');
+    if (failure.retryable) {
+      return fail('UPSTREAM_UNAVAILABLE');
+    }
+    return fail('INTERNAL_ERROR');
   },
   {
     description: 'Price the items of a prospective order. Nothing is reserved or charged.',
     effect: 'read',
-    input: { items: ItemsSchema },
+    input: { items: OrderItemsSchema },
     output: { currency: t.Literal('USD'), totalCents: t.Integer({ minimum: 0 }) },
     failures: ['UNKNOWN_ITEM'],
   }
 );
 ```
+
+`#maximus/services/pricing` is the module `maximus prepare` writes from the RPC document pricing publishes.
+Its `QuoteItemsFailure` narrows each failure's `data` by its code, and `fail` checks that data against
+`UNKNOWN_ITEM`'s own schema: should pricing answer other data than its document declares, the call answers
+`INTERNAL_ERROR`. See [Worker RPC](worker-rpc.md#bind-and-call-the-owner).
 
 Services that share failures can share their definitions instead: export the definitions object and spread
 it into each catalog, `defineErrors({ ...sharedDefinitions, noteNotFound: { … } })`.

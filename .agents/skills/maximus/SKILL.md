@@ -51,8 +51,8 @@ each one.
 5. **Answer failures from the catalog.** `fail(code)` with a code of `errors.ts`, listed in the route's
    `failures`; throw only for what should never happen. See
    [references/errors-and-results.md](references/errors-and-results.md).
-6. **Declare bindings in `maximus()`.** `env: { NOTES: bindings.kv() }`, with `bindings` from `cf/config`;
-   the generated `Env` types them.
+6. **Declare bindings in `maximus()`.** `env: { NOTES: bindings.kv() }`, with `bindings` from `cf/config`,
+   and another Worker's RPC methods in `services`; the generated `Env` types them.
 7. **Test** each route in `tests/` through `handler` from `#maximus/http`: its answer, its refusals and that
    one organization never reaches another's data. See [references/testing.md](references/testing.md).
 8. **Verify** with `bun run verify` before you finish.
@@ -65,6 +65,7 @@ each one.
 | `bunx maximus gen route get /v1/notes/{noteId} --tool get_note` | Writes `routes/v1/notes/[noteId].get.ts`, which is also the MCP tool `get_note`.                                                            |
 | `bunx maximus gen tool summarize-notes`                         | Writes `mcp/tools/summarize-notes.ts`, the tool `summarize_notes`.                                                                          |
 | `bunx maximus prepare`                                          | Writes `.maximus/` for production, or with `--mode development` as `vp dev` does. `vp dev`, `vp build` and `vp test` prepare by themselves. |
+| `bunx maximus openapi`                                          | Writes `openapi.json`, and `openapi.rpc.json` when a route declares `rpc`; `--check` fails when they differ from the routes.                |
 | `bun run test`                                                  | `vp test run`: the tests, in Node.                                                                                                          |
 | `bun run typecheck`                                             | `maximus prepare`, then `tsc`, which also checks type tests.                                                                                |
 | `bun run check`, `bun run fix`                                  | Lint and format; with fixes.                                                                                                                |
@@ -81,11 +82,14 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 | An endpoint for people and services             | A route file. Every route is served over HTTP.                                                                                                                                                           |
 | The same endpoint for agents                    | `mcp: { name: 'get_note' }` in its contract, which then needs a `description`.                                                                                                                           |
 | A capability only agents call                   | A file of `mcp/tools/` with `defineTool`, which needs a `description` and an `effect`.                                                                                                                   |
-| Another Worker of the account calls it          | `rpc: true` in its contract and the caller in `maximus()`'s `rpc.callers`; publish a contract the caller imports. See [references/transports.md](references/transports.md).                              |
+| Another Worker of the account calls it          | `rpc: true` in its contract and the caller's name in `rpc.callers`; commit the `openapi.rpc.json` that `bunx maximus openapi` writes. See [references/transports.md](references/transports.md).          |
+| Call another Worker of the account              | `services: { PRICING: { worker: 'example-pricing', openapi: '../pricing/openapi.rpc.json' } }` in `maximus()`; import its types from `#maximus/services/pricing`.                                        |
 | Out of the public OpenAPI document              | `visibility: 'internal'`: still routed, still checked against its scope.                                                                                                                                 |
 | Setup every call needs: stores, clients         | `context.ts`.                                                                                                                                                                                            |
 | A rule for every operation, on every transport  | `defineOperationMiddleware` in `middleware/`.                                                                                                                                                            |
 | Headers or an early answer around every request | `defineMiddleware` in `middleware/`. It runs before admission and sees no principal.                                                                                                                     |
+| Access tokens Auth0 issues                      | `tokens: auth0({ domain, audience })` from `@arbol-ai/maximus/vite`, with RBAC and permissions in the access token turned on. See [references/project.md](references/project.md#tokens).                 |
+| An application behind Cloudflare Access         | `tokens: cloudflareAccess({ team, aud, organizationId, scopes })` from `@arbol-ai/maximus/vite`. It serves no MCP and no OAuth discovery. See [references/project.md](references/project.md#tokens).     |
 | Tokens your authorization server does not issue | `auth.ts` with `defineAuth({ resolve })`, which verifies cryptographically.                                                                                                                              |
 | A provider's webhook, without a token           | A page named for its method, `pages/webhooks/<provider>.post.ts`, which verifies the signature on the exact bytes with `@arbol-ai/maximus/webhooks`. See [references/project.md](references/project.md). |
 | Many items in one answer                        | `output: Page(Item, { $id: 'ItemPage' })` with `input: PageQueryFields`.                                                                                                                                 |
@@ -127,16 +131,17 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 
 Load the one the task needs:
 
-- [references/project.md](references/project.md): `vite.config.ts`, the root modules, bindings and `Env`, the
-  development token, what `prepare` generates, pages, background work, Durable Objects and web apps.
+- [references/project.md](references/project.md): `vite.config.ts`, tokens from Auth0 or Cloudflare Access,
+  the root modules, bindings and `Env`, the development token, what `prepare` generates, pages, background
+  work, Durable Objects and web apps.
 - [references/routes-and-tools.md](references/routes-and-tools.md): file names and what they derive, every
   contract field, input, schemas and codecs, lists, byte bodies, tools, context and middleware.
 - [references/errors-and-results.md](references/errors-and-results.md): the catalog, `fail`, declared
   failures, the standard failures, uncertain outcomes and other services' failures.
 - [references/transports.md](references/transports.md): HTTP and OpenAPI, MCP, Worker RPC, and Workers
   composed by hand.
-- [references/testing.md](references/testing.md): tests in Node, stand-ins for bindings, MCP, RPC type tests,
-  the contract check and suites against a running Worker.
+- [references/testing.md](references/testing.md): tests in Node, stand-ins for bindings, MCP, RPC documents
+  and bindings, the contract check and suites against a running Worker.
 - [references/deploying.md](references/deploying.md): the origin and the issuer, secrets, resources,
   `bun run deploy`, the CI workflow and checking a deployment.
 - [references/writing-code.md](references/writing-code.md): the house style for every file you write:

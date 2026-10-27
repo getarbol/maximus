@@ -21,7 +21,10 @@ data it carries. [Errors and results](../guides/errors-and-results.md) explains 
 
 The name is the failure's factory in every catalog, `errors.notFound.create()`, and `defineErrors` refuses a
 domain failure of the same name. No domain failure may take one of these codes. A handler answers any of them
-with `fail(code)`, whatever its `failures` list.
+with `fail(code)`, whatever its `failures` list, except the five that routing, admission and reading a body
+answer before a handler could: `NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED`, `UNAUTHORIZED`, `REQUEST_TOO_LARGE`
+and `UNSUPPORTED_MEDIA_TYPE`. `fail` does not take those, and one that a handler, context or middleware
+answers anyway is `INTERNAL_ERROR`; a byte body's `read()` answers the last two itself.
 
 ## When each is answered
 

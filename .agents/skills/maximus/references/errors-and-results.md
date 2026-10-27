@@ -36,16 +36,20 @@ export default defineErrors({
 
 ## Answer a failure
 
-A handler, `context.ts` or a tool answers an expected failure with `fail(code)`, and passes the data its code
-declares:
+A handler, `context.ts` or a tool answers an expected failure with `fail(code)`:
 
 ```ts
-return (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND');
-return fail('QUOTA_EXCEEDED', { limit: 100 });
+const note = await notes.find(input.noteId);
+if (!note) {
+  return fail('NOTE_NOT_FOUND');
+}
 ```
 
+A code that declares data takes it: `return fail('QUOTA_EXCEEDED', { limit: 100 });`.
+
 A route lists the domain codes it may answer in `failures`: `failures: ['NOTE_NOT_FOUND']`. `fail` then
-type-checks only those codes and the standard ones, the OpenAPI document lists them, and any other domain
+type-checks only those codes and the standard ones an operation answers itself, the OpenAPI document lists
+them, and any other domain
 failure, from the handler, `context.ts` or middleware, answers `INTERNAL_ERROR` and is reported. Without
 `failures`, every code of the catalog is allowed and listed.
 
@@ -55,7 +59,11 @@ by the error's name alone.
 
 ## Standard failures
 
-Every operation may answer these without listing them:
+Every catalog holds these, and an operation answers them without listing them, except five. Routing and
+admission alone answer `NOT_FOUND`, `HTTP_METHOD_NOT_ALLOWED` and `UNAUTHORIZED`. Admission answers
+`REQUEST_TOO_LARGE` and `UNSUPPORTED_MEDIA_TYPE` for a JSON body, and a byte route returns them as
+`body.read()` gives them. `fail` takes none of the five; an operation that answers one in any other way
+answers `INTERNAL_ERROR` instead.
 
 | Code                      | Status | Retryable | When                                                                                                                                                        |
 | ------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -100,17 +108,29 @@ answering: a failure the caller can fix becomes one of this catalog's codes, one
 answers `INTERNAL_ERROR`. Catch a call that throws, such as an RPC call to a Worker that cannot be reached:
 
 ```ts
-let priced;
+import type { Quote, QuoteItemsFailure } from '#maximus/services/pricing';
+
+let priced: Result<Quote, QuoteItemsFailure>;
 try {
   priced = await env.PRICING.quoteItems(principal, input);
 } catch {
   return fail('UPSTREAM_UNAVAILABLE');
 }
 if (priced.ok) {
-  return priced.value;
+  return { currency: priced.value.currency, totalCents: priced.value.totalCents };
 }
-return fail(priced.error.retryable ? 'UPSTREAM_UNAVAILABLE' : 'INTERNAL_ERROR');
+const failure = priced.error;
+if (failure.code === 'UNKNOWN_SKU') {
+  return fail('UNKNOWN_ITEM', { index: failure.data.index });
+}
+if (failure.retryable) {
+  return fail('UPSTREAM_UNAVAILABLE');
+}
+return fail('INTERNAL_ERROR');
 ```
+
+The owner's failure types come from the RPC document it publishes, so the code narrows `data`. Answer only
+what this catalog declares: never return the owner's value or failure as it is.
 
 See [Errors and results](https://github.com/getarbol/maximus/blob/main/docs/guides/errors-and-results.md)
 and [Standard failures](https://github.com/getarbol/maximus/blob/main/docs/reference/standard-failures.md).

@@ -108,8 +108,11 @@ document an application describes, whose server URL is the origin alone; `maximu
 project's Worker serves to `openapi.json`.
 
 `tags` lists each group of the public operations once, in the order the operations first name it, with the
-description `groups` gives it in `maximus()`. A description of a group no public route has is refused:
-`groups describes "Recrods", which no public route has as its group; the groups are Records.`
+description `groups` gives it in `maximus()`. A description of a group that neither a public route nor an
+RPC method has is refused:
+`groups describes "Recrods", which no public route or RPC method has as its group; the groups are Records.`
+A Worker whose routes are all internal publishes a document without operations, and without the components
+operations share.
 
 ### Named components
 
@@ -175,6 +178,27 @@ every failure of the catalog when it declares none. Routing's own, `NOT_FOUND` a
 - `content['application/json'].schema`: a reference to its envelope, `<Code>Error` or
   `<Operation><Status>Error`.
 
+### The RPC document
+
+`createRpcOpenApi(app)` builds, and `maximus openapi` writes to `openapi.rpc.json`, the document of the
+operations an application serves over native RPC, which a caller's `services` option types its binding
+from. It is OpenAPI 3.1.0, like the HTTP document, with these differences:
+
+- Every operation that declares `rpc` is listed, public or internal, a route or a tool, at
+  `POST /rpc/<name>`. No HTTP route answers these paths: `info.description` says so, and the document has
+  no `servers`.
+- The request body is the method's whole input, path fields included, as the component `<Operation>Input`
+  (or `Empty`, or the input's own `$id`).
+- An operation has no `security`, since a Service Binding names its caller, and the document no
+  `securitySchemes`. It carries `x-effect`, `x-native-rpc: true`, `x-max-output-bytes` and
+  `x-rpc-callers`, the callers that may call it.
+- A body's own failures, `REQUEST_TOO_LARGE` and `UNSUPPORTED_MEDIA_TYPE`, are never listed: an RPC call
+  reads no body.
+
+Its answers and failures are the same named components as the HTTP document's. A caller's
+`.maximus/services/<binding>.ts` types each method from them:
+`quoteItems(principal: Principal, input: QuoteItemsInput): Promise<Result<Quote, QuoteItemsFailure>>`.
+
 ### OpenAPI extensions
 
 | Extension              | On                                           | Value                                                                                     |
@@ -194,6 +218,7 @@ every failure of the catalog when it declares none. Routing's own, `NOT_FOUND` a
 | `x-response`           | An attachment                                | `attachment`                                                                              |
 | `x-input-field`        | A query or header parameter of a byte upload | The input field the parameter fills.                                                      |
 | `x-failure-codes`      | Every failure response                       | The codes that answer with its status, in catalog order.                                  |
+| `x-rpc-callers`        | An operation of the RPC document             | The callers that may call it: its `rpc.callers`, or the application's.                    |
 
 `createOpenApi(app, { operationExtensions: (name, operation) => ({ … }) })` adds an adapter's own
 extensions to each operation; a key without the `x-` prefix throws `OpenAPI extensions must use x- names.`

@@ -109,21 +109,22 @@ and paths match case-sensitively. Without `app/routes/`, `index.html` is the one
 // app/routes/tasks/index.tsx
 import { Link, redirect, useLoaderData } from 'react-router';
 
-import { signedIn, tasks } from '../../api.ts';
+import { isSignedIn, listTasks } from '../../api.ts';
 
+/** The organization's tasks; a person who has not signed in is sent to sign in first. */
 export async function loader() {
-  if (!signedIn()) {
+  if (!isSignedIn()) {
     throw redirect('/');
   }
-  return await tasks.list();
+  return await listTasks();
 }
 
-/** /tasks: the organization's tasks. */
+/** Each of the organization's tasks, as a link to its own page. */
 export default function Tasks() {
-  const { tasks: list } = useLoaderData<typeof loader>();
+  const { tasks } = useLoaderData<typeof loader>();
   return (
     <ul>
-      {list.map((task) => (
+      {tasks.map((task) => (
         <li key={task.taskId}>
           <Link to={`/tasks/${task.taskId}`}>{task.title}</Link>
         </li>
@@ -133,6 +134,9 @@ export default function Tasks() {
 }
 ```
 
+The same page of the [`tasks`](../../examples/tasks) example also adds a task, with an `action` and a
+`<Form>`.
+
 `app/root.tsx` is the layout around every page: its default export renders the page with `<Outlet />`, and
 its `ErrorBoundary` shows when a page fails.
 
@@ -140,6 +144,7 @@ its `ErrorBoundary` shows when a page fails.
 // app/root.tsx
 import { Outlet } from 'react-router';
 
+/** The layout around every page: the app's name above the page. */
 export default function Root() {
   return (
     <main>
@@ -149,6 +154,7 @@ export default function Root() {
   );
 }
 
+/** What a page that fails shows instead. */
 export function ErrorBoundary() {
   return <p role="alert">Something went wrong.</p>;
 }
@@ -185,15 +191,24 @@ own schemas. Only types cross from the server's modules into the browser's:
 // app/api.ts
 import type { Failure, Static } from '@arbol-ai/maximus';
 
-import type { app } from '../.maximus/app.ts';
+import type { app } from '#maximus/app';
 
 /** The application's operations, whose schemas type each call. */
 type Operations = typeof app.operations;
-type Input<K extends keyof Operations> = Static<Operations[K]['input']>;
-type Output<K extends keyof Operations> = Static<Operations[K]['output']>;
+/** The name of one of the application's operations, such as `listTasks`. */
+type OperationName = keyof Operations;
+/** What an operation takes. */
+type Input<Name extends OperationName> = Static<Operations[Name]['input']>;
+/** What an operation answers. */
+type Output<Name extends OperationName> = Static<Operations[Name]['output']>;
+/** The envelope of every answer: the operation's output, or the failure that refused the call. */
+type Envelope<Name extends OperationName> =
+  | { success: true; data: Output<Name> }
+  | { success: false; error: Failure };
 
 /** A call the API refused, with the failure it answered. */
 export class RefusalError extends Error {
+  /** The failure: its code, its catalog message and whether a retry may succeed. */
   readonly failure: Failure;
   constructor(failure: Failure) {
     super(failure.message);
@@ -202,37 +217,37 @@ export class RefusalError extends Error {
   }
 }
 
-/** The bearer token the person signed in with, kept in memory alone. */
-let token = '';
+/** The bearer token the person gave, kept in memory alone: a reload asks for it again. */
+let bearerToken = '';
 
-export function signIn(value: string): void {
-  token = value;
+/** Keeps the person's token for the calls that follow. */
+export function signIn(token: string): void {
+  bearerToken = token;
 }
 
-export function signedIn(): boolean {
-  return token !== '';
+/** Whether the person gave a token. */
+export function isSignedIn(): boolean {
+  return bearerToken !== '';
 }
 
 /**
- * Sends one call with the token, and answers its data or throws the failure it answered. Every write sends
- * a JSON body, `{}` when its fields are all in its path.
+ * Calls one operation with the token, and answers its output or throws the refusal it answered. Every write
+ * sends a JSON body, `{}` when its fields are all in its path.
  */
-async function call<K extends keyof Operations>(
+async function call<Name extends OperationName>(
   method: string,
   path: string,
-  body?: Partial<Input<K>>
-): Promise<Output<K>> {
-  const response = await fetch(`/api${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${token}`,
-      ...(method === 'GET' ? {} : { 'content-type': 'application/json' }),
-    },
-    ...(method === 'GET' ? {} : { body: JSON.stringify(body ?? {}) }),
-  });
-  const envelope = (await response.json()) as
-    | { success: true; data: Output<K> }
-    | { success: false; error: Failure };
+  body?: Partial<Input<Name>>
+): Promise<Output<Name>> {
+  const headers = new Headers({ authorization: `Bearer ${bearerToken}` });
+  const request: RequestInit = { method, headers };
+  if (method !== 'GET') {
+    headers.set('content-type', 'application/json');
+    request.body = JSON.stringify(body ?? {});
+  }
+  const response = await fetch(`/api${path}`, request);
+  // The route's schemas type the envelope; checking it again would bring them into the browser.
+  const envelope = (await response.json()) as Envelope<Name>;
   if (!envelope.success) {
     throw new RefusalError(envelope.error);
   }
@@ -240,19 +255,40 @@ async function call<K extends keyof Operations>(
 }
 
 /** A task's path below /api. */
-const task = (taskId: string) => `/v1/tasks/${encodeURIComponent(taskId)}`;
+function taskPath(taskId: string): string {
+  return `/v1/tasks/${encodeURIComponent(taskId)}`;
+}
 
-/** The organization's tasks, one function per route. */
-export const tasks = {
-  list: () => call<'listTasks'>('GET', '/v1/tasks'),
-  create: (input: Input<'createTask'>) => call<'createTask'>('POST', '/v1/tasks', input),
-  complete: (taskId: string) => call<'completeTask'>('POST', `${task(taskId)}/complete`),
-};
+/** The organization's tasks, open and done. */
+export function listTasks() {
+  return call<'listTasks'>('GET', '/v1/tasks');
+}
+
+/** Adds an open task to the organization, and answers it. */
+export function createTask(input: Input<'createTask'>) {
+  return call<'createTask'>('POST', '/v1/tasks', input);
+}
+
+/** One task of the organization. */
+export function getTask(taskId: string) {
+  return call<'getTask'>('GET', taskPath(taskId));
+}
+
+/** Marks a task done, and answers it. */
+export function completeTask(taskId: string) {
+  return call<'completeTask'>('POST', `${taskPath(taskId)}/complete`);
+}
+
+/** Deletes a task. */
+export function deleteTask(taskId: string) {
+  return call<'deleteTask'>('DELETE', taskPath(taskId));
+}
 ```
 
-Each operation is named after its route's method and path, as [Concepts](../concepts.md#routes-and-operations)
-describes: `GET /v1/tasks` is `listTasks`. Every answer is the envelope described in
-[Wire formats](../reference/wire-formats.md), and a refusal carries the failure's `code` to branch on.
+Each function is named after the operation it calls, and each operation after its route's method and path,
+as [Concepts](../concepts.md#routes-and-operations) describes: `GET /v1/tasks` is `listTasks`. Every answer
+is the envelope described in [Wire formats](../reference/wire-formats.md), and a refusal carries the
+failure's `code` to branch on.
 
 The token comes from your authorization server, as the person signs in; never build one into the app. The
 default content security policy lets the pages call the token issuer's origin and its token endpoint's. Under

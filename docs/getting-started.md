@@ -108,21 +108,30 @@ export const NoteSchema = t.Object(
   },
   { $id: 'Note', additionalProperties: false }
 );
+/** A note. */
 export type Note = Static<typeof NoteSchema>;
 
 /** The notes of one organization in Workers KV: every key starts with the organization's id. */
-export function noteStore(kv: KVNamespace, organizationId: string) {
-  const key = (noteId: string) => `notes/${organizationId}/${noteId}`;
+export function noteStore(namespace: KVNamespace, organizationId: string) {
+  /** The key a note of the organization is stored under. */
+  function noteKey(noteId: string): string {
+    return `notes/${organizationId}/${noteId}`;
+  }
+
   return {
-    /** The note, or undefined when the organization has none with this id. */
-    async get(noteId: string): Promise<Note | undefined> {
-      const stored = await kv.get(key(noteId));
-      return stored === null ? undefined : readSchema(NoteSchema, JSON.parse(stored));
+    /** The note with this id, or undefined when the organization has none. */
+    async find(noteId: string): Promise<Note | undefined> {
+      const stored = await namespace.get(noteKey(noteId));
+      if (stored === null) {
+        return undefined;
+      }
+      return readSchema(NoteSchema, JSON.parse(stored));
     },
+
     /** Stores a new note and answers it. */
     async create(text: string): Promise<Note> {
       const note: Note = { noteId: crypto.randomUUID(), text, createdAt: new Date().toISOString() };
-      await kv.put(key(note.noteId), JSON.stringify(note));
+      await namespace.put(noteKey(note.noteId), JSON.stringify(note));
       return note;
     },
   };
@@ -134,7 +143,10 @@ them their TypeScript type through `Static`, and describes them, under its `$id`
 in the MCP tool's output schema. `readSchema` checks a value read back from storage the same way and throws
 when it does not match, so a stored value that is not a note never reaches a caller as one.
 
-A store holds the notes of one organization, and each of its keys begins with that organization's id.
+A store holds the notes of one organization, and each of its keys begins with that organization's id. It
+answers the note it finds, or `undefined`, and leaves the failure to the route. The project's `package.json`
+maps `#src/*` to `./src/*`, so every module imports the store by the same name, `#src/notes.ts`, whatever
+its folder.
 
 ## Give every handler the caller's notes
 
@@ -143,7 +155,7 @@ Create `context.ts` at the project's root:
 ```ts
 import { defineContext } from '@arbol-ai/maximus';
 
-import { noteStore } from './src/notes.ts';
+import { noteStore } from '#src/notes.ts';
 
 /** What every handler receives besides its input: the caller's organization's notes. */
 export default defineContext(({ env, principal }) => ({
@@ -191,7 +203,7 @@ Each file holds a placeholder handler and a contract to fill in. Replace `routes
 ```ts
 import { defineHandler, t } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
 /** POST /api/v1/notes: a new note, answered with 201 Created. */
 export default defineHandler(({ input, notes }) => notes.create(input.text), {
@@ -207,11 +219,17 @@ and `routes/v1/notes/[noteId].get.ts` with:
 ```ts
 import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { NoteSchema } from '../../../src/notes.ts';
+import { NoteSchema } from '#src/notes.ts';
 
-/** GET /api/v1/notes/{noteId}, and the MCP tool get_note. */
+/** GET /api/v1/notes/{noteId}, also the MCP tool get_note: one note of the caller's organization. */
 export default defineHandler(
-  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  async ({ input, notes, fail }) => {
+    const note = await notes.find(input.noteId);
+    if (!note) {
+      return fail('NOTE_NOT_FOUND');
+    }
+    return note;
+  },
   {
     description: 'Read one note of the organization by its id.',
     input: { noteId: UuidSchema },
@@ -331,8 +349,7 @@ Create `tests/notes.test.ts`:
 import { expect, it } from 'vite-plus/test';
 
 import { handler } from '#maximus/http';
-
-import type { Note } from '../src/notes.ts';
+import type { Note } from '#src/notes.ts';
 
 const token = 'test-development-token-for-local-tests';
 /** Workers KV for the tests: a Map behind the two methods the notes use. */
