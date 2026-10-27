@@ -22,13 +22,13 @@
   },
   "devDependencies": {
     "@arbol-ai/vite-plugin": "__MAXIMUS_VERSION__",
-    "@cloudflare/workers-types": "5.20261018.1",
+    "@cloudflare/workers-types": "5.20261027.1",
     "@types/node": "26.6.5",
-    "cf": "1.0.0-beta.22",
+    "cf": "1.0.0-beta.23",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "typescript": "7.0.2",
-    "ultracite": "8.0.1",
+    "ultracite": "8.1.0",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plus": "1.4.0"
   },
@@ -39,5 +39,5 @@
   "engines": {
     "node": ">=22.18"
   },
-  "packageManager": "bun@1.4.3"
+  "packageManager": "bun@1.4.4"
 }

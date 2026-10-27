@@ -45,17 +45,17 @@
     "build": "vp pack"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "2.0.0-beta.v.1"
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.5"
   },
   "devDependencies": {
     "@arbol-ai/maximus": "workspace:^",
-    "cf": "1.0.0-beta.18",
+    "cf": "1.0.0-beta.23",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plus": "1.4.0"
   },
   "peerDependencies": {
     "@arbol-ai/maximus": "7.4.0",
-    "cf": ">=1.0.0-beta.18",
+    "cf": ">=1.0.0-beta.23",
     "vite": "^8.3.4"
   }
 }
