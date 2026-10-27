@@ -222,7 +222,6 @@ and those of `maximus()`'s options in [Configuration](configuration.md#refusals)
 
 ```sh
 bun create maximus [directory] [--name <name>] [--web] [--no-mcp] [--yes]
-npm create maximus@latest [directory] [--name <name>] [--web] [--no-mcp] [--yes]
 ```
 
 Creates a project with `maximus init` of the release `create-maximus` depends on.

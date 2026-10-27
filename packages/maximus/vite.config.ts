@@ -1,6 +1,6 @@
 /**
- * The package build: tsdown bundles each entry into one ESM file and one declaration file under dist/,
- * with the code that several entries share in chunks.
+ * The package's tasks and its build: tsdown, through `vp pack`, bundles each entry into one ESM file and one
+ * declaration file under dist/, with the code that several entries share in chunks.
  */
 import { defineConfig } from 'vite-plus';
 
@@ -33,6 +33,14 @@ const entries = {
  * never load a chunk that imports node:, cloudflare:, pg or the MCP SDK.
  */
 export default defineConfig({
+  // The package's tasks, which `vp run` caches by the files each one reads: an unchanged build replays its
+  // dist/ instead of packing again.
+  run: {
+    tasks: {
+      build: { command: 'vp pack', cache: { input: [{ auto: true }, '!dist/**'] } },
+      typecheck: 'tsc --noEmit',
+    },
+  },
   pack: {
     entry: {
       ...entries,

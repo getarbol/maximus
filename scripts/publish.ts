@@ -1,7 +1,9 @@
 /**
- * Publishes the packed tarballs of @arbol-ai/maximus and create-maximus to npm, with
- * provenance, a prerelease under its own dist-tag. They share one version, and Maximus goes first, since the
- * others require it. The publish workflow runs it after the release checks.
+ * Publishes the packed tarballs of @arbol-ai/maximus and create-maximus to npm, with provenance, a prerelease
+ * under its own dist-tag. They share one version, and Maximus goes first, since create-maximus requires it.
+ * Bun packs them; npm publishes them, since npm's CLI alone exchanges the workflow's OIDC token for trusted
+ * publishing and attests provenance. The publish workflow runs it, with `bun scripts/publish.ts`, after the
+ * release checks.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -13,7 +15,11 @@ const directory = mkdtempSync(join(tmpdir(), 'maximus-release-'));
 try {
   const manifests = ['maximus', 'create-maximus'].map((name) => {
     const cwd = resolve('packages', name);
-    return { cwd, manifest: JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8')) };
+    const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf-8')) as {
+      name: string;
+      version: string;
+    };
+    return { cwd, manifest };
   });
   const versions = new Set(manifests.map(({ manifest }) => manifest.version));
   if (versions.size !== 1) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `create-maximus`, as `bun create maximus my-api` or `npm create maximus@latest my-api` runs it: `create` with
+ * `create-maximus`, as `bun create maximus my-api` runs it: `create` with
  * the person's terminal, if there is one, and the `maximus` command of the release this package depends on.
  */
 import { execFileSync } from 'node:child_process';

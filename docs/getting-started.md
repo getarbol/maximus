@@ -4,8 +4,9 @@ In this tutorial you build a notes service on Cloudflare Workers. It keeps each 
 Workers KV, answers over HTTP, and serves one of its routes to AI agents as an MCP tool. You run it locally,
 test it in Node and deploy it. It takes about fifteen minutes.
 
-You need [Bun](https://bun.sh) 1.4 and Node.js 22.18 or later. A Cloudflare account is needed only for the
-last step.
+You need [Bun](https://bun.sh) 1.4, which runs every command, and Node.js 22.18 or later installed beside
+it: Cloudflare's local runtime, which `vp dev` starts, runs on Node.js. A Cloudflare account is needed only
+for the last step.
 
 ## Create the project
 

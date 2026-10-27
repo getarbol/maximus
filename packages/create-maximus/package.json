@@ -34,10 +34,6 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "vp pack"
-  },
   "dependencies": {
     "@arbol-ai/maximus": "workspace:*"
   },

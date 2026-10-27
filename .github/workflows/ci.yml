@@ -1,7 +1,7 @@
 name: CI
-# Every pull request and every push to main: the build, types, lint and format; the tests with coverage on
-# each Node release the packages support; the Postgres entry against a real database; the packed packages
-# as a project installs them; and every example's Worker running under vp dev.
+# Every pull request and every push to main, each run through Bun: the build, types, lint and format; the
+# tests with coverage; the Postgres entry against a real database; the packed packages as a project installs
+# them; and every example's Worker running under vp dev.
 on:
   push:
     branches: [main]
@@ -29,20 +29,14 @@ jobs:
       - run: bun run verify
 
   test:
-    name: Tests on Node ${{ matrix.node }}
+    name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['22', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          node-version: ${{ matrix.node }}
       # The examples run against the packages' build, as a project installs them.
       - run: bun run build
       # Every package and example suite; under 90% lines, branches, functions or statements fails.
@@ -72,7 +66,7 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun run build
       # Packs each package, installs it into a new project and creates starters that pass their own verify.
-      - run: node scripts/verify-package.mjs
+      - run: bun run verify:package
 
   e2e:
     name: Examples running

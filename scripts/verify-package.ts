@@ -14,13 +14,34 @@ import { dirname, join, resolve } from 'node:path';
 import { publint } from 'publint';
 import { formatMessage } from 'publint/utils';
 
+/** What this script reads of a package manifest. */
+interface PackageManifest {
+  name: string;
+  version: string;
+  exports: Record<string, Record<string, string>>;
+  bin: Record<string, string>;
+  scripts: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  overrides?: Record<string, string>;
+}
+
+/** The manifest a packed tarball carries. */
+const packedManifest = (tarball: string): PackageManifest =>
+  JSON.parse(
+    execFileSync('tar', ['-xOzf', tarball, 'package/package.json'], { encoding: 'utf-8' })
+  ) as PackageManifest;
+
 /** A scratch consumer project, removed at the end. */
 const directory = mkdtempSync(join(tmpdir(), 'maximus-consumer-'));
 /** The package being released, and its manifest. */
 const source = resolve('packages/maximus');
-const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf-8'));
-/** Runs a script with this Node, in the consumer project unless told otherwise. */
-const run = (file, cwd = directory) => execFileSync(process.execPath, [file], { cwd, stdio: 'inherit' });
+const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf-8')) as PackageManifest;
+/** Runs a script with this Bun, in the consumer project unless told otherwise. */
+const run = (file: string, cwd = directory) =>
+  execFileSync(process.execPath, [file], { cwd, stdio: 'inherit' });
 /** The strictest compiler options a consumer sets, with every declaration file checked. */
 const strictest = {
   strict: true,
@@ -40,7 +61,12 @@ const strictest = {
  * Type-checks a consumer module that imports the given entries, with this workspace's TypeScript, so a
  * declaration that needs a type its environment lacks fails here rather than in a consumer's build.
  */
-const typecheck = (name, entries, compilerOptions, prelude = '') => {
+const typecheck = (
+  name: string,
+  entries: readonly string[],
+  compilerOptions: Record<string, unknown>,
+  prelude = ''
+) => {
   const project = join(directory, `types-${name}`);
   mkdirSync(project);
   const imports = entries.map(
@@ -78,11 +104,9 @@ try {
     ![...files].some((file) => /\.private|\.env|node_modules|^package\/tests\//.test(file)),
     'Private artifacts'
   );
-  const packed = JSON.parse(
-    execFileSync('tar', ['-xOzf', archive, 'package/package.json'], { encoding: 'utf-8' })
-  );
+  const packed = packedManifest(archive);
   // Every dependency resolves from the registry: no workspace, file or link protocol reaches a consumer.
-  for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+  for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies'] as const) {
     for (const [name, range] of Object.entries(packed[section] ?? {})) {
       assert(!/^(?:workspace|file|link):/.test(range), `${section}.${name} is ${range} in the release`);
     }
@@ -99,12 +123,28 @@ try {
     'publint'
   );
 
-  const install = (dependencies) => {
+  /**
+   * Installs these packages, tarballs by their path, into the consumer project with Bun, as a project does.
+   * Each tarball also overrides its package wherever another one depends on it, so create-maximus's own
+   * dependency on Maximus resolves to this release rather than to the registry.
+   */
+  const install = (dependencies: Record<string, string>) => {
+    const specified = Object.fromEntries(
+      Object.entries(dependencies).map(([name, range]) => [
+        name,
+        range.endsWith('.tgz') ? `file:${range}` : range,
+      ])
+    );
+    const overrides = Object.fromEntries(
+      Object.entries(specified).filter(([, range]) => range.startsWith('file:'))
+    );
     writeFileSync(
       join(directory, 'package.json'),
-      JSON.stringify({ private: true, type: 'module', dependencies })
+      JSON.stringify({ private: true, type: 'module', dependencies: specified, overrides })
     );
-    execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], {
+    rmSync(join(directory, 'node_modules'), { recursive: true, force: true });
+    rmSync(join(directory, 'bun.lock'), { force: true });
+    execFileSync('bun', ['install', '--ignore-scripts', '--linker', 'hoisted'], {
       cwd: directory,
       stdio: 'pipe',
     });
@@ -164,20 +204,19 @@ for (const value of [maximus, analytics, mcp, verifyContract]) {
   // The browser entries reach no Node or Workers module, no MCP SDK and no Postgres driver, however
   // deep the import (a bundler can silently stub a Node built-in, so the graph is read directly).
   const installed = join(directory, 'node_modules/@arbol-ai/maximus');
-  const runtimeModule = (specifier) =>
+  const runtimeModule = (specifier: string) =>
     /^(?:node:|cloudflare:|pg$|@modelcontextprotocol\/)/.test(specifier) ||
     builtinModules.includes(specifier);
   for (const entry of ['schemas', 'errors', 'failures', 'body', 'webhooks', 'http-paths', 'projection']) {
-    const pending = [join(installed, manifest.exports[`./${entry}`].import)];
-    const seen = new Set();
-    while (pending.length > 0) {
-      const file = pending.pop();
+    const pending = [join(installed, manifest.exports[`./${entry}`]?.import ?? '')];
+    const seen = new Set<string>();
+    for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
       if (seen.has(file)) {
         continue;
       }
       seen.add(file);
       const text = readFileSync(file, 'utf-8');
-      for (const [, specifier] of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g)) {
+      for (const [, specifier = ''] of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g)) {
         if (specifier.startsWith('.')) {
           pending.push(join(dirname(file), specifier));
         } else {
@@ -218,7 +257,9 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   assert.match(readFileSync(devVars, 'utf-8'), /^DEVELOPMENT_TOKEN=[0-9a-f]{64}\n$/);
   assert.equal(statSync(devVars).mode & 0o777, 0o600, 'The development token is readable by others');
   const projectPath = join(project, 'package.json');
-  const projectManifest = JSON.parse(readFileSync(projectPath, 'utf-8'));
+  const projectManifest = JSON.parse(readFileSync(projectPath, 'utf-8')) as PackageManifest & {
+    dependencies: Record<string, string>;
+  };
   assert.equal(projectManifest.dependencies['@arbol-ai/maximus'], manifest.version);
   // One package: its vite.config.ts imports the plugin from @arbol-ai/maximus/vite.
   assert(
@@ -247,15 +288,13 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
   );
   // create-maximus, packed the same way, creates the same starter with the exact release it depends on.
   const create = resolve('packages/create-maximus');
-  const createManifest = JSON.parse(readFileSync(join(create, 'package.json'), 'utf-8'));
+  const createManifest = JSON.parse(readFileSync(join(create, 'package.json'), 'utf-8')) as PackageManifest;
   assert.equal(createManifest.version, manifest.version, 'The packages share one version');
   execFileSync('bun', ['pm', 'pack', '--destination', directory], { cwd: create, stdio: 'pipe' });
   const createArchive = join(directory, `create-maximus-${createManifest.version}.tgz`);
-  const packedCreate = JSON.parse(
-    execFileSync('tar', ['-xOzf', createArchive, 'package/package.json'], { encoding: 'utf-8' })
-  );
+  const packedCreate = packedManifest(createArchive);
   assert.equal(
-    packedCreate.dependencies['@arbol-ai/maximus'],
+    packedCreate.dependencies?.['@arbol-ai/maximus'],
     manifest.version,
     'create-maximus pins its release'
   );

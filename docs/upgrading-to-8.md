@@ -13,8 +13,9 @@ that no operation, scope or tool changed by accident.
 
 ## Update the toolchain and packages
 
-8.0 builds with [Vite+](https://viteplus.dev) (`vp`), TypeScript 7 and Cloudflare's `cf` CLI, on Bun 1.4 and
-Node.js 22.18 or later. Install the packages a project needs:
+8.0 builds with [Vite+](https://viteplus.dev) (`vp`), TypeScript 7 and Cloudflare's `cf` CLI. Bun 1.4 runs
+every command; Node.js 22.18 or later stays installed beside it for Cloudflare's local runtime. Install the
+packages a project needs:
 
 ```sh
 bun add @arbol-ai/maximus@^8

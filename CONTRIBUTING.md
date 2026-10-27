@@ -5,8 +5,11 @@ the rules the framework keeps, and how to propose a change.
 
 ## Set up
 
-You need [Bun](https://bun.sh) 1.4 and Node.js 22.18 or later (Vite+ runs library packing on Node, and
-the release checks run `node` and `npm`).
+You need [Bun](https://bun.sh) 1.4, which runs every command and script, and Node.js 22.18 or later
+installed beside it: Vite+ and Cloudflare's local runtime, Miniflare, run on Node.js underneath, since
+Miniflare reaches workerd through an undici dispatcher that Bun's `fetch` does not take. Publishing uses
+npm's CLI for one step, the upload, which alone exchanges the workflow's OIDC token for npm's trusted
+publishing and provenance.
 
 ```sh
 bun install --frozen-lockfile
@@ -49,15 +52,20 @@ readers, `createDiagnostics` and the correlation helpers).
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `bun run verify`           | The packages' and examples' builds, TypeScript everywhere, lint and format.              |
 | `bun run fix`              | Fixes what lint and format can.                                                          |
-| `bun run test`             | The packages' tests and every example's, in Node.                                        |
+| `bun run test`             | The packages' tests and every example's.                                                 |
 | `bun run test:coverage`    | The same with V8 coverage: under 90% lines, branches, functions or statements fails.     |
 | `bun run test:integration` | The Postgres entry against a real database: Docker and the `postgres:18.6-trixie` image. |
 | `bun run test:e2e`         | Every example's Worker running under `vp dev`, called over HTTP and MCP.                 |
 | `bun run verify:package`   | The packed packages installed into a new project, and starters that pass their verify.   |
 
 Run `bun run verify` and `bun run test` before you push, and `bun run test:e2e` when you change an
-example or what a Worker serves. CI runs all of them on every pull request and every push to `main`, on
-Node 22 and 24, and publishing waits for it to pass on `main`.
+example or what a Worker serves. CI runs all of them on every pull request and every push to `main`, and
+publishing waits for it to pass on `main`.
+
+Vite+ runs the workspace's tasks, so the repository needs no other task runner. `vp run -r <task>` runs a
+task in every package that has it, and the packages' `build` and `typecheck` are tasks of their
+`vite.config.ts`, which `vp run` caches by the files each one reads: a package whose sources did not
+change replays its `dist/` instead of packing again. `vp run --last-details` says what ran and why.
 
 ## Rules the framework keeps
 

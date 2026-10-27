@@ -17,7 +17,7 @@ organizations at once, and whose data does not leave the organization it belongs
 ## Start
 
 ```sh
-bun create maximus my-api        # or: npm create maximus@latest my-api
+bun create maximus my-api
 cd my-api
 bun install
 bun run dev                      # http://localhost:5173

@@ -109,7 +109,7 @@ async function start(
     await run('bun', ['run', 'migrate:local'], directory, log);
   }
   // Its own process group, so stopping it stops workerd with it.
-  const child = spawn('npx', ['vp', 'dev', '--port', String(example.port), '--strictPort'], {
+  const child = spawn('bunx', ['vp', 'dev', '--port', String(example.port), '--strictPort'], {
     cwd: directory,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],

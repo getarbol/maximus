@@ -15,7 +15,6 @@ arguments answer instead:
 bun create maximus my-api --web          # an API, its MCP server and a React app
 bun create maximus my-api --no-mcp       # an API alone
 bun create maximus my-api --yes          # the defaults, without questions
-npm create maximus@latest my-api         # the same with npm
 ```
 
 Then:

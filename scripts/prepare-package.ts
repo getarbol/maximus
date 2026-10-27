@@ -1,6 +1,6 @@
 /**
- * Prepares the packages before they are built: copies the canonical Agent Skill into Maximus and the
- * repository's LICENSE into each package.
+ * Prepares the packages before they are built, as `bun run build` runs it: copies the canonical Agent Skill
+ * into Maximus and the repository's LICENSE into each package.
  */
 import { copyFileSync, cpSync, rmSync } from 'node:fs';
 
