@@ -27,7 +27,8 @@ dates of the release commits.
   layout; `maximus prepare` lists them in `.maximus/app-routes.ts` as lazy, case-sensitive routes. The
   same files decide which paths answer `index.html`, so an unknown path is a 404; `public/` is served by
   name, the hashed `/assets/` for good, and Vite's modules only in development. Pages that claim the API,
-  discovery, MCP, the build's assets or `pages/` are refused. `examples/project-tasks` has a React app
+  discovery, MCP, the build's assets or `pages/` are refused, as is a Vite `base` or `build.assetsDir`
+  that would move the build. `examples/project-tasks` has a React app
   that calls the API with the typed client.
 - `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
   may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot. With

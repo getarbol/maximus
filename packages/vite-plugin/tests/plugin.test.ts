@@ -65,3 +65,20 @@ test('refuses cloudflare.config.ts, which a second Worker configuration would be
     configure(maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' }), { root })
   ).rejects.toThrow('maximus() configures the Worker: move cloudflare.config.ts into its options');
 });
+
+test('serves a web app from the root, refusing a base or assets directory that would move its build', async () => {
+  const root = project({ 'index.html': '<!doctype html>' });
+  const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
+  await configure(plugins, { root, base: '/', build: { assetsDir: 'assets' } });
+  for (const config of [
+    { base: '/app/' },
+    { build: { assetsDir: 'static' } },
+    { environments: { client: { build: { assetsDir: 'static' } } } },
+  ]) {
+    await expect(configure(plugins, { root, ...config }), JSON.stringify(config)).rejects.toThrow(
+      'maximus() serves a web app from the root with its hashed files below /assets'
+    );
+  }
+  // Without index.html, the build is the project's own business.
+  await configure(plugins, { root: project({}), base: '/app/' });
+});

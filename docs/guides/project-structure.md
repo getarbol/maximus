@@ -531,7 +531,9 @@ forwards nothing else. Without `app/routes/`, `index.html` is the one page, at `
 
 Groups and `index` work as they do for routes. A page may not claim the API's base path, `/health`,
 `/.well-known`, `/mcp`, `/assets`, a versioned path or a `pages/` path, and two pages may not claim one
-path, whatever their parameters are named. The API needs its own base path, `/api` by default.
+path, whatever their parameters are named. The API needs its own base path, `/api` by default, and Vite's
+`base` and `build.assetsDir` keep their defaults: the Worker serves the build from the root, its hashed
+files below `/assets`.
 
 The browser calls the API with the typed client and the application's type alone:
 

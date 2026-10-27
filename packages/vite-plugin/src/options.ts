@@ -9,6 +9,7 @@ import type { TokenDevelopment, TokenPolicy } from '@arbol-ai/maximus';
 import type { ProjectOptions } from '@arbol-ai/maximus/vite';
 import { bindings, triggers } from 'cf/config';
 import type { WorkerConfig } from 'cf/config';
+import type { UserConfig } from 'vite';
 
 /** How tokens are verified, as configuration states it; the code that verifies them itself is `auth.ts`. */
 export type TokenOptions = Omit<
@@ -116,6 +117,22 @@ const ASSETS = 'ASSETS';
 /** Whether the project is a web app: `index.html` at its root, which Vite builds for the browser. */
 function servesWebApp(root: string): boolean {
   return existsSync(join(root, 'index.html'));
+}
+
+/**
+ * A web app's build as its Worker serves it: from the root, its hashed files below `/assets`. Refuses a
+ * configuration that moves them, whose app would otherwise miss its own files once deployed.
+ */
+export function checkWebAppBuild(root: string, config: UserConfig): void {
+  const builds = [config.build, config.environments?.client?.build];
+  if (
+    servesWebApp(root) &&
+    ((config.base ?? '/') !== '/' || builds.some((build) => (build?.assetsDir ?? 'assets') !== 'assets'))
+  ) {
+    throw new TypeError(
+      'maximus() serves a web app from the root with its hashed files below /assets: keep base and build.assetsDir at their defaults.'
+    );
+  }
 }
 
 /** The service's name and version: the options', else the package's, its name without a scope. */

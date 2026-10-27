@@ -13,7 +13,7 @@ import type { PluginConfig } from '@cloudflare/vite-plugin';
 import type { WorkerConfig } from 'cf/config';
 import type { Plugin } from 'vite';
 
-import { projectOptions, workerConfig } from './options.ts';
+import { checkWebAppBuild, projectOptions, workerConfig } from './options.ts';
 import type { MaximusOptions } from './options.ts';
 
 export type { MaximusOptions, TokenOptions } from './options.ts';
@@ -61,6 +61,7 @@ export function maximus(options: MaximusOptions): Plugin[] {
           'maximus() configures the Worker: move cloudflare.config.ts into its options, or keep maximusProject() and cloudflare().'
         );
       }
+      checkWebAppBuild(root, config);
       worker = workerConfig(root, mode, options, project.api.prepare(root, mode).crons);
       return await presets(config);
     },
