@@ -197,6 +197,21 @@ it('refuses an input or output that is not a strict object or a union of strict 
   expect(build({ ...readRecord, input: union, output: union })).not.toThrow();
 });
 
+it('refuses a record whose keys follow a pattern unless it refuses every other key, at any depth', () => {
+  const labels = (options: object = {}) =>
+    t.Object({ labels: t.Record(t.String({ pattern: '^[a-z]+$' }), t.String(), options) }, strict);
+  const refused = new TypeError(
+    'Operation "readRecord": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.'
+  );
+  expect(build({ ...readRecord, input: labels() })).toThrow(refused);
+  expect(build({ ...readRecord, output: t.Object({ pages: t.Array(labels()) }, strict) })).toThrow(refused);
+  expect(build({ ...readRecord, input: labels(strict) })).not.toThrow();
+  // Every key matches a record of plain string keys, so each value is checked.
+  expect(
+    build({ ...readRecord, input: t.Object({ labels: t.Record(t.String(), t.String()) }, strict) })
+  ).not.toThrow();
+});
+
 it('refuses a byte body or an attachment outside its HTTP-only, matching and non-GET contract', () => {
   expect(build(uploadFile, 'uploadFile')).not.toThrow();
   expect(build(downloadFile, 'downloadFile')).not.toThrow();
@@ -348,7 +363,7 @@ it('refuses an MCP tool without a safe name or with a name another operation too
   expect(build({ ...readRecord, rpc: true })).not.toThrow();
 });
 
-it('refuses guides without unique safe names', () => {
+it('refuses guides without unique safe names, and a resource name another guide, skill or document takes', () => {
   const guide = { name: 'usage', title: 'Usage', text: 'Read before writing.' };
   for (const guides of [
     [guide, guide],
@@ -363,6 +378,19 @@ it('refuses guides without unique safe names', () => {
   expect(
     build(readRecord, 'readRecord', { mcp: { guides: [guide, { ...guide, name: 'usage-2' }] } })
   ).not.toThrow();
+  // Guides and skills name MCP resources beside the OpenAPI document's, each name once.
+  const skill = { name: 'usage', description: 'Use the records.', text: 'Read before writing.' };
+  for (const mcp of [
+    { guides: [guide], skills: [skill] },
+    { guides: [{ ...guide, name: 'openapi-json' }] },
+  ]) {
+    const name = mcp.skills ? 'usage' : 'openapi-json';
+    expect(build(readRecord, 'readRecord', { mcp }), name).toThrow(
+      new TypeError(
+        `MCP resource name ${name} is taken: guides and skills need names of their own, and openapi-json and openapi-yaml name the OpenAPI document.`
+      )
+    );
+  }
 });
 
 it('refuses skills without unique Agent Skills names, a one-line description of at most 1024 characters and instructions', () => {

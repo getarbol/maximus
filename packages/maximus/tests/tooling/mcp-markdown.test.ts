@@ -110,6 +110,21 @@ test("a skill's frontmatter states its one-line description, and its name only a
   }
 });
 
+test("a guide and a skill never share a resource name, nor take the OpenAPI document's", () => {
+  for (const [files, name] of [
+    [
+      { 'mcp/guides/weekly-review.md': '# Weekly review\n', 'mcp/skills/weekly-review.md': weeklyReview },
+      'weekly-review',
+    ],
+    [{ 'mcp/guides/openapi-json.md': '# The document\n' }, 'openapi-json'],
+    [{ 'mcp/skills/openapi-yaml.md': weeklyReview.replace('weekly-review', 'openapi-yaml') }, 'openapi-yaml'],
+  ] as const) {
+    expect(() => prepare(project(files)), name).toThrow(
+      `MCP resource name ${name} is taken: guides and skills need names of their own, and openapi-json and openapi-yaml name the OpenAPI document.`
+    );
+  }
+});
+
 test('guides and skills are kebab-case ordinary files', () => {
   for (const name of ['mcp/guides/Task_Conventions.md', `mcp/skills/${'a'.repeat(65)}.md`]) {
     const root = project({ [name]: '# Title\n' });

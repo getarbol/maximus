@@ -348,6 +348,14 @@ const projectOwnerInput = (schema: OwnerSchema, stripUnknown: boolean): TSchema 
     .Encode((value) => value);
 };
 /**
+ * An input schema as callers send it, for the documents that publish it: a field with a default is optional,
+ * since decoding fills it in. A schema `inputSchema()` compiled is its wire form already.
+ */
+export function wireInput(schema: TSchema): TSchema {
+  return TransformKind in schema ? schema : projectOwnerInput(schema as OwnerSchema, false);
+}
+
+/**
  * Whether a schema carries owner codecs that only `inputSchema()` compiles: a normalizer, transform,
  * inspector or refinement, a `pipeSchema` source, or a `stripObject`. A plain decode ignores their
  * markers, so such a schema used directly as an operation input would admit raw, unnormalized and

@@ -92,6 +92,7 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
   checkSchemaReferences(manifest);
   checkGuides(manifest.mcp?.guides ?? []);
   checkSkills(manifest.mcp?.skills ?? []);
+  checkMcpResourceNames(manifest.mcp);
   checkSkillTool(manifest.mcp, claimed.tools);
   if (!validBodyLimit(manifest.maxBodyBytes)) {
     throw new TypeError('The application body limit is a positive integer up to 16 MiB.');
@@ -229,6 +230,11 @@ function checkOperationContract(name: string, op: OperationShape, namespace: str
       `Operation "${name}": input and output are strict objects or unions of strict objects; a GET input is one strict object (its query). Use safe operation names, namespaced scopes and strict object schemas.`
     );
   }
+  if (looseRecord(op.input) || looseRecord(op.output)) {
+    throw new TypeError(
+      `Operation "${name}": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.`
+    );
+  }
 }
 
 /** Byte bodies, attachments, limits, header-sourced fields and the route itself. */
@@ -315,6 +321,26 @@ function checkGuides(guides: readonly McpGuide[]): void {
   }
 }
 
+/** The names of the MCP resources the server always lists: the OpenAPI document as JSON and as YAML. */
+const OPENAPI_RESOURCES = ['openapi-json', 'openapi-yaml'];
+
+/**
+ * Guides and skills name MCP resources beside the OpenAPI document's, so each name stands for one resource: a
+ * guide and a skill never share one, and neither takes `openapi-json` or `openapi-yaml`. `maximus prepare`
+ * applies this to `mcp/guides/` and `mcp/skills/` too.
+ */
+export function checkMcpResourceNames(mcp: Pick<McpConfiguration, 'guides' | 'skills'> | undefined): void {
+  const taken = new Set(OPENAPI_RESOURCES);
+  for (const { name } of [...(mcp?.guides ?? []), ...(mcp?.skills ?? [])]) {
+    if (taken.has(name)) {
+      throw new TypeError(
+        `MCP resource name ${name} is taken: guides and skills need names of their own, and openapi-json and openapi-yaml name the OpenAPI document.`
+      );
+    }
+    taken.add(name);
+  }
+}
+
 /** The MCP skills: unique Agent Skills names, one-line descriptions and instructions. */
 function checkSkills(skills: readonly McpSkill[]): void {
   if (
@@ -347,6 +373,33 @@ function checkSkillTool(mcp: McpConfiguration | undefined, tools: ReadonlySet<st
 /** Whether a body or output limit is absent, or a positive integer up to 16 MiB. */
 function validBodyLimit(value: number | undefined): boolean {
   return value === undefined || (Number.isInteger(value) && value > 0 && value <= MAX_BODY_BYTES_CEILING);
+}
+
+/** The key pattern of `t.Record(t.String(), value)`, which every key matches, so every value is checked. */
+const ANY_KEY = '^(.*)$';
+
+/**
+ * Whether a schema holds, at any depth, a record whose keys follow a pattern but that admits other keys:
+ * without `additionalProperties: false`, a key outside the pattern passes with any value at all.
+ */
+function looseRecord(schema: unknown): boolean {
+  if (Array.isArray(schema)) {
+    return schema.some(looseRecord);
+  }
+  if (!schema || typeof schema !== 'object') {
+    return false;
+  }
+  const node = schema as Record<string, unknown>;
+  const patterns = node.patternProperties;
+  if (
+    patterns &&
+    typeof patterns === 'object' &&
+    node.additionalProperties !== false &&
+    Object.keys(patterns).some((pattern) => pattern !== ANY_KEY)
+  ) {
+    return true;
+  }
+  return Object.values(node).some(looseRecord);
 }
 
 /**

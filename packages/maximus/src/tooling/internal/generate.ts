@@ -6,6 +6,7 @@
 import { existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
+import { operationPathParameters } from '../../http-paths.ts';
 import { checkProjectFolder, projectFiles, projectPath, routeShape } from './project-files.ts';
 
 /** The methods a route file may answer, by the suffix its name takes. */
@@ -79,6 +80,8 @@ export function generateRoute(directory: string, method: string, path: string, t
   }
   const segments = routeSegments(path);
   const routePath = projectPath(segments.join('/'), 'routes');
+  // The template rules the Worker applies when it starts, such as safe parameter names.
+  operationPathParameters(routePath);
   for (const { name, file } of projectFiles(root, 'routes', 'development')) {
     const suffix = /\.(get|post|put|patch|delete)$/.exec(name);
     if (

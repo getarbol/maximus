@@ -9,6 +9,7 @@ import type { Tool } from '@modelcontextprotocol/server';
 
 import { operationMatchesScopes, reportUnexpected, standardErrors } from '../index.ts';
 import type { OperationShape, TransportContext } from '../index.ts';
+import { wireInput } from '../input-schemas.ts';
 import { MAX_BODY_BYTES_CEILING, mcpOpenWorld } from '../manifest.ts';
 import { canonical, standaloneSchema } from '../schema-bundle.ts';
 import { readSkill, registerSkills, SKILLS_EXTENSION, skillTool } from './skills.ts';
@@ -37,7 +38,7 @@ function toolDefinition(op: ToolOperation): Tool {
       name: op.mcp.name,
       title: op.title,
       description: op.description,
-      inputSchema: toolInputSchema(op.input),
+      inputSchema: toolInputSchema(wireInput(op.input)),
       outputSchema: { ...(standaloneSchema(op.output) as object), type: 'object' },
       annotations: {
         readOnlyHint: op.effect === 'read',

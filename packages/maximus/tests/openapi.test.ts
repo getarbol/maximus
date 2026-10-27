@@ -4,8 +4,17 @@
  */
 import { expect, it } from 'vite-plus/test';
 
-import { createHttpHandler, createOpenApi, defineErrors, maximus, ok, t } from '../src/index.ts';
+import {
+  createHttpHandler,
+  createOpenApi,
+  defineErrors,
+  maximus,
+  ok,
+  PageQueryFields,
+  t,
+} from '../src/index.ts';
 import type { AppManifest, OperationShape } from '../src/index.ts';
+import { defaultSchema } from '../src/schemas.ts';
 
 const ISSUER = 'https://issuer.example.test/';
 const empty = t.Object({}, { additionalProperties: false });
@@ -242,6 +251,61 @@ it('documents a list query field as one comma-separated value, the form the API 
     );
   expect(await (await search('tags=a,b')).json()).toMatchObject({ data: { tags: ['a', 'b'] } });
   expect((await search('tags=a&tags=b')).status).toBe(400);
+});
+
+it('publishes a field with a default as optional, since decoding fills it in, whether or not inputSchema() wraps the input', () => {
+  const app = maximus<Record<string, never>>({
+    name: 'fixture',
+    namespace: 'fixture',
+    title: 'Fixture',
+    version: '1',
+    origin: 'https://fixture.example.test',
+    tokens: { issuer: ISSUER, audience: 'https://fixture.example.test' },
+    errors,
+    rpc: { callers: [] },
+    telemetry: { enabled: false },
+  })
+    .operation(
+      'listRecords',
+      {
+        ...words,
+        effect: 'read',
+        scope: 'fixture:records:read',
+        input: t.Object(PageQueryFields, { additionalProperties: false }),
+        output: empty,
+        http: { method: 'GET', path: '/v1/records' },
+      },
+      async () => ok({})
+    )
+    .operation(
+      'createRecord',
+      {
+        ...words,
+        effect: 'write',
+        scope: 'fixture:records:write',
+        input: t.Object(
+          { title: t.String(), pinned: defaultSchema(t.Boolean(), false) },
+          { additionalProperties: false }
+        ),
+        output: empty,
+        http: { method: 'POST', path: '/v1/records' },
+      },
+      async () => ok({})
+    )
+    .build();
+  const paths = (
+    createOpenApi(app) as {
+      paths: Record<string, { get: { parameters: { name: string; required: boolean }[] }; post: object }>;
+    }
+  ).paths['/v1/records'];
+  expect(paths?.get.parameters.map(({ name, required }) => [name, required])).toStrictEqual([
+    ['cursor', false],
+    ['direction', false],
+    ['limit', false],
+  ]);
+  expect(paths?.post).toMatchObject({
+    requestBody: { content: { 'application/json': { schema: { required: ['title'] } } } },
+  });
 });
 
 it('fills the default limits', () => {

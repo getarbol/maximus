@@ -108,6 +108,14 @@ Everything else:
   client sends `tags=a,b`, the one form the API reads, rather than repeating the key, which it refuses.
 - Every refusal of `.build()` that concerns one operation names it, and a refusal of a route template names
   the path or the routes it concerns.
+- `.build()` refuses a record whose keys follow a pattern unless it sets `additionalProperties: false`,
+  without which a key outside the pattern passes with any value, and guide or skill names that collide with
+  each other or with the OpenAPI document's resources. `maximus prepare` and `maximus gen route` refuse a
+  route parameter the Worker would refuse, such as `[constructor]`.
+- An operation's JSON body in another media type is refused with `415` before any of it is read.
+- The OpenAPI document and the MCP tool listing publish an input field with a default as optional, since
+  decoding fills it in, whether or not `inputSchema()` wraps the input; a `DELETE`'s body is required only
+  when its input requires a field. The API's index names the MCP endpoint whenever the Worker serves MCP.
 - `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds a
   method to itself in its constructor constructs.
 - Project discovery sees the MCP tool of a route declared as a `const`, refuses a route whose fields it

@@ -209,7 +209,7 @@ it('answers INTERNAL_ERROR, before the operation runs, when the rate limit bindi
   expect(lock).not.toHaveBeenCalled();
 });
 
-it('refuses a call by its token, its scope or its rate limit without reading its body, however large', async () => {
+it('refuses a call by its token, its scope, its rate limit or its media type without reading its body, however large', async () => {
   lock.mockClear();
   /** A call to `lockRecord` that sends a 1 MiB record id, with the headers given. */
   const large = (headers: Record<string, string> = {}) =>
@@ -232,6 +232,7 @@ it('refuses a call by its token, its scope or its rate limit without reading its
     [401, writer, large(), unlimited],
     [403, reader, large(token), unlimited],
     [429, limited, large(token), exhausted],
+    [415, writer, large({ ...token, 'content-type': 'text/plain' }), unlimited],
   ] as const) {
     expect((await handle(request, env)).status).toBe(status);
     expect(request.bodyUsed, String(status)).toBe(false);

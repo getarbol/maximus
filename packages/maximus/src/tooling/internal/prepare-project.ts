@@ -7,6 +7,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { join, relative, resolve, sep } from 'node:path';
 
 import type { ApplicationConfiguration } from '../../builder.ts';
+import { operationPathParameters } from '../../http-paths.ts';
 import { ownsPrefix, VERSIONED_PATH } from '../../internal/http-layout.ts';
 import { checkPagePaths } from '../../project/pages.ts';
 import type { TokenPolicy } from '../../tokens.ts';
@@ -137,6 +138,15 @@ function discoverRoutes(root: string, files: readonly ProjectFile[], imports: Im
     }
     const method = suffix[1].toUpperCase();
     const path = projectPath(name.slice(0, -suffix[0].length), 'routes');
+    // The template rules the Worker applies when it starts, such as safe parameter names, applied now.
+    try {
+      operationPathParameters(path);
+    } catch (error) {
+      throw new TypeError(
+        `${relative(root, file)}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+    }
     // `{taskId}` and `{id}` match the same paths.
     const claim = `${method} ${routeShape(path)}`;
     const owner = owners.get(claim);

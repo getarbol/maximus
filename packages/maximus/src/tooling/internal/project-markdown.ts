@@ -5,6 +5,7 @@
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
+import { checkMcpResourceNames } from '../../define-app.ts';
 import type { McpConfiguration, McpGuide, McpSkill } from '../../manifest.ts';
 import { compareNames } from './project-files.ts';
 
@@ -88,6 +89,7 @@ export function mcpMarkdown(root: string): McpConfiguration | undefined {
   }
   const guides = markdownFiles(root, 'mcp/guides').map(guide);
   const skills = markdownFiles(root, 'mcp/skills').map(skill);
+  checkMcpResourceNames({ guides, skills });
   const configuration: McpConfiguration = {
     ...(existsSync(instructions) ? { instructions: readFileSync(instructions, 'utf-8') } : {}),
     ...(guides.length ? { guides } : {}),

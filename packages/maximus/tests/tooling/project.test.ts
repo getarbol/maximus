@@ -106,6 +106,18 @@ test('a route file is named by its method; any other name is refused with the co
   }
 });
 
+test('a route whose parameter the Worker would refuse as it starts is refused when prepared', () => {
+  for (const [file, path] of [
+    ['routes/v1/tasks/[constructor].get.ts', '/v1/tasks/{constructor}'],
+    ['routes/v1/[taskId]/notes/[taskId].get.ts', '/v1/{taskId}/notes/{taskId}'],
+  ] as const) {
+    const root = project({ [file]: ROUTE });
+    expect(() => prepare(root), file).toThrow(
+      new TypeError(`${file}: Path parameter names must be unique and safe: ${path}`)
+    );
+  }
+});
+
 test('suffixed modules declare one method each and share a path', () => {
   const root = project({
     'routes/v1/tasks/index.get.ts': 'export default defineHandler(list, { output: {} });',

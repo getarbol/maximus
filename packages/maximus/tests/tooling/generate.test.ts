@@ -66,7 +66,7 @@ test('a path is written however it is spelled, and a folder that exists takes th
   prepare(root);
 });
 
-test('a route a file already answers, an unknown method, a path outside a version and a bad tool name are refused', () => {
+test('a route a file already answers, an unknown method, a path outside a version, an unsafe parameter and a bad tool name are refused', () => {
   const root = project({ 'routes/v1/tasks/[taskId].get.ts': ROUTE });
   expect(() => generateRoute(root, 'get', '/v1/tasks/{id}')).toThrow(
     'routes/v1/tasks/[taskId].get.ts already answers GET /v1/tasks/{id}.'
@@ -81,6 +81,10 @@ test('a route a file already answers, an unknown method, a path outside a versio
   }
   expect(() => generateRoute(root, 'get', '/v1/tasks/{task-id}')).toThrow(
     'Use letters, digits, _ and - in a fixed segment'
+  );
+  // A name the Worker would refuse as it starts, since it would reach an object's prototype.
+  expect(() => generateRoute(root, 'get', '/v1/tasks/{constructor}')).toThrow(
+    new TypeError('Path parameter names must be unique and safe: /v1/tasks/{constructor}')
   );
   expect(() => generateRoute(root, 'get', '/v1/tasks', 'list-tasks')).toThrow(
     'Name an MCP tool in snake_case'

@@ -9,6 +9,7 @@ import type { TSchema } from '@sinclair/typebox';
 import { FailureSchema } from './errors.ts';
 import type { ErrorDefinition } from './errors.ts';
 import { operationPathParameters } from './http-paths.ts';
+import { wireInput } from './input-schemas.ts';
 import { queryKinds } from './internal/http-query.ts';
 import { pathParameterSchemas } from './internal/http-routes.ts';
 import {
@@ -220,12 +221,19 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
   ) as OpenApiDocument;
 }
 
+/** Whether a body schema requires a field, so no empty body is valid: a union does when each member does. */
+function requiresField(schema: unknown): boolean {
+  const node = schema as { required?: unknown[]; anyOf?: unknown[] };
+  return node.anyOf ? node.anyOf.every(requiresField) : (node.required ?? []).length > 0;
+}
+
 /**
  * Where an operation's input travels: its path parameters, then a byte body's query and header
  * metadata, a GET's query, or a JSON body without the fields the path carries.
  */
 function requestContract(op: OperationShape, http: NonNullable<OperationShape['http']>): object {
-  const { input } = op;
+  // As callers send it: a field with a default is optional.
+  const input = wireInput(op.input);
   const parameterNames = operationPathParameters(http.path);
   const pathNames = new Set(parameterNames);
   const pathParameters = parameterNames.map((parameter) => {
@@ -274,15 +282,14 @@ function requestContract(op: OperationShape, http: NonNullable<OperationShape['h
       ],
     };
   }
+  const body = pathNames.size ? bodyWithoutPathParameters(input, pathNames) : input;
   return {
     ...(pathParameters.length ? { parameters: pathParameters } : {}),
     requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: pathNames.size ? bodyWithoutPathParameters(input, pathNames) : input,
-        },
-      },
+      // A DELETE may send no body at all, and is then its empty input: its body is required only when its
+      // input requires a field the path does not carry.
+      required: http.method !== 'DELETE' || requiresField(body),
+      content: { 'application/json': { schema: body } },
     },
   };
 }

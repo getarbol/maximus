@@ -413,7 +413,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         return Response.json({
           name: manifest.title,
           openapi: paths.mount('/openapi.json'),
-          ...(manifest.mcp && mcpTransport ? { mcp: mcpTransport.path } : {}),
+          ...(mcpTransport ? { mcp: mcpTransport.path } : {}),
         });
       }
       case '/openapi.json': {
@@ -594,6 +594,19 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         let request = incoming;
         let bodyText = '';
         const byteOperation = operationRoute?.definition.op.http?.body === 'bytes';
+        // An operation's body in another media type is refused before any of it is read; a DELETE may send
+        // none at all.
+        const type = request.headers.get('content-type');
+        if (
+          operationRoute &&
+          !byteOperation &&
+          request.method !== 'GET' &&
+          (type === null
+            ? request.body !== null && request.method !== 'DELETE'
+            : mediaType(type) !== 'application/json')
+        ) {
+          return reject(standardErrors.unsupportedMedia.create());
+        }
         if (request.body && !byteOperation) {
           const maxBytes = operationRoute
             ? (operationRoute.definition.op.maxBodyBytes ?? fallbackBodyBytes)
@@ -689,7 +702,8 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
                 operation: name ?? null,
                 surface,
                 requestId,
-                started: performance.now(),
+                // Timed from the request's start, as admission times the refusals HTTP answers.
+                started,
                 errorCode: error.code,
               });
             },

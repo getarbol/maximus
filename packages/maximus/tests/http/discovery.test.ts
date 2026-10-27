@@ -111,15 +111,22 @@ it('answers its index, liveness and OpenAPI documents without reading a token', 
   expect(verify).not.toHaveBeenCalled();
 });
 
-it('names the MCP endpoint in its index only when the application configures MCP', async () => {
+it('names the MCP endpoint in its index whenever it serves MCP, with or without MCP configuration', async () => {
   const configured = createHttpHandler(application({}, {}), { transports: [transport('/agents', 'mcp')] });
   expect(await (await configured(new Request(`${ORIGIN}/`), {})).json()).toStrictEqual({
     name: 'Records',
     openapi: '/openapi.json',
     mcp: '/agents',
   });
-  const unconfigured = createHttpHandler(application(), { transports: [transport('/mcp')] });
-  expect(await (await unconfigured(new Request(`${ORIGIN}/`), {})).json()).toStrictEqual({
+  // Tools alone make an MCP server, as a project whose routes declare tools but that has no mcp/ Markdown.
+  const tools = createHttpHandler(application(), { transports: [transport('/mcp')] });
+  expect(await (await tools(new Request(`${ORIGIN}/`), {})).json()).toStrictEqual({
+    name: 'Records',
+    openapi: '/openapi.json',
+    mcp: '/mcp',
+  });
+  const other = createHttpHandler(application(), { transports: [transport('/tools')] });
+  expect(await (await other(new Request(`${ORIGIN}/`), {})).json()).toStrictEqual({
     name: 'Records',
     openapi: '/openapi.json',
   });
