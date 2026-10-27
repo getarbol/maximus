@@ -48,8 +48,19 @@ async function configure(
 test('prepares the project and keeps Cloudflare’s plugin after its own, out of Vitest alone', async () => {
   const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});' });
   const options = { origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' };
-  // Under Vitest, a project's tests import the generated application in Node, without workerd.
-  expect(maximus(options).map(({ name }) => name)).toEqual(['maximus', 'maximus-project']);
+  // Under Vitest, a project's tests import the generated application in Node, without workerd, and resolve
+  // `cloudflare:workers` to the package's stand-in, Maximus's own modules included.
+  const tested = maximus(options);
+  expect(tested.map(({ name }) => name)).toEqual(['maximus', 'maximus-project', 'maximus:test']);
+  const testing = tested[2]?.config;
+  expect(
+    typeof testing === 'function' && testing.call({} as never, {}, { mode: 'test', command: 'serve' })
+  ).toEqual({
+    resolve: {
+      alias: { 'cloudflare:workers': expect.stringMatching(/testing[/\\]cloudflare-workers\.[jt]s$/) },
+    },
+    test: { server: { deps: { inline: [/@arbol-ai\/maximus/] } } },
+  });
   vi.stubEnv('VITEST', '');
   const plugins = maximus(options);
   vi.unstubAllEnvs();

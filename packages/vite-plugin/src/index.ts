@@ -5,6 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { maximusProject } from '@arbol-ai/maximus/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
@@ -76,12 +77,34 @@ export function maximus(options: MaximusOptions): Plugin[] {
     },
   };
   // Under Vitest, a project's tests import the generated application in Node: Cloudflare's plugin, which
-  // would run them in workerd's dev environment, stays out.
+  // would run them in workerd's dev environment, stays out, and `cloudflare:workers` is a stand-in.
   if (process.env.VITEST) {
-    return [configure, project];
+    return [configure, project, testing()];
   }
   // Cloudflare's plugin parses what the customizer returns with its input schema, as it parses
   // cloudflare.config.ts; its type names the parsed form.
   const customize = () => worker as Exclude<PluginConfig['config'], (...args: never[]) => unknown>;
   return [configure, project, ...cloudflare({ config: customize })];
+}
+
+/** The path of this package's stand-in for `cloudflare:workers`, with this extension. */
+function workersStandIn(extension: string): string {
+  return fileURLToPath(new URL(`testing/cloudflare-workers.${extension}`, import.meta.url));
+}
+
+/**
+ * What a project's tests run with in Node: `cloudflare:workers` resolves to this package's stand-in, whose
+ * entrypoint and Durable Object base classes keep the context and bindings a test constructs them with.
+ * Maximus's own modules are inlined, so the generated Worker resolves the stand-in too.
+ */
+function testing(): Plugin {
+  // The build ships JavaScript; this package's own tests run its sources.
+  const workers = existsSync(workersStandIn('js')) ? workersStandIn('js') : workersStandIn('ts');
+  return {
+    name: 'maximus:test',
+    config: () => ({
+      resolve: { alias: { 'cloudflare:workers': workers } },
+      test: { server: { deps: { inline: [/@arbol-ai\/maximus/] } } },
+    }),
+  };
 }

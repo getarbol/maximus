@@ -209,6 +209,26 @@ test('an MCP module outside mcp/tools/, nested or misnamed is refused', () => {
   }
 });
 
+test("a binding to one of the Worker's own Durable Object classes is typed by that class", () => {
+  const schedules = { type: 'durable-object', worker: 'tasks', exportName: 'DaySchedule' };
+  const elsewhere = { type: 'durable-object', worker: 'billing', exportName: 'DaySchedule' };
+  const configured = options({
+    env: {
+      production: { SCHEDULES: schedules, LEDGER: elsewhere },
+      development: { SCHEDULES: schedules, LEDGER: elsewhere, DEVELOPMENT_TOKEN: { type: 'secret' } },
+    },
+  });
+  const root = project({ 'durable-objects/day-schedule.ts': 'export default class DaySchedule {}' });
+  prepare(root, 'development', configured);
+  const env = generated(root, 'env.d.ts');
+  expect(env).toContain(
+    'type DurableObjects = {\n  "SCHEDULES": DurableObjectNamespace<import("../durable-objects/day-schedule.ts").default>;\n};'
+  );
+  expect(env).toContain('interface Env extends Omit<Bindings, keyof DurableObjects>, DurableObjects {}');
+  // Another Worker's class of the same name is not this one: Cloudflare's inference types that binding.
+  expect(env).not.toContain('"LEDGER": DurableObjectNamespace');
+});
+
 test('the generated modules carry the configuration and infer Env from the bindings of each mode', () => {
   const configured = options({
     env: {

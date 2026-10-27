@@ -191,6 +191,37 @@ function discoverEvents(kind: 'queues' | 'email', files: readonly ProjectFile[],
   });
 }
 
+/** The name a Durable Object module's class is exported under: `session-store.ts` exports `SessionStore`. */
+function durableObjectClass(name: string): string {
+  return name
+    .split('-')
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join('');
+}
+
+/**
+ * Each binding to one of the Worker's own Durable Object classes, in every mode, as the namespace of that
+ * class. Cloudflare's inference sees the Worker only by its name there, and types the namespace without it.
+ */
+function durableObjectBindings(
+  project: ProjectOptions,
+  files: readonly ProjectFile[],
+  imports: Imports
+): string[] {
+  const classes = new Map(files.map(({ name, file }) => [durableObjectClass(name), imports.source(file)]));
+  const { production, development } = project.env;
+  return Object.entries(production).flatMap(([key, binding]) => {
+    if (typeof binding !== 'object' || binding === null || !Object.hasOwn(development, key)) {
+      return [];
+    }
+    const { type, worker, exportName } = binding as Record<string, unknown>;
+    const source = typeof exportName === 'string' ? classes.get(exportName) : undefined;
+    return type === 'durable-object' && worker === project.application.name && source
+      ? [`  ${JSON.stringify(key)}: DurableObjectNamespace<import(${source}).default>;`]
+      : [];
+  });
+}
+
 /** The Durable Object classes `durable-objects/` declares, exported under the PascalCase of their files. */
 function discoverDurableObjects(files: readonly ProjectFile[], imports: Imports): string[] {
   const classes = new Set(['Service']);
@@ -198,10 +229,7 @@ function discoverDurableObjects(files: readonly ProjectFile[], imports: Imports)
     if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(name)) {
       throw new TypeError(`Durable Object filenames must be top-level kebab-case names: ${name}`);
     }
-    const className = name
-      .split('-')
-      .map((part) => part[0]?.toUpperCase() + part.slice(1))
-      .join('');
+    const className = durableObjectClass(name);
     if (classes.has(className)) {
       throw new TypeError(`Duplicate Worker export: ${className}`);
     }
@@ -404,6 +432,7 @@ export function prepareProject(directory: string, mode: string, project: Project
   const queues = discoverEvents('queues', files.queues, worker);
   const email = discoverEvents('email', files.email, worker);
   const durableObjects = discoverDurableObjects(files['durable-objects'], worker);
+  const objects = durableObjectBindings(project, files['durable-objects'], new Imports(output));
   const web = discoverWebApp(root, output, mode, project, pages.paths);
 
   const generated: Record<string, string> = {
@@ -417,7 +446,7 @@ export function prepareProject(directory: string, mode: string, project: Project
       ]
     ),
     // The bindings each mode declares, which Cloudflare's own inference turns into `Env`: a JSON value is
-    // also its own literal type.
+    // also its own literal type. A binding to one of the Worker's own Durable Object classes is typed by it.
     'env.d.ts': generatedModule(
       mode,
       [],
@@ -425,10 +454,13 @@ export function prepareProject(directory: string, mode: string, project: Project
         "type Bindings = import('cf/config').InferEnv<",
         `  { env: ${JSON.stringify(project.env.production)} } | { env: ${JSON.stringify(project.env.development)} }`,
         '>;',
+        ...(objects.length ? ['type DurableObjects = {', ...objects, '};'] : []),
         '',
         'declare global {',
         '  namespace Cloudflare {',
-        '    interface Env extends Bindings {}',
+        objects.length
+          ? '    interface Env extends Omit<Bindings, keyof DurableObjects>, DurableObjects {}'
+          : '    interface Env extends Bindings {}',
         '  }',
         '  interface Env extends Cloudflare.Env {}',
         '}',

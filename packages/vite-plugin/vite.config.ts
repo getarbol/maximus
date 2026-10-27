@@ -1,11 +1,12 @@
 /**
- * The package build: tsdown bundles the plugin into one ESM file and one declaration file under dist/.
+ * The package build: tsdown bundles the plugin into one ESM file and one declaration file under dist/, and
+ * the stand-in for `cloudflare:workers` that a project's tests resolve into dist/testing/.
  */
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
   pack: {
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', 'testing/cloudflare-workers': 'src/testing/cloudflare-workers.ts' },
     format: 'esm',
     platform: 'node',
     target: 'es2022',
