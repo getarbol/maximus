@@ -16,6 +16,10 @@ dates of the release commits.
   development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
   trigger and brings the lint and format presets a configuration lacks. It is released with
   `@arbol-ai/maximus` at the same version.
+- A project configured in `vite.config.ts` describes its MCP server in Markdown: `mcp/instructions.md`
+  for every client that connects, `mcp/guides/<name>.md` as resources and prompts titled by their first
+  heading, and `mcp/skills/<name>.md` as Agent Skills whose frontmatter states their description. The
+  Worker serves MCP when any of them exists. Other layouts set `mcp` in code and refuse the files.
 - With `index.html` at its root, a project configured in `vite.config.ts` is a web app: `maximus()`
   declares the `ASSETS` binding and Worker-first assets, and the same Worker serves the API under `/api`
   and the app's build. The pages are the files of `app/routes/` (`[taskId].tsx` is `:taskId`), each a

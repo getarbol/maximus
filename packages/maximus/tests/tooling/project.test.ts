@@ -211,7 +211,7 @@ test('a suffixed module exports its declaration and nothing else', () => {
 test('MCP tools are named by their file and bring the MCP transport, as a route tool does', () => {
   const root = project({
     'mcp/tools/summarize-tasks.ts': 'export default defineTool({});',
-    'mcp/instructions.md': '# Not a module',
+    'mcp/README.md': '# Not a module',
     'mcp/_shared.ts': 'export const ignored = true;',
   });
   prepareProject(root);

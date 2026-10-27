@@ -15,6 +15,9 @@ routes/v1/tasks/[taskId].get.ts           GET    /api/v1/tasks/{taskId}
 routes/v1/tasks/[taskId].delete.ts        DELETE /api/v1/tasks/{taskId}
 routes/v1/tasks/[taskId]/complete.post.ts POST   /api/v1/tasks/{taskId}/complete (+ MCP complete_task)
 mcp/tools/summarize-tasks.ts              MCP only: summarize_tasks
+mcp/instructions.md                       What MCP clients read when they connect
+mcp/guides/task-conventions.md            A guide, as an MCP resource and prompt
+mcp/skills/weekly-review.md               An Agent Skill: skill://weekly-review/SKILL.md
 src/tasks.ts                              The organization's tasks in Workers KV
 index.html                                The web app, which loads app/main.tsx
 app/api.ts                                The typed client of the API, and the token in memory

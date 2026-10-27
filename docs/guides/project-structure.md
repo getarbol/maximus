@@ -14,6 +14,7 @@ context.ts                 Optional: what every handler receives, prepared once 
 auth.ts                    Optional: tokens the application verifies itself
 routes/v1/greeting.get.ts   One defineHandler per route and method: GET /api/v1/greeting
 mcp/tools/summarize.ts     Optional MCP-only tools, named by their file
+mcp/instructions.md        Optional MCP description: instructions, guides/*.md and skills/*.md
 middleware/10-response.ts   Ordered HTTP request middleware
 pages/index.ts             Optional public response at /
 index.html                 Optional web app, served by the same Worker; app/routes/ are its pages
@@ -179,6 +180,32 @@ method belong to the filename.
 idempotent when it reads. When a route or a tool declares MCP, the generated Worker adds the MCP transport
 unless the configuration already has one. MCP needs OAuth discovery: configure `tokens.issuer`, not an
 application `bearer` scheme.
+
+The MCP server describes itself with Markdown in `mcp/`, which a project configured in `vite.config.ts`
+serves even when it has no tool:
+
+```text
+mcp/instructions.md               What every client reads when it connects
+mcp/guides/task-conventions.md    A guide: a resource and a prompt, titled by its first # heading
+mcp/skills/weekly-review.md       An Agent Skill, served as skill://weekly-review/SKILL.md
+```
+
+A skill starts with frontmatter that states its one-line `description` (and its `name`, if at all, as its
+file does), as an Agent Skill's `SKILL.md` does; the Markdown after it is the instructions:
+
+```md
+---
+description: Review the organization's open tasks once a week and complete the ones that are done.
+---
+
+# Weekly review
+
+1. Call summarize_tasks to see how many tasks are open.
+```
+
+Guides and skills are named by their kebab-case files. They are static guidance for every caller: never
+put tenant data in them, and they grant no tool or scope. With `maximus.config.ts` or the 7.3 entries, set
+`mcp` in the application instead; `mcp/*.md` is refused there.
 
 Handlers are typed through the global `MaximusRegister`, which `maximus prepare` writes in
 `.maximus/register.d.ts`: its `base` gives every handler its context. A root `errors.ts` that
