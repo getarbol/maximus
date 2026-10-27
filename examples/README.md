@@ -1,14 +1,16 @@
 # Examples
 
 Runnable Maximus services, each configured in its `vite.config.ts` alone and deployable to Cloudflare. Every
-one runs locally with `bun run dev`, and its tests run in Node with `bun run test`; none needs a Cloudflare
-account until it deploys.
+one runs locally with `bun run dev`, and its tests run in Node with `bun run test`. Only `browser-pages`
+needs a Cloudflare account before it deploys: its browser runs on Cloudflare's network.
 
-| Example                    | Shows                                                                                                                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`tasks`](tasks)           | Routes as files, typed failures, MCP tools from routes and from `mcp/tools/`, a guide and an Agent Skill in Markdown, and a React web app served by the same Worker. Workers KV. |
-| [`d1-notes`](d1-notes)     | A D1 database with migrations, rows keyed by organization and read through their schema, keyset pages, and literal search as an MCP tool.                                        |
-| [`worker-rpc`](worker-rpc) | Two Workers: orders calls pricing over native RPC with the caller's principal, typed by the contract pricing publishes.                                                          |
+| Example                              | Shows                                                                                                                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`tasks`](tasks)                     | Routes as files, typed failures, MCP tools from routes and from `mcp/tools/`, a guide and an Agent Skill in Markdown, and a React web app served by the same Worker. Workers KV. |
+| [`d1-notes`](d1-notes)               | A D1 database with migrations, rows keyed by organization and read through their schema, keyset pages, and literal search as an MCP tool.                                        |
+| [`worker-rpc`](worker-rpc)           | Two Workers: orders calls pricing over native RPC with the caller's principal, typed by the contract pricing publishes.                                                          |
+| [`queue-reminders`](queue-reminders) | A queue whose consumer delivers reminders once, a dead letter queue, and a cron that queues again what was never delivered. Workers KV.                                          |
+| [`browser-pages`](browser-pages)     | Browser Run: pages read as Markdown for agents or captured as a PNG attachment, with Chrome held to the allowed hosts.                                                           |
 
 Inside this repository the examples depend on the workspace packages (`workspace:^`). Your own project
 depends on a release: `bun create maximus my-api` starts one.

@@ -18,8 +18,34 @@
         "vitest": "5.0.5",
       },
     },
+    "examples/browser-pages": {
+      "name": "@maximus-examples/browser-pages",
+      "dependencies": {
+        "@arbol-ai/maximus": "workspace:^",
+      },
+      "devDependencies": {
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
+        "cf": "^1.0.0-beta.23",
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+        "vite-plus": "1.4.0",
+      },
+    },
     "examples/d1-notes": {
       "name": "@maximus-examples/d1-notes",
+      "dependencies": {
+        "@arbol-ai/maximus": "workspace:^",
+      },
+      "devDependencies": {
+        "@arbol-ai/vite-plugin": "workspace:^",
+        "@cloudflare/workers-types": "5.20261027.1",
+        "cf": "^1.0.0-beta.23",
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+        "vite-plus": "1.4.0",
+      },
+    },
+    "examples/queue-reminders": {
+      "name": "@maximus-examples/queue-reminders",
       "dependencies": {
         "@arbol-ai/maximus": "workspace:^",
       },
@@ -261,11 +287,15 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
+    "@maximus-examples/browser-pages": ["@maximus-examples/browser-pages@workspace:examples/browser-pages"],
+
     "@maximus-examples/d1-notes": ["@maximus-examples/d1-notes@workspace:examples/d1-notes"],
 
     "@maximus-examples/orders": ["@maximus-examples/orders@workspace:examples/worker-rpc/orders"],
 
     "@maximus-examples/pricing": ["@maximus-examples/pricing@workspace:examples/worker-rpc/pricing"],
+
+    "@maximus-examples/queue-reminders": ["@maximus-examples/queue-reminders@workspace:examples/queue-reminders"],
 
     "@maximus-examples/tasks": ["@maximus-examples/tasks@workspace:examples/tasks"],
 
