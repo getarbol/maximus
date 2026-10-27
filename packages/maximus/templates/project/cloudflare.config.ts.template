@@ -1,14 +1,13 @@
 import { bindings, defineConfig } from 'cf/config';
 
-import * as entrypoint from './.maximus/entry.ts' with { type: 'cf-worker' };
-
 export default defineConfig(({ mode }) => ({
   worker: {
     name: '__PROJECT_NAME__',
     compatibilityDate: '__COMPATIBILITY_DATE__',
     // Maximus keeps request diagnostics in AsyncLocalStorage.
     compatibilityFlags: ['nodejs_compat'],
-    entrypoint,
+    // A path, not an imported module: Env is inferred from this file, and the Worker's types need Env.
+    entrypoint: './.maximus/entry.ts',
     workersDev: true,
     previewUrls: false,
     observability: {

@@ -6,8 +6,9 @@ Read .agents/skills/project/SKILL.md and node_modules/@arbol-ai/maximus/skills/m
 ## Structure
 
 This is an API-first Maximus project. Application and transport policy live in maximus.config.ts.
-Routes export GET/POST/PUT/PATCH/DELETE declarations through defineRoute from #maximus/routes. Keep
-operation names, schemas, scopes and effects explicit; MCP and RPC exposure use the same contracts.
+Each route file default-exports one defineHandler: routes/v1/tasks/[taskId].delete.ts answers
+DELETE /api/v1/tasks/{taskId}. Declare strict schemas; the name, effect and scope derive from the method
+and path unless declared. MCP and RPC exposure use the same contracts; mcp/tools/ holds MCP-only tools.
 The Vite plugin and maximus prepare reconcile generated .maximus/ entries before builds. Never edit them.
 src/ is optional shared domain code. Root configuration never imports generated modules or routes.
 Middleware files are ordered by name: defineMiddleware wraps HTTP before token admission and has no

@@ -8,7 +8,9 @@ requirement. Existing service layouts and default-export route factories remain 
 
 ```text
 maximus.config.ts          Application, authentication and Worker transport policy
-routes/v1/greeting.ts       Named GET/POST/PUT/PATCH/DELETE operation declarations
+errors.ts                  Optional error catalog; every handler's fail is typed by its codes
+routes/v1/greeting.get.ts   One defineHandler per route and method: GET /api/v1/greeting
+mcp/tools/summarize.ts     Optional MCP-only tools, named by their file
 middleware/10-response.ts   Ordered HTTP request middleware
 pages/index.ts             Optional public response at /
 crons/daily.ts             Optional scheduled handler and cron expression
@@ -20,7 +22,7 @@ src/                      Optional shared domain code; no framework entrypoints 
 public/                   Assets, when explicitly configured
 tests/                    Explicitly run tests; never discovered as routes
 .maximus/                 Generated composition, ignored by Git
-cloudflare.config.ts      Infrastructure; imports .maximus/entry.ts as its entrypoint
+cloudflare.config.ts      Infrastructure; names .maximus/entry.ts as its entrypoint
 vite.config.ts            maximusProject() before cloudflare()
 ```
 
@@ -52,80 +54,112 @@ Cloudflare resource bindings, triggers, migrations and secrets stay in `cloudfla
 The starter defines `#maximus/*` package imports for the generated modules, so route imports do not
 change with directory depth. Relative imports remain supported.
 
-A file exports HTTP method declarations. The generated route helper retains the configured context,
-literal operation names, input/output schemas and MCP/RPC exposure:
+A route is a file whose name gives its path and method, and whose default export is a `defineHandler`
+declaration. `input` and `output` take a schema or the fields of a strict object; the handler receives one
+object (`{ input, principal, env, fail, …context }`, with the context the base prepares) and returns its
+output or `fail(code)`:
 
 ```ts
-// routes/v1/greeting.ts
-import { EmptyInputSchema, ok, t } from '@arbol-ai/maximus';
+// routes/v1/tasks/[taskId]/complete.post.ts: POST /api/v1/tasks/{taskId}/complete
+import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-import { defineRoute } from '#maximus/routes';
+import { TaskSchema } from '../../../../src/tasks.ts';
 
-export const GET = defineRoute(
-  'getGreeting',
-  {
-    title: 'Get a greeting',
-    description: 'Return a greeting.',
-    scope: 'notes:greeting:read',
-    effect: 'read',
-    input: EmptyInputSchema,
-    output: t.Object({ message: t.String() }, { additionalProperties: false }),
+export default defineHandler({
+  description: 'Mark a task as done. Completing a done task changes nothing.',
+  input: { taskId: UuidSchema },
+  output: TaskSchema,
+  failures: ['TASK_NOT_FOUND'],
+  mcp: { name: 'complete_task', idempotent: true },
+  handler: async ({ input, tasks, fail }) => {
+    const task = await tasks.get(input.taskId);
+    if (!task) {
+      return fail('TASK_NOT_FOUND');
+    }
+    return task.done ? task : tasks.put({ ...task, done: true });
   },
-  async () => ok({ message: 'Hello World' })
-);
+});
 ```
 
-Add `POST`, `PUT`, `PATCH` or `DELETE` in that same file with their own operation names, contracts and
-handlers. Use `mcp` and `rpc` on a declaration exactly as with `base.operation`; configuring an MCP
-transport and trusted RPC callers remains explicit. HTTP body/header/response options may be declared
-in `http`, but `http.method` and `http.path` belong to the export and filename. No raw handler bypasses
-authentication or schema validation. Public native responses remain explicit pages/plain routes.
+What a route leaves out, binding derives:
 
-`routes/v1/notes/index.ts` maps to `/v1/notes`; `routes/v1/notes/[noteId].ts` maps to
-`/v1/notes/{noteId}`. Declare `noteId` in the input schema. `(group)` directories organize files without
-adding URL segments. With the starter's `/api` base, greeting is `/api/v1/greeting`. Catch-all operation
-routes are unsupported. Versioned templates retain ownership and schema admission.
+| Field            | Default                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `operationId`    | The method and path in camelCase: `postV1TasksTaskIdComplete`. It also names the RPC method                                            |
+| `effect`         | `read` for GET, `delete` for DELETE, `write` for the other methods                                                                     |
+| `scope`          | `<namespace>:<resource>:read` for a read, `:write` otherwise; the resource is the first fixed segment after the version, in kebab-case |
+| `title`          | The MCP tool's name as words (`Complete task`), else the method and path                                                               |
+| `description`    | None; a route that is also an MCP tool must describe itself                                                                            |
+| `mcp.idempotent` | As the HTTP method: true for GET, PUT and DELETE                                                                                       |
 
-Exports must be explicit. Named re-exports such as `export { handler as GET } from './_handler'` work;
-`export *` and mixing a default route factory with method exports in one file are refused. Keep runtime
-helpers private or in `_files`; exported TypeScript types do not register routes. Duplicate paths,
-operation identifiers and conflicting methods fail discovery, type checking or native construction.
+Declare any of them when the default is wrong: a POST search declares `effect: 'read'`, and so takes the
+read scope. A path whose segments after the version are all parameters names no resource and must declare
+its `scope`. `failures` lists the domain codes the route may answer; `fail` then accepts only those and the
+standard failures, with the data each code declares. Each declaration is checked as a whole: the schemas
+are strict objects, path parameters are required string fields of `input`, mutations never use GET, and a
+field no route has is refused. `http` takes the byte body, header and attachment options; the path and
+method belong to the filename.
+
+`mcp/tools/<name>.ts` default-exports a `defineTool`: a tool only MCP serves, with no HTTP route. The file
+`summarize-tasks.ts` is the tool `summarize_tasks` and the operation `summarizeTasks`. A tool states its
+`description` and `effect`; its scope defaults to `<namespace>:<file>:read` or `:write` and it is
+idempotent when it reads. When a route or a tool declares MCP, the generated Worker adds the MCP transport
+unless the configuration already has one. MCP needs OAuth discovery: configure `tokens.issuer`, not an
+application `bearer` scheme.
+
+Handlers are typed through the global `MaximusRegister`, which `maximus prepare` writes in
+`.maximus/register.d.ts`: its `base` gives every handler its context. A root `errors.ts` that
+default-exports the error catalog adds `errors`, which types `failures` and `fail`; the application must
+use that same catalog (`errors` in `maximus.config.ts`), which the generated base checks when the Worker
+starts. Include `.maximus/*.ts` in `tsconfig.json`: TypeScript does not expand a bare `.maximus` entry.
+
+`routes/v1/notes/index.get.ts` maps to `GET /v1/notes`; `routes/v1/notes/[noteId].delete.ts` maps to
+`DELETE /v1/notes/{noteId}`. `(group)` directories organize files without adding URL segments. With the
+starter's `/api` base, greeting is `/api/v1/greeting`. Catch-all operation routes are unsupported.
+Versioned templates retain ownership and schema admission.
+
+The forms of 7.3 and 7.4 keep working. A file without a method suffix exports `GET`, `POST`, `PUT`,
+`PATCH` or `DELETE` declarations made with the generated `defineRoute` helper (`#maximus/routes`), each
+naming its operation, or default-exports a route factory that receives its path. Such a file owns its
+whole path: it cannot share it with suffixed files. Exports must be explicit; `export *` and mixing a
+default route factory with method exports in one file are refused.
 
 ### Filename decisions
 
-These mappings assume `worker.http.basePath: '/api'`. Filenames determine the URL; method exports
-determine the HTTP verb. The operation name is explicit and remains stable when a file moves.
+These mappings assume `worker.http.basePath: '/api'`. Filenames determine the URL and, with a suffix,
+the method.
 
-| Source                                                     | Export                         | HTTP registration or behavior                                     |
-| ---------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------- |
-| `routes/v1/greeting.ts`                                    | `GET`, `POST`                  | `GET /api/v1/greeting` and `POST /api/v1/greeting`                |
-| `routes/v1/notes/index.ts`                                 | `GET`, `POST`                  | `/api/v1/notes`; `index` adds no segment                          |
-| `routes/v1/notes/[noteId].ts`                              | `GET`, `PATCH`, `DELETE`       | `/api/v1/notes/{noteId}`; `noteId` belongs in each input schema   |
-| `routes/v1/(staff)/reports.ts`                             | `GET`                          | `/api/v1/reports`; the group adds no URL segment or authorization |
-| `routes/v2/notes.ts`                                       | `GET`                          | `/api/v2/notes`; versions are explicit directories                |
-| `routes/v1/debug.dev.ts`                                   | `GET`                          | `/api/v1/debug` only in `development` mode                        |
-| `routes/v1/status.prod.ts`                                 | `GET`                          | `/api/v1/status` only in `production` mode                        |
-| `routes/v1/_schemas.ts`, `routes/_shared/`                 | Any                            | Helpers; ignored by discovery                                     |
-| `routes/v1/greeting.test.ts`, `routes/v1/greeting.spec.ts` | Any                            | Test modules; ignored by discovery                                |
-| `routes/v1/greeting.d.ts`                                  | Types                          | Declaration file; ignored by discovery                            |
-| `routes/greeting.ts`, `routes/v1/index.ts`                 | `GET`                          | Rejected: an operation needs a resource below a version           |
-| `routes/v1/[...rest].ts`, `routes/v1/[[id]].ts`            | `GET`                          | Rejected: no catch-all or optional segments                       |
-| `pages/index.ts`                                           | Default response handler       | Public `GET /` and `HEAD /`, outside the API base                 |
-| `middleware/10-response.ts`                                | Default middleware declaration | Global policy; no route is registered                             |
+| Source                                                       | Export                         | HTTP registration or behavior                                         |
+| ------------------------------------------------------------ | ------------------------------ | --------------------------------------------------------------------- |
+| `routes/v1/greeting.get.ts`                                  | `defineHandler`                | `GET /api/v1/greeting`                                                |
+| `routes/v1/notes/index.get.ts`, `index.post.ts`              | `defineHandler`                | `GET` and `POST /api/v1/notes`; `index` adds no segment               |
+| `routes/v1/notes/[noteId].delete.ts`                         | `defineHandler`                | `DELETE /api/v1/notes/{noteId}`; `noteId` belongs in `input`          |
+| `routes/v1/(staff)/reports.get.ts`                           | `defineHandler`                | `GET /api/v1/reports`; the group adds no URL segment or authorization |
+| `routes/v2/notes.get.ts`                                     | `defineHandler`                | `GET /api/v2/notes`; versions are explicit directories                |
+| `routes/v1/debug.get.dev.ts`                                 | `defineHandler`                | `GET /api/v1/debug` only in `development` mode                        |
+| `routes/v1/status.get.prod.ts`                               | `defineHandler`                | `GET /api/v1/status` only in `production` mode                        |
+| `routes/v1/greeting.ts`                                      | `GET`, `POST` (7.4)            | `GET` and `POST /api/v1/greeting`; the file owns the path             |
+| `mcp/tools/summarize-tasks.ts`                               | `defineTool`                   | The MCP tool `summarize_tasks`; no HTTP route                         |
+| `routes/v1/_schemas.ts`, `routes/_shared/`, `mcp/_shared.ts` | Any                            | Helpers; ignored by discovery                                         |
+| `routes/v1/greeting.test.ts`, `routes/v1/greeting.spec.ts`   | Any                            | Test modules; ignored by discovery                                    |
+| `routes/v1/greeting.d.ts`                                    | Types                          | Declaration file; ignored by discovery                                |
+| `routes/greeting.get.ts`, `routes/v1/index.get.ts`           | `defineHandler`                | Rejected: an operation needs a resource below a version               |
+| `routes/v1/[...rest].get.ts`, `routes/v1/[[id]].get.ts`      | `defineHandler`                | Rejected: no catch-all or optional segments                           |
+| `pages/index.ts`                                             | Default response handler       | Public `GET /` and `HEAD /`, outside the API base                     |
+| `middleware/10-response.ts`                                  | Default middleware declaration | Global policy; no route is registered                                 |
 
-Use kebab-case for resource files, `[camelCase]` for contract parameters, and zero-padded numeric
-prefixes for middleware order. Segment casing is preserved. Route groups only organize source:
-putting a file in `(staff)` does not make it private. Declare its scope and visibility explicitly.
+Use kebab-case for resource files, `[camelCase]` for contract parameters, lowercase method suffixes and
+zero-padded numeric prefixes for middleware order. Segment casing is preserved. Route groups only
+organize source: putting a file in `(staff)` does not make it private. Declare its scope and visibility.
 
-A route file cannot export a schema or a helper value alongside method declarations. Keep them
-unexported, put them in an ignored helper module, or move shared code to an optional `src/` directory.
-Type-only exports are allowed. `GET.ts` means a resource literally named `GET`; it does not select a
-verb. The verb is the export. `HEAD` and `OPTIONS` are not operation declaration exports in this
-release; HTTP transport handling remains owned by the native pipeline.
+A suffixed file default-exports its declaration and nothing else: keep schemas and helpers unexported,
+in an ignored helper module or in `src/`. Type-only exports are allowed. `get.ts` names a resource
+literally called `get`; only a suffix after another name selects a method. `HEAD` and `OPTIONS` are not
+operation methods; HTTP transport handling remains owned by the native pipeline.
 
-Two files resolving to the same path are an error, even if they declare different verbs. Put those
-verbs together. A base file plus a matching `.dev`/`.prod` file is also a collision, not an override.
-Modes other than `development` and `production` include unsuffixed modules only.
+Each method of a path has one owner. Two suffixed files for the same method and path are an error, as
+are a base file and a matching `.dev`/`.prod` file: a mode suffix selects a file, it does not override
+one. Modes other than `development` and `production` include unsuffixed modules only.
 
 ## Middleware
 
@@ -218,7 +252,7 @@ background work. Use the native background context for independent work instead.
 
 ## Reconciliation and compatibility
 
-`maximus prepare` generates `.maximus/base.ts`, `routes.ts`, `app.ts`, `middleware.ts`, `worker.ts` and the stable `entry.ts`.
+`maximus prepare` generates `.maximus/base.ts`, `routes.ts`, `register.d.ts`, `app.ts`, `middleware.ts`, `worker.ts` and the stable `entry.ts`.
 The generated Worker exports its default handler, typed `Service` RPC entry and discovered Durable
 Objects. No application module or configuration executes on the build host: Oxc reads route exports,
 and generated code uses literal imports and chained builder calls without widening operation types.
@@ -249,8 +283,9 @@ Projects with multiple root configuration files are rejected rather than picking
 | ------------------------ | -------------------------------------------------------------------------- |
 | `.maximus/middleware.ts` | Import discovered modules and separate request/operation phases            |
 | `.maximus/base.ts`       | Attach operation policy to the configured base; preserve its derived types |
-| `.maximus/routes.ts`     | Export the project's typed `defineRoute` helper                            |
-| `.maximus/app.ts`        | Mount every discovered method/factory and build the typed manifest         |
+| `.maximus/routes.ts`     | Export the project's typed `defineRoute` helper, for 7.4 route modules     |
+| `.maximus/register.d.ts` | Register the base and error catalog that type every handler                |
+| `.maximus/app.ts`        | Bind every discovered route and tool and build the typed manifest          |
 | `.maximus/worker.ts`     | Compose HTTP/MCP/RPC, pages, events and Durable Object exports             |
 | `.maximus/entry.ts`      | Stable Cloudflare entry that re-exports the generated Worker               |
 

@@ -25,7 +25,7 @@
     "maximus.config.ts",
     "cloudflare.config.ts",
     "vite.config.ts",
-    ".maximus",
+    ".maximus/*.ts",
     ".cloudflare/types"
   ]
 }

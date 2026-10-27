@@ -33,7 +33,6 @@ export type {
   HandlerHttp,
   HandlerMcp,
   HandlerOptions,
-  Register,
   SchemaOf,
   SchemaOrFields,
   ToolDeclaration,

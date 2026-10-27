@@ -5,6 +5,7 @@ import { join, relative, resolve, sep } from 'node:path';
 /** Project-owned convention directories; infrastructure remains in cloudflare.config.ts. */
 export const PROJECT_DIRECTORIES = [
   'routes',
+  'mcp',
   'pages',
   'middleware',
   'crons',

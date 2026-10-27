@@ -2,7 +2,7 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
-import { readProjectModule, routeExports } from './project-exports.ts';
+import { declarationExports, readProjectModule, routeExports } from './project-exports.ts';
 import { PROJECT_DIRECTORIES, projectFiles, projectPath } from './project-files.ts';
 
 /** Generate only owned modules; a failed discovery never replaces the previous output. */
@@ -28,13 +28,26 @@ export function prepareProject(directory: string, mode = 'production') {
       );
     }
   }
+  // A root errors module types every handler's failures; the application must use that same catalog.
+  const catalogs = ['errors.ts', 'errors.mts', 'errors.js', 'errors.mjs'].filter((name) =>
+    existsSync(join(root, name))
+  );
+  if (catalogs.length > 1) {
+    throw new TypeError('Keep at most one errors module at the project root.');
+  }
+  const [catalog] = catalogs;
+  if (catalog && lstatSync(join(root, catalog)).isSymbolicLink()) {
+    throw new TypeError('The errors module cannot be a symlink.');
+  }
   const output = join(root, '.maximus');
   if (existsSync(output) && lstatSync(output).isSymbolicLink()) {
     throw new TypeError('The generated .maximus directory cannot be a symlink.');
   }
   const files = Object.fromEntries(PROJECT_DIRECTORIES.map((name) => [name, projectFiles(root, name, mode)]));
-  if (config) {
-    readProjectModule(join(root, config), 'config');
+  for (const module of [config, catalog]) {
+    if (module) {
+      readProjectModule(join(root, module), 'config');
+    }
   }
   for (const { file } of files.middleware ?? []) {
     readProjectModule(file, 'middleware');
@@ -48,14 +61,36 @@ export function prepareProject(directory: string, mode = 'production') {
       imports.push(`import ${identifier} from ${source(file.file)};`);
       return { ...file, identifier };
     });
-  const occupied = new Set<string>();
-  const mounts = (files.routes ?? []).flatMap(({ name, file }, index) => {
-    const path = projectPath(name, 'routes');
-    if (occupied.has(path)) {
-      throw new TypeError(`Multiple route files claim ${path}; put its methods in one module.`);
+  // A path belongs to one unsuffixed module, for every method it exports, or to one suffixed module per
+  // method: `tasks/index.get.ts` and `tasks/index.post.ts` share `/v1/tasks`.
+  const owners = new Map<string, Map<string, string>>();
+  const claim = (path: string, method: string, file: string) => {
+    const methods = owners.get(path) ?? new Map<string, string>();
+    const owner =
+      methods.get(method) ?? methods.get('*') ?? (method === '*' ? [...methods.values()][0] : undefined);
+    if (owner) {
+      throw new TypeError(
+        `Multiple route files claim ${method === '*' ? path : `${method} ${path}`}: ${relative(root, owner)} and ${relative(root, file)}. Put a path's methods in one module, or one method in each suffixed module.`
+      );
     }
-    occupied.add(path);
+    owners.set(path, methods.set(method, file));
+  };
+  const binders = new Set<string>();
+  let servesMcp = false;
+  const mounts = (files.routes ?? []).flatMap(({ name, file }, index) => {
     const identifier = `routes_${index}`;
+    const suffix = /\.(get|post|put|patch|delete)$/.exec(name);
+    if (suffix?.[1]) {
+      const method = suffix[1].toUpperCase();
+      const path = projectPath(name.slice(0, -suffix[0].length), 'routes');
+      claim(path, method, file);
+      servesMcp = declarationExports(file, 'defineHandler').mcp || servesMcp;
+      binders.add('bindRoute');
+      imports.push(`import ${identifier} from ${source(file)};`);
+      return [`.mount(bindRoute(base, ${identifier}, ${JSON.stringify(path)}, ${JSON.stringify(method)}))`];
+    }
+    const path = projectPath(name, 'routes');
+    claim(path, '*', file);
     const exports = routeExports(file);
     if (exports.legacy) {
       imports.push(`import ${identifier} from ${source(file)};`);
@@ -66,13 +101,32 @@ export function prepareProject(directory: string, mode = 'production') {
       (method) => `.mount(${identifier}.${method}(${JSON.stringify(path)}, ${JSON.stringify(method)}))`
     );
   });
-  const application = `${header}import { checkProjectPipeline } from '@arbol-ai/maximus/config';\nimport { base } from './base.ts';\n${imports.join('\n')}\nexport const app = checkProjectPipeline(base, base${mounts.join('')}.build());\n`;
+  // A tool only MCP serves is a top-level module of mcp/tools/, named by its file.
+  const tools = (files.mcp ?? []).map(({ name, file }, index) => {
+    const tool = /^tools\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/.exec(name)?.[1];
+    if (!tool) {
+      throw new TypeError(
+        `MCP modules are kebab-case tools directly in mcp/tools/, such as mcp/tools/summarize-tasks.ts: ${relative(root, file)}`
+      );
+    }
+    declarationExports(file, 'defineTool');
+    servesMcp = true;
+    binders.add('bindTool');
+    imports.push(`import tools_${index} from ${source(file)};`);
+    return `.mount(bindTool(base, tools_${index}, ${JSON.stringify(tool)}))`;
+  });
+  const application = `${header}import { ${[...binders, 'checkProjectPipeline'].join(', ')} } from '@arbol-ai/maximus/config';\nimport { base } from './base.ts';\n${imports.join('\n')}\nexport const app = checkProjectPipeline(base, base${mounts.join('')}${tools.join('')}.build());\n`;
+  const registration = `${header}import type { base } from './base.ts';\n${catalog ? `import type errors from '../${catalog}';\n` : ''}\ndeclare global {\n  interface MaximusRegister {\n    base: typeof base;\n${catalog ? '    errors: typeof errors;\n' : ''}  }\n}\n`;
   imports.length = 0;
   const middleware = register('middleware');
   const middlewareSource = `${header}import { collectMiddleware } from '@arbol-ai/maximus/config';\n${imports.join('\n')}\nexport const { middleware, requestMiddleware } = collectMiddleware([${middleware.map(({ identifier }) => identifier).join(', ')}] as const);\n`;
+  const configured = config ? 'config.application' : 'application';
+  const catalogCheck = catalog
+    ? `import errors from '../${catalog}';\nif (${configured}.definition.errors !== errors) {\n  throw new TypeError('The application must use the error catalog ${catalog} exports.');\n}\n`
+    : '';
   const baseSource = config
-    ? `${header}import config from '../${config}';\nimport { useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { middleware } from './middleware.ts';\nexport const base: typeof config.application = useProjectMiddleware(config.application, middleware);\n`
-    : `${header}export { base } from '../src/application.ts';\n`;
+    ? `${header}import config from '../${config}';\nimport { useProjectMiddleware } from '@arbol-ai/maximus/config';\nimport { middleware } from './middleware.ts';\n${catalogCheck}export const base: typeof config.application = useProjectMiddleware(config.application, middleware);\n`
+    : `${header}import { base as application } from '../src/application.ts';\n${catalogCheck}export const base = application;\n`;
   const routeSource = `${header}import { createRoute } from '@arbol-ai/maximus/config';\nimport { base } from './base.ts';\nexport const defineRoute = createRoute(base);\n`;
   imports.length = 0;
   const pages = register('pages');
@@ -119,12 +173,17 @@ export function prepareProject(directory: string, mode = 'production') {
   const optionsImport = config
     ? `import config from '../${config}';\nconst options = config.worker;`
     : "import { options } from '../src/worker.ts';";
-  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\nconst worker: WorkerRuntime<${config ? 'ProjectEnv<typeof config>' : "Parameters<typeof base.definition.context>[0]['env']"}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
+  // A declared tool needs the MCP transport; a configured one is kept, never doubled.
+  const transports = servesMcp
+    ? "import { mcp } from '@arbol-ai/maximus/mcp';\nconst transports = options.transports?.some(({ protocol }) => protocol === 'mcp') ? options.transports : [...(options.transports ?? []), mcp()];\n"
+    : 'const transports = options.transports;\n';
+  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\n${transports}const worker: WorkerRuntime<${config ? 'ProjectEnv<typeof config>' : "Parameters<typeof base.definition.context>[0]['env']"}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, transports, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
   mkdirSync(output, { recursive: true });
   const generated = {
     'middleware.ts': middlewareSource,
     'base.ts': baseSource,
     'routes.ts': routeSource,
+    'register.d.ts': registration,
     'app.ts': application,
     'worker.ts': worker,
     'entry.ts':

@@ -1,8 +1,8 @@
 /**
  * The release checks of the packed package: every export and the bin are present, the size cap, no private
  * files or workspace protocols, publint's rules, a clean install without optional peers, declarations that
- * type-check without the DOM library, Node and browser entries, Postgres with pg, and a `maximus init`
- * starter that passes its own `verify` (types, lint and format, Vite+ build) on the
+ * type-check without the DOM library, Node and browser entries, Postgres with pg, and `maximus init`
+ * service and project starters that pass their own `verify` (types, lint and format, Vite+ build) on the
  * packed release.
  */
 import assert from 'node:assert/strict';
@@ -250,7 +250,46 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
     !JSON.stringify(built).includes('DEVELOPMENT_TOKEN'),
     'A deployed build declares the development token'
   );
-  console.info(`Packed package, its entries and a starter passed (${manifest.name}@${manifest.version}).`);
+
+  // The project starter, on this release as well: its file routes are discovered, typed through the
+  // generated registration and built, and its build carries no development token either.
+  const project = join(directory, 'project');
+  execFileSync(
+    process.execPath,
+    [
+      join(directory, 'node_modules/@arbol-ai/maximus/dist/tooling/cli.js'),
+      'init',
+      project,
+      '--name',
+      'example-project',
+      '--layout',
+      'project',
+    ],
+    { stdio: 'pipe' }
+  );
+  const projectPath = join(project, 'package.json');
+  const projectManifest = JSON.parse(readFileSync(projectPath, 'utf-8'));
+  assert.equal(projectManifest.dependencies['@arbol-ai/maximus'], manifest.version);
+  projectManifest.dependencies['@arbol-ai/maximus'] = `file:${archive}`;
+  writeFileSync(projectPath, `${JSON.stringify(projectManifest, null, 2)}\n`);
+  execFileSync('bun', ['install', '--ignore-scripts'], { cwd: project, stdio: 'pipe' });
+  execFileSync('bun', ['run', 'verify'], { cwd: project, stdio: 'inherit' });
+  assert.match(
+    readFileSync(join(project, '.maximus/app.ts'), 'utf-8'),
+    /bindRoute\(base, routes_\d+, "\/v1\/greeting", "GET"\)/
+  );
+  const projectBuild = readFileSync(
+    join(project, '.cloudflare/output/v0/workers/default/worker.config.json'),
+    'utf-8'
+  );
+  assert.equal(JSON.parse(projectBuild).name, 'example-project');
+  assert(
+    !projectBuild.includes('DEVELOPMENT_TOKEN'),
+    'A deployed project build declares the development token'
+  );
+  console.info(
+    `Packed package, its entries and both starters passed (${manifest.name}@${manifest.version}).`
+  );
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

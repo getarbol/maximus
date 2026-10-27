@@ -1,0 +1,9 @@
+import { defineHandler, t } from '@arbol-ai/maximus';
+
+/** GET /api/v1/greeting: the filename is the path and the method; the scope is __PROJECT_NAME__:greeting:read. */
+export default defineHandler({
+  title: 'Get a greeting',
+  description: 'Return a greeting to an authenticated caller.',
+  output: { message: t.String() },
+  handler: () => ({ message: 'Hello World' }),
+});

@@ -71,8 +71,18 @@ export default defineConfig({
       chunkFileNames: 'chunks/[name]-[hash].js',
       codeSplitting: {
         // Declarations used by two or more entries share one file, so a class with a private member
-        // (ApplicationBuilder) is a single declaration for every entry.
-        groups: [{ name: 'types.d', test: /\.d\.ts$/, minShareCount: 2 }],
+        // (ApplicationBuilder) is a single declaration for every entry. The Workers and project ones,
+        // which name `cloudflare:workers` and the Workers globals, share another: an entry that needs no
+        // Workers types, the root among them, never loads them.
+        groups: [
+          {
+            name: 'types.d',
+            test: /^(?!.*[\\/](?:workers|project)[\\/]).*\.d\.ts$/,
+            minShareCount: 2,
+            priority: 1,
+          },
+          { name: 'workers-types.d', test: /\.d\.ts$/, minShareCount: 2 },
+        ],
       },
     },
   },

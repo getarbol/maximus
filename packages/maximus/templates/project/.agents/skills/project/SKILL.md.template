@@ -4,8 +4,10 @@ description: Extend the __PROJECT_NAME__ Maximus backend using its optional file
 ---
 
 Read CLAUDE.md and the installed Maximus skill. Configure the application in maximus.config.ts.
-Add named GET/POST/PUT/PATCH/DELETE declarations to routes/v1/, importing defineRoute from #maximus/routes.
-Declare strict input/output schemas, scope, effect and explicit MCP/RPC exposure. Use optional src/ for
+Add one file per route and method to routes/v1/ (tasks/index.get.ts, tasks/[taskId].delete.ts), each
+default-exporting defineHandler from @arbol-ai/maximus with strict input/output schemas; declare a scope or
+effect only where the method's default is wrong, and MCP/RPC exposure explicitly. MCP-only tools are
+defineTool modules in mcp/tools/. Use optional src/ for
 named domain functions. Middleware is discovered in filename order: defineMiddleware wraps requests;
 defineOperationMiddleware applies policy after authentication across transports. Keep principal-based
 policy in the operation phase. Read the Maximus project-structure guide before adding another module kind.

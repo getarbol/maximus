@@ -4,6 +4,7 @@ dist/
 .env*
 .dev.vars*
 .cloudflare/
+.maximus/
 .wrangler/
 coverage/
 *.tgz

@@ -17,7 +17,8 @@ uses optional directories. Add only the modules the service needs:
 
 | Directory        | Convention                                                                            |
 | ---------------- | ------------------------------------------------------------------------------------- |
-| routes/          | Versioned named GET/POST declarations; paths and methods are discovered.              |
+| routes/          | One `defineHandler` per file: `greeting.get.ts` answers `GET /api/v1/greeting`.       |
+| mcp/tools/       | `defineTool` modules only MCP serves, named by their file.                            |
 | pages/           | Fixed-path public response handlers; index.ts serves `/`.                             |
 | middleware/      | Ordered HTTP wrappers or post-admission operation policy.                             |
 | crons/           | A `cron` export and a default native scheduled handler.                               |
@@ -29,8 +30,8 @@ uses optional directories. Add only the modules the service needs:
 | public/          | Optional static assets; configure the binding and admitted files before using it.     |
 | .maximus/        | Generated imports; ignored and never edited by hand.                                  |
 
-The Vite plugin reconciles modules and named method exports on every build and source change.
-Root maximus.config.ts owns application and transport policy; the Cloudflare config imports the
+The Vite plugin reconciles modules on every build and source change.
+Root maximus.config.ts owns application and transport policy; the Cloudflare config names the
 generated .maximus/entry.ts entry. No src/ directory or manual route registration is required. `bun run prepare:project` generates the same imports for editors. Files starting
 with `_` are ignored except `email/_default.ts`; `.dev.ts` and `.prod.ts` select their matching mode.
 Platform bindings, cron triggers, queue subscriptions, email routing and Durable Object migrations

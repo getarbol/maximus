@@ -62,6 +62,15 @@ beforeAll(() => {
   write('dist/worker.ts', WORKER_CODE);
   write('.cloudflare/output/v0/workers/default/bundle/index.ts', WORKER_CODE);
   write('.cloudflare/types/index.d.ts', `/* eslint-disable */\n${WORKER_CODE}`);
+  for (const route of [
+    '[taskId].get.ts',
+    '[noteId].ts',
+    '[listId].delete.dev.ts',
+    'taskLists.get.ts',
+    '[taskId]Extra.get.ts',
+  ]) {
+    write(`routes/v1/tasks/${route}`, 'export default {};\n');
+  }
   let output: string;
   try {
     output = execFileSync(
@@ -113,6 +122,16 @@ it('lets code that runs in Node use its fetch options and its environment', () =
   for (const file of ['scripts/release.ts', 'tests/worker.test.ts', 'vite.config.ts']) {
     expect(reported(file, 'maximus(no-fetch-redirect-error)')).toHaveLength(0);
     expect(reported(file, 'eslint(no-restricted-properties)')).toHaveLength(0);
+  }
+});
+
+it('lets a route file name its path parameter as its input field, and nothing else break kebab-case', () => {
+  const named = (route: string) => reported(`routes/v1/tasks/${route}`, 'unicorn(filename-case)');
+  for (const route of ['[taskId].get.ts', '[noteId].ts', '[listId].delete.dev.ts']) {
+    expect(named(route), route).toHaveLength(0);
+  }
+  for (const route of ['taskLists.get.ts', '[taskId]Extra.get.ts']) {
+    expect(named(route), route).toHaveLength(1);
   }
 });
 

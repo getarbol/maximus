@@ -85,3 +85,38 @@ export function routeExports(file: string): { legacy: boolean; methods: readonly
   }
   return { legacy: false, methods };
 }
+
+/**
+ * A `defineHandler` route or `defineTool` module: one default export, the declaration, and types. Returns
+ * whether the declaration names an MCP tool, as its object literal shows it; the generated Worker serves MCP
+ * when one does.
+ */
+export function declarationExports(file: string, helper: 'defineHandler' | 'defineTool'): { mcp: boolean } {
+  const parsed = readProjectModule(file, 'route');
+  const names = new Set<string>();
+  for (const statement of parsed.module.staticExports) {
+    for (const entry of statement.entries) {
+      if (!entry.isType) {
+        names.add(entry.exportName.kind === 'Default' ? 'default' : (entry.exportName.name ?? '*'));
+      }
+    }
+  }
+  if (names.size !== 1 || !names.has('default')) {
+    throw new TypeError(
+      `${file} must default-export its ${helper} declaration and nothing else. Keep helpers private or in _files.`
+    );
+  }
+  const exported = parsed.program.body.find((node) => node.type === 'ExportDefaultDeclaration');
+  const declaration = exported?.type === 'ExportDefaultDeclaration' ? exported.declaration : undefined;
+  const [argument] = declaration?.type === 'CallExpression' ? declaration.arguments : [];
+  return {
+    mcp:
+      argument?.type === 'ObjectExpression' &&
+      argument.properties.some(
+        (property) =>
+          property.type === 'Property' &&
+          ((property.key.type === 'Identifier' && property.key.name === 'mcp') ||
+            (property.key.type === 'Literal' && property.key.value === 'mcp'))
+      ),
+  };
+}

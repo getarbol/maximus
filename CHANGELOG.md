@@ -14,8 +14,24 @@ dates of the release commits.
   what a route leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its
   effect from the method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's
   idempotent hint. `defineTool` declares a tool only MCP serves. A project registers its base and error
-  catalog in `Register`, which types every handler's context and failures.
+  catalog in the global `MaximusRegister`, which types every handler's context and failures.
 - The OpenAPI document leaves out an operation's empty description.
+- The project layout discovers `routes/**/<name>.<method>.ts` files, each default-exporting one
+  `defineHandler` (`tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`; `.dev` and `.prod`
+  follow the method), and `mcp/tools/<name>.ts` files, each a `defineTool`. Several suffixed files share a
+  path, one per method. `maximus prepare` writes `.maximus/register.d.ts`, and a root `errors.ts` that
+  default-exports the catalog types every handler's failures; the generated base checks the application
+  uses it. The generated Worker adds the MCP transport when a route or tool declares MCP. Route modules
+  that export `GET` or a default factory keep working and own their whole path.
+- The project starter declares its greeting as `routes/v1/greeting.get.ts` and `greeting.post.ts`, includes
+  `.maximus/*.ts` in `tsconfig.json` (TypeScript skipped the bare `.maximus` entry) and names its Worker
+  entry by path in `cloudflare.config.ts`, which no longer makes the Worker's types depend on themselves
+  once the configuration derives context from its bindings.
+- The oxlint preset accepts a route file named after its path parameter, such as `[taskId].get.ts` or
+  `[noteId].ts`, which kebab-case refused although the parameter must match its input field.
+- The root entry's declarations no longer load the Workers declarations: a Node consumer type-checks them
+  without Workers types, as the release checks require. The release checks also verify the project
+  starter.
 - `operation()` accepts every field `.operation()` does, including `failures`, `maxBodyBytes` and
   `maxOutputBytes`. Both, and the project route helper, share one handler type, and `Failure` is
   derived from `FailureSchema`, so the type and the wire schema cannot drift apart.

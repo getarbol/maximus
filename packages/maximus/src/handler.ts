@@ -14,15 +14,18 @@ import type { Exposure, Invocation, OperationShape } from './manifest.ts';
 import type { StaticDecode } from './schema-types.ts';
 import type { STANDARD_FAILURES } from './standard-failures.ts';
 
-/**
- * What a project registers about its application, so every handler is typed without importing it: `base`,
- * the builder its routes bind to, and `errors`, its error catalog. `maximus prepare` writes the
- * registration; without one, handlers receive the bare invocation and fail with standard failures.
- */
-export interface Register {}
+declare global {
+  /**
+   * What a project registers about its application, so every handler is typed without importing it:
+   * `base`, the builder its routes bind to, and `errors`, its error catalog. `maximus prepare` writes the
+   * registration in `.maximus/register.d.ts`; without one, handlers receive the bare invocation and fail
+   * with standard failures. Global, so it merges however the package's declarations are bundled.
+   */
+  interface MaximusRegister {}
+}
 
 /** A registered member, or its fallback when the project registers none. */
-type Registered<K extends string, Fallback> = Register extends Record<K, infer T> ? T : Fallback;
+type Registered<K extends string, Fallback> = MaximusRegister extends Record<K, infer T> ? T : Fallback;
 /** The context every handler receives: what the registered base prepares. */
 type RegisteredContext =
   Registered<'base', never> extends ApplicationBuilder<infer _E, infer C, infer _O> ? C : Invocation<unknown>;

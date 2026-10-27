@@ -36,8 +36,8 @@ export const base = maximus<Env>({
   telemetry: { enabled: false },
 }).derive(async ({ env }) => ok({ prefix: env.PREFIX }));
 
-declare module '../../../src/handler.ts' {
-  interface Register {
+declare global {
+  interface MaximusRegister {
     base: typeof base;
     errors: typeof errors;
   }

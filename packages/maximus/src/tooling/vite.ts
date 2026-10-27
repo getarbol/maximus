@@ -25,7 +25,7 @@ export function maximusProject(): Plugin {
     const path = relative(root, file).split(/[\\/]/);
     return (
       PROJECT_DIRECTORIES.some((name) => name === path[0]) ||
-      (path.length === 1 && /^maximus\.config\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
+      (path.length === 1 && /^(?:maximus\.config|errors)\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
       (path[0] === 'src' && ['application.ts', 'worker.ts'].includes(path[1] ?? ''))
     );
   };

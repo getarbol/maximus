@@ -98,6 +98,16 @@ export default defineConfig({
     // Node tooling imports stay explicit, and immutable option defaults stay local.
     'unicorn/import-style': 'off',
     'unicorn/no-object-as-default-parameter': 'off',
+    // A route file names its path parameter as its input field: `[taskId].get.ts`.
+    'unicorn/filename-case': [
+      'error',
+      {
+        case: 'kebabCase',
+        ignore: [
+          String.raw`^\[[a-z][A-Za-z0-9]*\](?:\.(?:get|post|put|patch|delete))?(?:\.(?:dev|prod))?\.[cm]?[jt]sx?$`,
+        ],
+      },
+    ],
   },
   overrides: [
     {
