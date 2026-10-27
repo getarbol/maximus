@@ -5,8 +5,11 @@ import { parseSync } from 'vite';
 
 export const ROUTE_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
-/** Refuse direct runtime import cycles and workerd-only imports in application configuration. */
-export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config') {
+/**
+ * Refuse direct runtime import cycles and workerd-only imports in application configuration. A cron module
+ * may use the application: only the generated Worker, which imports it, would form a cycle.
+ */
+export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config' | 'cron') {
   const parsed = parseSync(file, readFileSync(file, 'utf-8'));
   if (parsed.errors.length) {
     throw new TypeError(`Cannot discover ${file}: ${parsed.errors[0]?.message}`);
@@ -35,7 +38,8 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
     if (
       generated &&
       (role === 'config' ||
-        ['app', 'worker', 'entry'].includes(generated) ||
+        ['worker', 'entry'].includes(generated) ||
+        (role !== 'cron' && generated === 'app') ||
         (role === 'middleware' && ['base', 'routes'].includes(generated)))
     ) {
       throw new TypeError(
@@ -126,7 +130,7 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
  * a project configured in `vite.config.ts` declares as the Worker's cron trigger. Undefined otherwise.
  */
 export function cronExpression(file: string): string | undefined {
-  for (const node of readProjectModule(file, 'route').program.body) {
+  for (const node of readProjectModule(file, 'cron').program.body) {
     const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : undefined;
     if (declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
       for (const { id, init } of declaration.declarations) {

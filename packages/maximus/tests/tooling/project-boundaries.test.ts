@@ -234,6 +234,31 @@ test("a cron module's schedule is a declarator of an exported const; a let, a fu
   ]);
 });
 
+test('a cron module that does not parse, or imports the Worker that imports it, is refused before any output is replaced', () => {
+  const root = project({ 'routes/v1/notes.ts': 'export const GET = {};' });
+  prepareProject(root);
+  const worker = generated(root, 'worker.ts');
+  for (const contents of [
+    "export const cron = '0 8 * * *';\nexport default () => {",
+    "import { Service } from '#maximus/worker';\nexport const cron = '0 8 * * *';\nexport default () => Service;",
+  ]) {
+    write(root, { 'crons/daily.ts': contents });
+    expect(() => prepareProject(root), contents).toThrow(join(root, 'crons/daily.ts'));
+    expect(generated(root, 'worker.ts')).toBe(worker);
+  }
+});
+
+test('a cron module may use the generated application, which does not import it', () => {
+  const root = project({
+    'crons/daily.ts':
+      "import { app } from '#maximus/app';\nexport const cron = '0 8 * * *';\nexport default () => app;",
+  });
+  expect(prepareProject(root).crons).toEqual([{ file: join(root, 'crons/daily.ts'), cron: '0 8 * * *' }]);
+  expect(generated(root, 'worker.ts')).toContain(
+    'import cron_0, { cron as schedule_0 } from "../crons/daily.ts";'
+  );
+});
+
 test('two page files may not claim one path', () => {
   const root = project({
     'pages/about.ts': 'export default {};',
