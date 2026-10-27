@@ -55,9 +55,9 @@ function toolDefinition(op: ToolOperation): Tool {
 /**
  * An operation's input as a tool's `inputSchema`: an object at the root, as MCP requires and hosts enforce.
  * A union input (`{ channel: 'email', … } | { channel: 'sms', … }`) lists as one object with every member's
- * fields, required when every member requires them, and a field the members declare differently as their
- * choices. Hosts that refuse a root `anyOf`, the Anthropic API among them, would fail every tool of the
- * request; each call is still checked against the exact union.
+ * fields and key patterns, a field required when every member requires it, and a field the members declare
+ * differently as their choices. Hosts that refuse a root `anyOf`, the Anthropic API among them, would fail
+ * every tool of the request; each call is still checked against the exact union.
  */
 function toolInputSchema(input: unknown): Tool['inputSchema'] {
   const schema = standaloneSchema(input) as JsonSchema;
@@ -71,6 +71,17 @@ function toolInputSchema(input: unknown): Tool['inputSchema'] {
   }
   const fields = (member: JsonSchema) => (member.properties ?? {}) as Record<string, JsonSchema>;
   const names = [...new Set(members.flatMap((member) => Object.keys(fields(member))))];
+  // A record member admits keys by pattern: its patterns join the listing, as its fields would.
+  const patterns = new Map<string, JsonSchema[]>();
+  for (const member of members) {
+    for (const [pattern, keys] of Object.entries(
+      (member.patternProperties ?? {}) as Record<string, JsonSchema>
+    )) {
+      const declared = patterns.get(pattern) ?? [];
+      declared.push(keys);
+      patterns.set(pattern, declared);
+    }
+  }
   const required = names.filter((name) =>
     members.every((member) => Array.isArray(member.required) && member.required.includes(name))
   );
@@ -85,6 +96,13 @@ function toolInputSchema(input: unknown): Tool['inputSchema'] {
         ),
       ])
     ),
+    ...(patterns.size
+      ? {
+          patternProperties: Object.fromEntries(
+            [...patterns].map(([pattern, schemas]) => [pattern, fieldChoices(schemas)])
+          ),
+        }
+      : {}),
     ...(required.length ? { required } : {}),
     ...(members.every((member) => member.additionalProperties === false)
       ? { additionalProperties: false }

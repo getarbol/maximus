@@ -1,7 +1,8 @@
 /**
  * MCP listings and calls the other suites leave out: a union input whose member is a named recursive
  * definition, listed as one object beside its `$defs`; fields the members declare differently listed as
- * choices and no field required that some member omits, every call still checked against the exact union; calls without arguments, to an operation and to the skill tool; a guide
+ * choices and no field required that some member omits, every call still checked against the exact union;
+ * a record member's key patterns listed; calls without arguments, to an operation and to the skill tool; a guide
  * read as a resource; and a server that fails on its own answering 500, reported by a safe description
  * correlated with the request and never with its text.
  */
@@ -41,6 +42,11 @@ const Reminder = t.Union([
     },
     strict
   ),
+]);
+/** Headers by name, or a note: a record member admits keys by pattern. */
+const Annotation = t.Union([
+  t.Object({ kind: t.Literal('note'), text: t.String() }, strict),
+  t.Record(t.String({ pattern: '^x-[a-z]+$' }), t.String(), strict),
 ]);
 const USAGE: McpGuide = { name: 'usage', title: 'Usage', text: '# Usage\n\nOrganize before you schedule.' };
 const organize = vi.fn(async (_context: null, input: { name: string }) => ok({ name: input.name }));
@@ -82,6 +88,17 @@ const manifest = defineApp<Record<string, never>, null>()({
       output: t.Object({ scheduled: t.Boolean() }, strict),
       mcp: { name: 'schedule_reminder', idempotent: false },
       execute: schedule,
+    }),
+    annotateEntry: operation({
+      http: { method: 'POST', path: '/v1/entries/annotate' },
+      effect: 'write',
+      scope: 'listing:entries:write',
+      title: 'Annotate an entry',
+      description: 'Attach a note or headers to an entry.',
+      input: Annotation,
+      output: t.Object({}, strict),
+      mcp: { name: 'annotate_entry', idempotent: false },
+      execute: async () => ok({}),
     }),
     pingService: operation({
       http: { method: 'POST', path: '/v1/ping' },
@@ -199,6 +216,22 @@ it('lists fields the members declare differently as choices, and requires no fie
   const mixed = await rpc('tools/call', { name: 'schedule_reminder', arguments: { after: 5, label: 3 } });
   expect(mixed.message.result.isError).toBe(true);
   expect(schedule).not.toHaveBeenCalled();
+});
+
+it('lists the key patterns of a record member, so a host admits what the operation accepts', async () => {
+  expect((await listed('annotate_entry'))?.inputSchema).toStrictEqual({
+    type: 'object',
+    properties: { kind: { type: 'string', const: 'note' }, text: { type: 'string' } },
+    patternProperties: { '^x-[a-z]+$': { type: 'string' } },
+    additionalProperties: false,
+  });
+  const headers = await rpc('tools/call', { name: 'annotate_entry', arguments: { 'x-trace': 'abc' } });
+  expect(headers.message.result).toMatchObject({ structuredContent: {} });
+  const note = await rpc('tools/call', {
+    name: 'annotate_entry',
+    arguments: { kind: 'note', text: 'Done.' },
+  });
+  expect(note.message.result).toMatchObject({ structuredContent: {} });
 });
 
 it('calls a tool without arguments as with an empty input, and the skill tool without a name as an unknown skill', async () => {

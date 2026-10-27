@@ -224,18 +224,14 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
   }
   const templates = new Map([...roots].map(([method, root]) => [method, compile([root])]));
   /**
-   * The route for a method and path: an exact route first, then one transition per segment through the
-   * compiled states.
+   * The route for a method and the path's segments: an exact route first, then one transition per segment
+   * through the compiled states.
    */
-  function findRoute(method: string, path: string): Route<D> | null {
-    const fixed = exact.get(`${method} ${path}`);
+  function findRoute(method: string, segments: readonly string[]): Route<D> | null {
+    const fixed = exact.get(`${method} /${segments.join('/')}`);
     if (fixed) {
       return fixed;
     }
-    if (!path.startsWith('/') || path.endsWith('/')) {
-      return null;
-    }
-    const segments = path.slice(1).split('/');
     let state = templates.get(method);
     for (const segment of segments) {
       if (!segment || !state) {
@@ -246,30 +242,38 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
     return state?.route ?? null;
   }
   /**
-   * The route a request reaches, with its path parameters decoded; null when none matches or a parameter
-   * value is unsafe.
+   * The route a request reaches, with its path parameters: every segment is decoded before it is matched, so
+   * `/v1/notes/%61rchive` is `/v1/notes/archive` and reaches its route, never a sibling `{noteId}` as the
+   * value `archive`. Null when none matches, or a segment is empty or decodes to an unsafe value.
    */
   function match(method: string, path: string): HttpRouteMatch<D> | null {
-    const route = findRoute(method, path);
+    if (!path.startsWith('/')) {
+      return null;
+    }
+    const segments: string[] = [];
+    for (const segment of path.slice(1).split('/')) {
+      const decoded = decodePathParameter(segment);
+      if (decoded === null) {
+        return null;
+      }
+      segments.push(decoded);
+    }
+    const route = findRoute(method, segments);
     if (!route) {
       return null;
     }
-    const segments = path.slice(1).split('/');
     const parameters: Record<string, string> = {};
     for (const parameter of route.parameters) {
-      const value = decodePathParameter(segments[parameter.position] ?? '');
-      if (value === null) {
-        return null;
-      }
-      parameters[parameter.name] = value;
+      parameters[parameter.name] = segments[parameter.position] ?? '';
     }
     return { definition: route.definition, parameters };
   }
   return {
     match,
-    /** Used only at construction to prevent a transport from bypassing item-route authorization. */
+    /** Whether any route answers a declared path, so a transport cannot claim an operation's path. */
     ownsPath(path: string): boolean {
-      return [...HTTP_METHODS].some((method) => findRoute(method, path) !== null);
+      const segments = path.slice(1).split('/');
+      return [...HTTP_METHODS].some((method) => findRoute(method, segments) !== null);
     },
   };
 }

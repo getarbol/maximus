@@ -39,11 +39,12 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
   ) {
     return err(standardErrors.forbidden.create());
   }
-  const admitted = decodeInput(operation.input, input);
-  if (!admitted.ok) {
-    return err(standardErrors.invalidInput.create(admitted.error.data));
-  }
   try {
+    // A refused input answers INVALID_INPUT; an owner codec that fails is the server's error, caught below.
+    const admitted = decodeInput(operation.input, input);
+    if (!admitted.ok) {
+      return err(standardErrors.invalidInput.create(admitted.error.data));
+    }
     const trustedAuthority = authority
       ? Object.freeze({
           surface: authority.surface,

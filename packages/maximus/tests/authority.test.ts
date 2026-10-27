@@ -237,3 +237,56 @@ it('validates conditional declarations instead of accepting typos, collisions or
     ).toThrow('Conditional scopes');
   }
 });
+
+it('a transport cannot run an operation outside the caller scopes when the token names no client', async () => {
+  let ran = false;
+  const app = maximus<Record<string, never>>(configuration)
+    .operation(
+      'deleteRecord',
+      {
+        scope: 'test:records:delete',
+        title: 'Delete',
+        description: 'Delete',
+        effect: 'delete',
+        input,
+        output: input,
+        http: { method: 'DELETE', path: '/v1/records/delete' },
+      },
+      (_context, value) => {
+        ran = true;
+        return Promise.resolve(ok(value));
+      }
+    )
+    .build();
+  // A person whose token grants only the transport's scope and names no client (no azp or client_id).
+  const verify = async () => ({
+    sub: 'person',
+    org_id: organizationId,
+    scope: 'test:records:read',
+    permissions: ['test:records:read'],
+  });
+  const transported = createHttpHandler(app, {
+    verify,
+    transports: [
+      {
+        path: '/tools',
+        scope: () => 'test:records:read',
+        handle: async ({ invoke }) =>
+          Response.json(await invoke('deleteRecord', app.operations.deleteRecord, { managed: false })),
+      },
+    ],
+  });
+  const response = await transported(
+    new Request('https://example.test/tools', {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: '{}',
+    }),
+    {}
+  );
+  expect(await response.json()).toMatchObject({
+    ok: false,
+    error: { code: standardErrors.forbidden.create().code },
+  });
+  expect(ran).toBe(false);
+});

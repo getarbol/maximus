@@ -7,7 +7,8 @@ import type { Static, TSchema } from '@sinclair/typebox';
 import { Value, HasTransform, TransformDecode } from '@sinclair/typebox/value';
 import { fullFormats } from 'ajv-formats/dist/formats.js';
 
-import { decodeIssues, jsonPointer } from './internal/decode-issues.ts';
+import { SchemaValidationError } from './input-schemas.ts';
+import { codecFault, decodeIssues, jsonPointer } from './internal/decode-issues.ts';
 import type { StaticDecode } from './schema-types.ts';
 
 // Maintained RFC validators only; never instantiate Ajv or compile dynamic JavaScript in workerd.
@@ -52,7 +53,10 @@ export function parseSchema<Schema extends TSchema>(schema: Schema, input: unkno
   return input;
 }
 
-/** TypeBox traversals operate on bounded JSON trees; native RPC must obey the same input boundary as HTTP. */
+/**
+ * Whether a value is a bounded plain JSON tree, which TypeBox's traversals expect and every transport admits:
+ * no cycles, class instances, functions, non-finite numbers, nesting beyond 100 levels or own `__proto__` key.
+ */
 function boundedInput(value: unknown, depth = 0, parents = new Set<object>()): boolean {
   if (depth > 100) {
     return false;
@@ -73,17 +77,28 @@ function boundedInput(value: unknown, depth = 0, parents = new Set<object>()): b
   ) {
     return false;
   }
+  // JSON.parse keeps "__proto__" as an own key, and copying it by assignment would make it the copy's
+  // prototype, whose keys no strict schema sees: plain JSON data never needs it.
+  if (Object.hasOwn(value, '__proto__')) {
+    return false;
+  }
   parents.add(value);
   const valid = Object.values(value).every((child) => boundedInput(child, depth + 1, parents));
   parents.delete(value);
   return valid;
 }
 
-/** Admit a real wire schema once, materialize declared defaults, and decode native TypeBox transforms.
- * Output validation deliberately remains check-only: response data must already be canonical. */
+/**
+ * Decodes input against its schema: admits only a bounded plain JSON tree, applies the declared defaults to a
+ * copy, checks it and runs its codecs. Throws a `SchemaValidationError` (or TypeBox's assertion error) when the
+ * input is refused, and whatever an owner codec throws otherwise. Output is checked, never decoded: what a
+ * handler returns must already be canonical.
+ */
 export function decodeSchema<Schema extends TSchema>(schema: Schema, input: unknown): StaticDecode<Schema> {
   if (!boundedInput(input)) {
-    throw new TypeError('Input must be a bounded plain JSON tree.');
+    throw new SchemaValidationError([
+      { code: 'invalid_input', message: 'Input must be a bounded plain JSON tree.', path: [] },
+    ]);
   }
   const value = Value.Default(schema, Value.Clone(input));
   Value.Assert(schema, value);
@@ -103,14 +118,20 @@ const MAX_ISSUES = 10;
 const MAX_ISSUE_TEXT = 256;
 
 /**
- * The transport maps schema codec failures to its declared INVALID_INPUT contract, with the first
- * field issues. Schema messages name the expectation, not the value; owner refinements must too.
+ * Decodes input as `decodeSchema` does and answers a refusal as the `INVALID_INPUT` failure, with its first
+ * field issues: where the input failed and what was expected, never a value. A fault of an owner codec, an
+ * error that refuses nothing, is thrown for the caller to report: it is the server's failure, not the input's.
  */
 export function decodeInput<Schema extends TSchema>(schema: Schema, input: unknown) {
+  let value: StaticDecode<Schema>;
   try {
-    return { ok: true as const, value: decodeSchema(schema, input) };
+    value = decodeSchema(schema, input);
   } catch (error) {
-    const issues: InputIssue[] = (decodeIssues(error, MAX_ISSUES) ?? []).map((issue) => ({
+    const refused = decodeIssues(error, MAX_ISSUES);
+    if (!refused) {
+      throw codecFault(error);
+    }
+    const issues: InputIssue[] = refused.map((issue) => ({
       path: jsonPointer(issue.path).slice(0, MAX_ISSUE_TEXT),
       message: issue.message.slice(0, MAX_ISSUE_TEXT),
     }));
@@ -124,4 +145,5 @@ export function decodeInput<Schema extends TSchema>(schema: Schema, input: unkno
       },
     };
   }
+  return { ok: true as const, value };
 }

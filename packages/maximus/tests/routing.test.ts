@@ -73,6 +73,122 @@ it('rejects ambiguous declaration paths without normalizing incoming paths', asy
   expect(verify).not.toHaveBeenCalled();
 });
 
+it('decodes every path segment before it routes, so an encoded fixed segment never reaches a parameter route', async () => {
+  const strict = { additionalProperties: false } as const;
+  const archive = vi.fn(async () => ok({ archived: true }));
+  const read = vi.fn(async (_context: unknown, input: { recordId: string }) =>
+    ok({ recordId: input.recordId })
+  );
+  const app = base
+    .operation(
+      'archiveRecords',
+      {
+        ...definition,
+        scope: 'routing:records:write',
+        effect: 'write',
+        output: t.Object({ archived: t.Boolean() }, strict),
+        http: { method: 'POST', path: '/v1/records/archive' },
+      },
+      archive
+    )
+    .operation(
+      'readRecord',
+      {
+        ...definition,
+        scope: 'routing:records:write',
+        effect: 'write',
+        input: t.Object({ recordId: t.String() }, strict),
+        output: t.Object({ recordId: t.String() }, strict),
+        http: { method: 'POST', path: '/v1/records/{recordId}' },
+      },
+      read
+    )
+    .build();
+  const handle = createHttpHandler(app, {
+    verify: async () => ({
+      sub: 'person',
+      azp: 'portal',
+      org_id: 'org_1234567890abcdef',
+      scope: 'routing:records:write',
+      permissions: ['routing:records:write'],
+    }),
+  });
+  const call = (path: string) =>
+    handle(
+      new Request(`https://example.test${path}`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      {}
+    );
+  const data = async (path: string) => ((await (await call(path)).json()) as { data: unknown }).data;
+  // %61 is "a": the path is /v1/records/archive, whatever its spelling.
+  expect(await data('/v1/records/%61rchive')).toEqual({ archived: true });
+  expect(read).not.toHaveBeenCalled();
+  // A parameter is decoded once, and a value that would change the path's segments is refused.
+  expect(await data('/v1/records/a%20b')).toEqual({ recordId: 'a b' });
+  for (const path of [
+    '/v1/records/a%2Fb',
+    '/v1/records/%2E%2E',
+    '/v1/records/%E0%A4%A',
+    '/v1/%72ecords//x',
+  ]) {
+    expect((await call(path)).status, path).toBe(404);
+  }
+});
+
+it('refuses a JSON body or a query that names __proto__, which no input declares', async () => {
+  const strict = { additionalProperties: false } as const;
+  const app = base
+    .operation(
+      'searchRecords',
+      {
+        ...definition,
+        input: t.Object({ term: t.Optional(t.String()), tags: t.Optional(t.Array(t.String())) }, strict),
+        output: t.Object({ count: t.Integer() }, strict),
+      },
+      async () => ok({ count: 0 })
+    )
+    .operation(
+      'createRecord',
+      {
+        ...definition,
+        scope: 'routing:records:write',
+        effect: 'write',
+        input: t.Object({ title: t.String() }, strict),
+        output: t.Object({ count: t.Integer() }, strict),
+        http: { method: 'POST', path: '/v1/records' },
+      },
+      async () => ok({ count: 1 })
+    )
+    .build();
+  const handle = createHttpHandler(app, {
+    verify: async () => ({
+      sub: 'person',
+      azp: 'portal',
+      org_id: 'org_1234567890abcdef',
+      scope: 'routing:records:read routing:records:write',
+      permissions: ['routing:records:read', 'routing:records:write'],
+    }),
+  });
+  const headers = { authorization: 'Bearer a.b.c', 'content-type': 'application/json' };
+  for (const query of ['?__proto__=x', '?__proto__=a,b', '?term=x&__proto__=y']) {
+    const response = await handle(new Request(`https://example.test/v1/records${query}`, { headers }), {});
+    expect(response.status, query).toBe(400);
+  }
+  const posted = await handle(
+    new Request('https://example.test/v1/records', {
+      method: 'POST',
+      headers,
+      body: '{"title":"x","__proto__":{"archived":true}}',
+    }),
+    {}
+  );
+  expect(posted.status).toBe(400);
+  expect(await posted.json()).toMatchObject({ error: { code: 'INVALID_INPUT' } });
+});
+
 it('serves an explicit route beneath a transport path while the transport keeps its exact path', async () => {
   const app = base.build();
   expect(() =>

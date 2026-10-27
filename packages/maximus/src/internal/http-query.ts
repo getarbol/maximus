@@ -70,7 +70,7 @@ export function queryKinds(op: OperationShape): ReadonlyMap<string, QueryKind> {
  * A GET's input from its query string, each declared field read once as its kind, the way generated
  * clients write it: `?limit=2&active=true&tags=a,b` is
  * `{ limit: 2, active: true, tags: ['a', 'b'] }`. A field the input does not declare stays a string for
- * the schema to judge. Null when a field repeats or a value does not read as its kind.
+ * the schema to judge. Null when a field repeats, is named `__proto__` or does not read as its kind.
  */
 export function queryInput(
   kinds: ReadonlyMap<string, QueryKind>,
@@ -82,6 +82,10 @@ export function queryInput(
   }
   const input: Record<string, unknown> = {};
   for (const [key, text] of params) {
+    // Assigning "__proto__" would set the input's prototype rather than a field no schema declares.
+    if (key === '__proto__') {
+      return null;
+    }
     let value: unknown = text;
     switch (kinds.get(key)) {
       case 'integer': {

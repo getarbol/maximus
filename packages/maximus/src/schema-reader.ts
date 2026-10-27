@@ -5,7 +5,7 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import { inputSchema, SchemaValidationError } from './input-schemas.ts';
-import { decodeIssues } from './internal/decode-issues.ts';
+import { codecFault, decodeIssues } from './internal/decode-issues.ts';
 import type { StaticDecode } from './schema-types.ts';
 import { decodeSchema } from './validation.ts';
 
@@ -20,7 +20,8 @@ export type Checked<S extends TSchema> =
 /**
  * Reads untrusted data — a stored record, a provider or model answer — through its schema's owner
  * semantics: defaults applied, normalizers run before their checks, unknown keys of a strip object
- * dropped. A refusal carries every issue with its path; nothing is coerced.
+ * dropped. A refusal carries every issue with its path; nothing is coerced. An owner codec that fails
+ * throws what it threw.
  */
 export function checkSchema<S extends TSchema>(schema: S, input: unknown): Checked<S> {
   try {
@@ -28,7 +29,7 @@ export function checkSchema<S extends TSchema>(schema: S, input: unknown): Check
   } catch (error) {
     const issues = decodeIssues(error);
     if (!issues) {
-      throw error;
+      throw codecFault(error);
     }
     return { success: false, error: new SchemaValidationError(issues) };
   }

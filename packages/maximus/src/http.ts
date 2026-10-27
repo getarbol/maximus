@@ -580,6 +580,11 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           ) {
             return { ok: false as const, error: standardErrors.notFound.create() };
           }
+          // A transport names the operation itself: the caller must hold that operation's scope, even when the
+          // token names no client and so carries no authority for execution to check.
+          if (transport && !operationMatchesScopes(op, authenticated.scopes)) {
+            return { ok: false as const, error: standardErrors.forbidden.create() };
+          }
           const admissionStarted = performance.now();
           if (!(await admitRequest())) {
             const error = standardErrors.rateLimited.create();

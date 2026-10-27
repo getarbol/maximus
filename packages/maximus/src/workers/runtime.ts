@@ -9,7 +9,7 @@ import { executeOperation } from '../execution.ts';
 import { standardErrors, createHttpHandler, err, PrincipalSchema, parseInput } from '../index.ts';
 import type { Static, Failure, Result, Principal, HttpRoute } from '../index.ts';
 import type { HttpOptions, AppManifest, OperationShape } from '../internals.ts';
-import { recordExecution, telemetryEnabled, withTelemetry } from '../telemetry.ts';
+import { recordExecution, reportUnexpected, telemetryEnabled, withTelemetry } from '../telemetry.ts';
 import { createAssetHandler } from './assets.ts';
 import type { WorkerAssetsOptions } from './assets.ts';
 import { instrumentDurableObject, instrumentService } from './internal/instrumentation.ts';
@@ -52,6 +52,14 @@ export interface WorkerRuntime<E, O extends Record<string, OperationShape>> {
     implementation: D
   ) => D;
 }
+/** A Worker event handler besides fetch: the event, then the bindings and the execution context. */
+type WorkerEventHandler<E> = (
+  this: ExportedHandler<E>,
+  event: unknown,
+  env: E,
+  context: ExecutionContext
+) => unknown;
+
 /**
  * What `createWorker` takes besides the application: the Worker's other handlers, its transports, the HTTP
  * handler's options, its static assets and its plain routes.
@@ -140,16 +148,34 @@ export function createWorker<E, C, O extends Record<string, OperationShape>>(
   const entrypoint = service(Entrypoint) as typeof Entrypoint & {
     new (...args: ConstructorParameters<typeof Entrypoint>): Entrypoint & RpcMethods<O>;
   };
-  const handler: ExportedHandler<E> = { ...options.handlers, fetch };
-  const scheduledHandler = options.handlers?.scheduled;
-  if (scheduledHandler) {
-    handler.scheduled = function scheduled(this: ExportedHandler<E>, controller, env, ctx) {
-      return withTelemetry(manifest.telemetry, env, () => scheduledHandler.call(this, controller, env, ctx));
+  // Every other handler (scheduled, queue, email, tail, …) runs inside the application's diagnostics, as
+  // fetch does: a failure is reported by its safe description, then thrown on for the platform to retry or
+  // record, as it would without Maximus.
+  const handler: Record<string, unknown> = { fetch };
+  for (const [event, implementation] of Object.entries(options.handlers ?? {})) {
+    if (typeof implementation !== 'function') {
+      continue;
+    }
+    const run = implementation as WorkerEventHandler<E>;
+    handler[event] = function handle(
+      this: ExportedHandler<E>,
+      payload: unknown,
+      env: E,
+      context: ExecutionContext
+    ) {
+      return withTelemetry(manifest.telemetry, env, async () => {
+        try {
+          return await run.call(this, payload, env, context);
+        } catch (error) {
+          reportUnexpected(error, event);
+          throw error;
+        }
+      });
     };
   }
 
   return {
-    handler,
+    handler: handler as ExportedHandler<E>,
     entrypoint,
     service,
     durableObject(implementation) {

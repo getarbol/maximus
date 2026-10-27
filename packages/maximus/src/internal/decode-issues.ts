@@ -17,15 +17,17 @@ function segments(path: string): string[] {
 }
 
 /**
- * The issues of a failed decode, at most `limit`, each with its path from the input's root, or null
- * when the failure is not the input's (an owner codec's own fault is rethrown by the caller). TypeBox
- * finds issues one at a time, so an input with millions of them costs no more than `limit`.
+ * The issues of a refused decode, at most `limit`, each with its path from the input's root, or null when
+ * nothing refused the input: an owner codec threw something other than a `SchemaValidationError`, which is
+ * the codec's fault for the caller to report. A codec nested in another reports its issues below the path
+ * the outer one decodes. TypeBox finds issues one at a time, so an input with millions of them costs no
+ * more than `limit`.
  */
 export function decodeIssues(error: unknown, limit = Number.POSITIVE_INFINITY): SchemaIssue[] | null {
   let cause = error;
-  let path: string[] = [];
+  const path: string[] = [];
   while (cause instanceof TransformDecodeError) {
-    path = segments(cause.path);
+    path.push(...segments(cause.path));
     cause = cause.error;
   }
   if (cause instanceof SchemaValidationError) {
@@ -34,7 +36,11 @@ export function decodeIssues(error: unknown, limit = Number.POSITIVE_INFINITY): 
   if (cause instanceof AssertError) {
     const issues: SchemaIssue[] = [];
     for (const issue of cause.Errors()) {
-      issues.push({ code: 'invalid_input', message: issue.message, path: segments(issue.path) });
+      issues.push({
+        code: 'invalid_input',
+        message: issue.message,
+        path: [...path, ...segments(issue.path)],
+      });
       // Stop before asking for one more: each issue TypeBox finds is built in full.
       if (issues.length >= limit) {
         break;
@@ -42,10 +48,19 @@ export function decodeIssues(error: unknown, limit = Number.POSITIVE_INFINITY): 
     }
     return issues;
   }
-  if (cause instanceof TypeError) {
-    return [{ code: 'invalid_input', message: cause.message, path: [] }];
-  }
   return null;
+}
+
+/**
+ * What an owner codec threw, without the TypeBox error that wraps it: that wrapper carries the value being
+ * decoded, which a fault must never take with it to a log.
+ */
+export function codecFault(error: unknown): unknown {
+  let cause = error;
+  while (cause instanceof TransformDecodeError) {
+    cause = cause.error;
+  }
+  return cause;
 }
 
 /** RFC 6901 JSON Pointer of an issue path; the empty string names the whole input. */

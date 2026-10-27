@@ -6,7 +6,7 @@ import { expect, it } from 'vite-plus/test';
 
 import { executeOperation } from '../src/execution.ts';
 import { defineErrors, maximus, ok, standardErrors, t } from '../src/index.ts';
-import { decodeInput, inputSchema, normalizeSchema, refineSchema } from '../src/schemas.ts';
+import { decodeInput, inputSchema, normalizeSchema, pipeSchema, refineSchema } from '../src/schemas.ts';
 
 const Confirm = t.Object(
   {
@@ -37,6 +37,26 @@ it('refuses an input with its first field issues as JSON Pointers, never with it
     note: '   ',
   });
   expect(blank.ok ? [] : blank.error.data.issues.map((issue) => issue.path)).toEqual(['/note']);
+});
+
+it('reports an issue of a codec nested in a field at its full path from the input root', () => {
+  const Labels = inputSchema(
+    t.Object(
+      {
+        labels: t.Object(
+          { tags: pipeSchema(t.Array(t.String()), t.Array(t.String({ minLength: 2 }))) },
+          { additionalProperties: false }
+        ),
+      },
+      { additionalProperties: false }
+    )
+  );
+  const refused = decodeInput(Labels, { labels: { tags: ['ok', 'x'] } });
+  expect(refused.ok ? [] : refused.error.data.issues.map((issue) => issue.path)).toEqual(['/labels/tags/1']);
+  expect(decodeInput(Labels, { labels: { tags: ['ok', 'go'] } })).toEqual({
+    ok: true,
+    value: { labels: { tags: ['ok', 'go'] } },
+  });
 });
 
 it('bounds the issues a refusal carries', () => {

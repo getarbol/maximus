@@ -335,26 +335,36 @@ it('serves HTTP operations from the default handler and annotates the span with 
   ]);
 });
 
-it('runs the scheduled handler inside the diagnostics of its env and merges the other handlers as written', async () => {
+it('runs every other handler inside the diagnostics of its env, reporting a failure before it throws it on', async () => {
   const seen: boolean[] = [];
   const scheduled = vi.fn(async (_controller: ScheduledController, _env: Env, _ctx: ExecutionContext) => {
     seen.push(diagnosticsEnabled());
     reportUnexpected(new RangeError('PRIVATE schedule detail'), 'scheduled');
   });
-  const queue = vi.fn(async () => undefined);
+  const failure = new TypeError('PRIVATE patient 42 could not be notified');
+  const queue = vi.fn(async (_batch: MessageBatch, _env: Env, _ctx: ExecutionContext) => {
+    seen.push(diagnosticsEnabled());
+    throw failure;
+  });
   const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   try {
     const { handler } = createWorker(app, { handlers: { scheduled, queue } });
-    expect(handler.queue).toBe(queue);
     const controller: ScheduledController = { cron: '0 * * * *', scheduledTime: 0, noRetry: () => undefined };
     await handler.scheduled?.(controller, off, executionContext(undefined));
     await handler.scheduled?.(controller, on, executionContext(undefined));
-    expect(seen).toEqual([false, true]);
     expect(scheduled).toHaveBeenLastCalledWith(controller, on, expect.anything());
     expect(scheduled.mock.contexts[1]).toBe(handler);
-    // Only the run whose env turns telemetry on reports, by the error's safe description alone.
-    expect(unexpected).toHaveBeenCalledOnce();
-    expect(log).toHaveBeenCalledOnce();
+    const batch = { queue: 'notifications', messages: [] } as unknown as MessageBatch;
+    // The platform still sees the failure, and retries the batch as it would without Maximus.
+    await expect(handler.queue?.(batch, on, executionContext(undefined))).rejects.toBe(failure);
+    await expect(handler.queue?.(batch, off, executionContext(undefined))).rejects.toBe(failure);
+    expect(seen).toEqual([false, true, true, false]);
+    // Only the runs whose env turns telemetry on report, by the error's safe description alone.
+    expect(unexpected).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(2);
+    expect(log.mock.calls.map(([line]) => (JSON.parse(String(line)) as { surface: string }).surface)).toEqual(
+      ['scheduled', 'queue']
+    );
     expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE');
   } finally {
     log.mockRestore();

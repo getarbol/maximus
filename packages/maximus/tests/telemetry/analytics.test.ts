@@ -41,7 +41,7 @@ afterEach(() => {
 
 it('records each call as an event of exactly the allowlisted metadata, with an id of its own', async () => {
   const record = vi.fn(async (_env: Env, _event: ExecutionEvent) => undefined);
-  const observer = analytics<Env>({ record });
+  const observer = analytics<Env>({ record, actor: 'id' });
   // An observation carrying more than its declared fields, as a widened object can at run time.
   const widened = {
     ...observation,
@@ -70,6 +70,35 @@ it('records each call as an event of exactly the allowlisted metadata, with an i
   expect(first?.id).not.toBe(second?.id);
   expect(record.mock.calls[0]?.[0]).toBe(on);
   expect(JSON.stringify(record.mock.calls)).not.toContain('PRIVATE');
+});
+
+it('names the actor by a pseudonym unless asked for its id: distinct per organization, never the id itself', async () => {
+  const record = vi.fn(async (_env: Env, _event: ExecutionEvent) => undefined);
+  const observer = analytics<Env>({ record });
+  const email = { ...principal, actorId: 'patient.ana@example.test' };
+  await observer.execution?.({ ...observation, principal: email }, on);
+  await observer.execution?.({ ...observation, principal: email }, on);
+  await observer.execution?.(
+    { ...observation, principal: { ...email, organizationId: 'org_other0000000000' } },
+    on
+  );
+  const [first, again, elsewhere] = record.mock.calls.map(([, event]) => event.actorId);
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`${principal.organizationId}:patient.ana@example.test`)
+  );
+  expect(first).toBe(Buffer.from(digest).toString('hex'));
+  expect(again).toBe(first);
+  expect(elsewhere).not.toBe(first);
+  expect(JSON.stringify(record.mock.calls)).not.toContain('patient.ana');
+});
+
+it('never records an event that does not match its schema: the observer fails instead', async () => {
+  const record = vi.fn(async () => undefined);
+  await expect(
+    analytics<Env>({ record }).execution?.({ ...observation, service: 'Records API' }, on)
+  ).rejects.toThrow('The analytics event does not match ExecutionEventSchema.');
+  expect(record).not.toHaveBeenCalled();
 });
 
 it('records nothing while its own switch is off for the env', async () => {
