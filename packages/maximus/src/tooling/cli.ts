@@ -85,7 +85,7 @@ async function run(): Promise<void> {
       const serves = created.mcp ? 'an API and its MCP server' : 'an API';
       report(
         created,
-        `Created ${name} in ${shown(created.directory)}: ${serves}${created.web ? ' with a web app' : ''}.\n${created.next}`
+        `Created ${name} in ${shown(created.directory)}/: ${serves}${created.web ? ' with a web app' : ''}.\n${created.next}`
       );
       return;
     }

@@ -89,7 +89,7 @@ test('init scaffolds a project named after its directory unless --name names it,
   expect(reported).toEqual([]);
   expect(printed).toHaveLength(1);
   expect(printed[0]).toMatch(
-    /^Created tasks in .+tasks: an API and its MCP server\.\nRun bun install and bun run dev\./
+    /^Created tasks in .+tasks\/: an API and its MCP server\.\nRun bun install and bun run dev\./
   );
   expect(printed[0]).toContain('bun run deploy deploys.');
   expect(existsSync(join(directory, 'routes/v1/greeting.get.ts'))).toBe(true);

@@ -1,174 +1,165 @@
 # Maximus
 
-[![Verify](https://github.com/getarbol/maximus/actions/workflows/verify.yml/badge.svg)](https://github.com/getarbol/maximus/actions/workflows/verify.yml)
+[![CI](https://github.com/getarbol/maximus/actions/workflows/ci.yml/badge.svg)](https://github.com/getarbol/maximus/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@arbol-ai/maximus.svg)](https://www.npmjs.com/package/@arbol-ai/maximus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Maximus is a TypeScript framework for organization-scoped APIs on Cloudflare Workers. You declare
-each operation once, with its schemas, scope, effect and handler, and Maximus serves it over HTTP
-with a runtime OpenAPI 3.1 contract, as an MCP tool for AI agents, and as a typed Worker RPC method.
-Each transport admits the caller its own way (a verified token and its scopes, or a trusted Service
-Binding), then every call runs the same pipeline: decode and validate the input, prepare the
-context, run your handler, validate what it returns. It is built for teams whose services are called
-by people, by other services and by agents, in many tenants at once.
+Maximus is a TypeScript framework for organization-scoped APIs on Cloudflare Workers. Each route is a file
+that declares its handler and its contract once. Maximus serves it over HTTP with a live OpenAPI 3.1
+document, as an MCP tool when you name one, and as a native RPC method to the Workers you allow. Whatever
+the transport, a call is admitted by a verified token and its scopes, or by a trusted Service Binding, and
+then runs one pipeline: decode and validate the input, prepare the context, run the handler, check what it
+returns.
 
-Create a project with `bunx @arbol-ai/maximus init my-service --name my-service --layout project`.
-It starts with Vite+ and one configuration, `vite.config.ts`, whose `maximus()` from
-`@arbol-ai/vite-plugin` states the application and its Worker. Each route is a file,
-`routes/v1/greeting.get.ts`, default-exporting one `defineHandler`; a route can also be an MCP tool, and
-`mcp/tools/` holds tools only agents call. Middleware is ordered, the Worker entry and `Env` are
-generated, and main deploys automatically. `src/` is optional. See
-[Project structure](docs/guides/project-structure.md) for the file conventions.
+It is built for teams whose services are called by people, by other services and by AI agents, in many
+organizations at once, and whose data does not leave the organization it belongs to.
 
-The repository root uses Vite+ for checks, formatting, workspace tasks and library/Worker builds.
-`bun run verify` performs non-test validation; tests run only when explicitly requested.
-
-```ts
-import { defineErrors, err, maximus, ok, t } from '@arbol-ai/maximus';
-import { mcp } from '@arbol-ai/maximus/mcp';
-import { createWorker } from '@arbol-ai/maximus/workers';
-
-interface Env {
-  NOTES: KVNamespace;
-}
-
-const errors = defineErrors({
-  noteNotFound: { code: 'NOTE_NOT_FOUND', status: 404, message: 'The note does not exist.' },
-});
-
-const app = maximus<Env>({
-  name: 'notes',
-  namespace: 'notes',
-  title: 'Notes',
-  version: '1.0.0',
-  origin: 'https://notes.example.com',
-  tokens: { issuer: 'https://auth.example.com/', audience: 'https://notes.example.com' },
-  errors,
-  rpc: { callers: ['reporting'] },
-  mcp: { instructions: "Read the notes of the caller's organization." },
-})
-  .operation(
-    'getNote',
-    {
-      scope: 'notes:notes:read',
-      effect: 'read',
-      title: 'Get a note',
-      description: 'Read one note by its identifier.',
-      input: t.Object({ noteId: t.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
-      output: t.Object({ noteId: t.String(), text: t.String() }, { additionalProperties: false }),
-      http: { method: 'GET', path: '/v1/notes/{noteId}' }, // HTTP route + OpenAPI
-      mcp: { name: 'get_note', idempotent: true }, // MCP tool
-      rpc: true, // Worker RPC method
-    },
-    async ({ env, principal }, { noteId }) => {
-      const text = await env.NOTES.get(`${principal.organizationId}/${noteId}`);
-      return text === null ? err(errors.noteNotFound.create()) : ok({ noteId, text });
-    }
-  )
-  .build();
-
-const worker = createWorker(app, { transports: [mcp()] });
-
-export const NotesService = worker.entrypoint;
-export default worker.handler;
-```
-
-That Worker serves:
-
-- `GET /v1/notes/{noteId}` with an OAuth bearer token holding `notes:notes:read`, answering
-  `{ "success": true, "data": { … }, "error": null, "metadata": { "requestId": "…" } }`, or `404`
-  with the `NOTE_NOT_FOUND` failure in the same envelope;
-- `GET /openapi.json` (and YAML), generated from the definition, with scopes as OAuth security
-  requirements and every failure the catalog can return;
-- the `get_note` tool at `/mcp`, listed only to tokens that carry its scope;
-- `getNote(principal, input)` on `NotesService` for the Worker whose Service Binding names it
-  `reporting`.
-
-The handler's `input` and `context` are inferred, the organization comes from the verified token,
-and an input with unknown fields, such as another `organizationId`, is refused before the handler
-runs.
-
-## One package
+## Start
 
 ```sh
-bun add @arbol-ai/maximus
+bun create maximus my-api        # or: npm create maximus@latest my-api
+cd my-api
+bun install
+bun run dev                      # http://localhost:5173
 ```
 
-Everything is in `@arbol-ai/maximus`, one entry per concern. A bundle carries only the entries it
-imports, and the browser entries load no Worker or Node runtime.
+The new project answers `GET /api/v1/greeting` to a signed-in caller, serves it to agents as the MCP tool
+`get_greeting`, publishes `/api/openapi.json` and ships with tests, lint, a GitHub workflow and the Maximus
+skill linked for coding agents. [Getting started](docs/getting-started.md) builds on it step by step.
 
-| Entry                                | Purpose                                                                                                         |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `@arbol-ai/maximus`                  | Definitions, schemas, tokens and scopes, errors, middleware, native HTTP and OpenAPI.                           |
-| `@arbol-ai/maximus/workers`          | The Worker: fetch handler, named RPC entrypoints, entrypoint and Durable Object instrumentation, static assets. |
-| `@arbol-ai/maximus/mcp`              | MCP over Streamable HTTP with the official SDK: tools, resources, prompts and Agent Skills.                     |
-| `@arbol-ai/maximus/schemas`          | Schemas, codecs and readers without the rest of the core, for browsers.                                         |
-| `@arbol-ai/maximus/analytics`        | An observer that records allowlisted execution metadata to your sink.                                           |
-| `@arbol-ai/maximus/postgres`         | Short tenant-scoped Postgres transactions (needs the optional peer `pg`).                                       |
-| `@arbol-ai/maximus/testing`          | A contract smoke helper for tests.                                                                              |
-| `@arbol-ai/maximus/oxlint`, `/oxfmt` | Lint and format presets.                                                                                        |
+## A route is a file
 
-It also installs the `maximus` CLI and ships the Maximus Agent Skill. Every entry is listed in
-[package exports](docs/reference/exports.md).
+```ts
+// routes/v1/notes/[noteId].get.ts: GET /api/v1/notes/{noteId}
+import { defineHandler, UuidSchema } from '@arbol-ai/maximus';
 
-## Why Maximus
+import { NoteSchema } from '../../../src/notes.ts';
 
-- **One definition, every transport.** HTTP, OpenAPI, MCP and RPC are projections of the same
-  operation, so the contract cannot drift between them.
-- **One owner for each check.** Admission, input validation, execution and output validation each
-  happen once, in a fixed order, and no transport re-implements them. Invalid output is never sent.
-- **Tenancy by construction.** Every call has a verified principal with an organization; strict
-  schemas keep input from overriding it.
-- **Failures are data.** Handlers return `Result`s from a declared catalog that fixes each code's
-  status and retry semantics, so HTTP, MCP and RPC callers see the same failure.
-- **Native and small.** Web `fetch` routing, TypeBox and TypeScript inference. No code generation,
-  no runtime code compilation, no web framework underneath.
-- **Private by default.** Diagnostics carry codes, ids and durations, never bodies, credentials or
-  error text.
+export default defineHandler(
+  async ({ input, notes, fail }) => (await notes.get(input.noteId)) ?? fail('NOTE_NOT_FOUND'),
+  {
+    description: 'Read one note of the organization by its id.',
+    input: { noteId: UuidSchema },
+    output: NoteSchema,
+    failures: ['NOTE_NOT_FOUND'],
+    mcp: { name: 'get_note' },
+  }
+);
+```
 
-The trade-offs are deliberate:
+The file's name is its method and path. Maximus derives the operation's name (`getV1NotesNoteId`), its
+effect (`read`) and the scope a caller needs (`notes:notes:read`); the contract states the rest. `input`
+is decoded and typed from its schema, `fail` accepts only the codes your `errors.ts` declares, and `notes`
+is what `context.ts` prepares for every call, here the notes of the caller's organization. The same file
+is the MCP tool `get_note`.
 
-- It targets Cloudflare Workers. The HTTP handler is standard `fetch`, but RPC and assets are
-  Workers features, and other runtimes are not a supported target.
-- Every operation requires a bearer token with an organization. The default verifier reads standard
-  OAuth access tokens (RFC 9068) from any authorization server: Auth0's as they are, and others, such
-  as Okta's or WorkOS's, once `tokens.claims` says where their claims are. A person holds only the
-  scopes their permissions also list. Other credentials need a resolver. Organization ids are 1 to
-  128 letters, digits, `_` and `-`, as identity providers issue them (`org_…`, UUIDs, slugs).
-- Routes are fixed and versioned (`/v1/...`), with whole-segment parameters and no
-  regular-expression routing or path normalization. Bodies are JSON, plus explicit byte uploads.
-- Schemas are TypeBox; there is no Zod adapter.
+## One configuration
+
+```ts
+// vite.config.ts
+import { maximus } from '@arbol-ai/vite-plugin';
+import { bindings } from 'cf/config';
+import { defineConfig } from 'vite-plus';
+
+export default defineConfig({
+  plugins: [
+    maximus({
+      origin: 'https://notes.example.com',
+      tokens: { issuer: 'https://auth.example.com/' },
+      compatibilityDate: '2026-10-26',
+      env: { NOTES_DB: bindings.d1({ name: 'notes' }) },
+    }),
+  ],
+});
+```
+
+`maximus()` states the application and the Worker that serves it, with Cloudflare's own names for the
+Worker's settings and bindings. From it and the project's files, Maximus generates `.maximus/`: the
+application, the Worker's entry and an `Env` type inferred from the bindings. `vp dev` runs the Worker
+locally in workerd, `vp test` runs your tests in Node, `vp build` builds it and `cf deploy` deploys that
+build.
+
+## What a deployed Worker serves
+
+| Path                                        | Serves                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| `/api/v1/…`                                 | Your routes, to callers whose token holds their scopes.                     |
+| `/api/openapi.json`, `/api/openapi.yaml`    | The OpenAPI 3.1 document, built from the routes and the error catalog.      |
+| `/mcp`                                      | MCP over Streamable HTTP: the tools, guides and Agent Skills you declare.   |
+| `/api/.well-known/oauth-protected-resource` | OAuth discovery, which a refused call's `WWW-Authenticate` challenge names. |
+| `/health`                                   | Liveness, with the service's name and version.                              |
+| `/`, and every path a web app owns          | The React app `index.html` starts, with a strict content security policy.   |
+
+## How it behaves
+
+- **One definition, every transport.** HTTP, OpenAPI, MCP and RPC are views of the same route, so the
+  contract cannot drift between them.
+- **One owner for each check.** Admission, input validation, execution and output validation each happen
+  once, in a fixed order, and no transport repeats them. An answer its schema refuses is never sent.
+- **Tenancy by construction.** Every call carries a verified principal with an organization, which input
+  can never override; storage keys, queries and Durable Object names start from it.
+- **Failures are data.** A route answers `fail(code)` from a declared catalog that fixes each code's status
+  and retry semantics, so HTTP, MCP and RPC callers see the same failure.
+- **Private by default.** Diagnostics carry codes, ids and durations, never bodies, credentials or error
+  text, and analytics name each actor by a pseudonym unless you choose otherwise.
+- **Small Workers.** A Worker without MCP builds to under 200 kB. With MCP, the SDK is a separate chunk that
+  loads with the first MCP request.
+
+The trade-offs are deliberate. Maximus targets Cloudflare Workers. Every route requires a bearer token
+with an organization: standard OAuth access tokens from your authorization server, or your own verifier.
+Routes are versioned (`/v1/…`) with whole-segment parameters. Bodies are JSON, plus explicit byte uploads.
+Schemas are [TypeBox](https://github.com/sinclairzx81/typebox).
+
+## Packages
+
+| Package                                                                        | What it is                                                                                           |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| [`@arbol-ai/maximus`](https://www.npmjs.com/package/@arbol-ai/maximus)         | The framework, one entry per concern, the `maximus` command and the Maximus skill for coding agents. |
+| [`@arbol-ai/vite-plugin`](https://www.npmjs.com/package/@arbol-ai/vite-plugin) | `maximus()`: the project's only configuration, run by Vite+ and Cloudflare's Vite plugin.            |
+| [`create-maximus`](https://www.npmjs.com/package/create-maximus)               | `bun create maximus`: a new project.                                                                 |
+
+The three are released together, at one version. A Worker carries only the entries it imports:
+`@arbol-ai/maximus/mcp` and `@arbol-ai/maximus/postgres`, for instance, stay out of one that does not use
+them. Every entry is listed in [package exports](docs/reference/exports.md).
+
+## Examples
+
+Runnable services in [`examples/`](examples), each configured in its `vite.config.ts` alone, tested in
+Node and deployable to Cloudflare:
+
+| Example                                       | Shows                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`tasks`](examples/tasks)                     | Routes as files, MCP tools, guides and an Agent Skill, and a React app on the same Worker. |
+| [`d1-notes`](examples/d1-notes)               | D1 with migrations, rows keyed by organization, keyset pages and search for agents.        |
+| [`worker-rpc`](examples/worker-rpc)           | Two Workers over native RPC, typed by the contract one of them publishes.                  |
+| [`queue-reminders`](examples/queue-reminders) | A queue consumer that delivers once, a dead letter queue and a cron that recovers.         |
+| [`browser-pages`](examples/browser-pages)     | Browser Run: pages as Markdown for agents, or as PNG attachments.                          |
+| [`r2-documents`](examples/r2-documents)       | Byte uploads checked against their type, SHA-256 checksums and streamed downloads from R2. |
+| [`do-appointments`](examples/do-appointments) | A Durable Object per organization and day that never double-books a slot.                  |
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md): build, run and call a service.
+- [Getting started](docs/getting-started.md): create, run, test and deploy a service.
 - [Concepts](docs/concepts.md): the model and its vocabulary.
-- [Guides](docs/README.md#guides): HTTP, MCP, RPC, errors, middleware, authentication, testing,
-  deploying and more.
-- [Reference](docs/README.md#reference): configuration, operations, CLI, wire formats, failures and
+- [Guides](docs/README.md#guides): routes, schemas, errors, authentication, MCP, bindings, RPC, background
+  work, web apps, testing, deploying and more.
+- [Reference](docs/README.md#reference): configuration, route options, the CLI, wire formats, failures and
   exports.
-- [Architecture](docs/architecture.md): the design decisions.
+- [Upgrading to 8.0](docs/upgrading-to-8.md) from a 7.x service.
 
-Runnable [examples](examples): a minimal HTTP service, HTTP and MCP together, and two Workers over
-RPC.
-
-An [Agent Skill](.agents/skills/maximus/SKILL.md) teaches coding agents to build with Maximus; it
-ships in `@arbol-ai/maximus` under `skills/maximus`.
+The [Maximus skill](.agents/skills/maximus/SKILL.md) teaches coding agents to build with Maximus; every
+project links the copy its installed release ships.
 
 ## Status and versioning
 
 Maximus runs Arbol's production services; Arbol builds and maintains it. Releases follow semantic
-versioning: a breaking change moves the major version, and published releases never change. See the
-[changelog](CHANGELOG.md) and the [migration guides](docs/README.md#guides).
-
-The package is published on npm as
-[`@arbol-ai/maximus`](https://www.npmjs.com/package/@arbol-ai/maximus). Up to 6.x it was
-`@getarbol/maximus`, a private package; the [changelog](CHANGELOG.md) says what 7.0.0 changed.
+versioning, and the [changelog](CHANGELOG.md) records every change.
 
 ## Contributing and security
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) to set up the workspace and propose changes, and report
-vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Everyone taking part follows
-the [code of conduct](CODE_OF_CONDUCT.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) to set up the workspace and propose a change. Report
+vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
