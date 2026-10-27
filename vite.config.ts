@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vite-plus';
 
 import fmt from './packages/maximus/config/oxfmt.mjs';
@@ -29,6 +31,14 @@ export default defineConfig({
           name: 'unit',
           include: ['packages/*/tests/**/*.test.ts'],
           exclude: ['packages/*/tests/**/*.integration.test.ts'],
+        },
+        // Unit tests run the Workers runtime in Node; suites that need workerd use Miniflare.
+        resolve: {
+          alias: {
+            'cloudflare:workers': fileURLToPath(
+              new URL('packages/maximus/tests/workers/fixtures/cloudflare-workers.ts', import.meta.url)
+            ),
+          },
         },
       },
       {
