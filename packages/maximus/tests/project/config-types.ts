@@ -2,13 +2,13 @@
  * Compile-only coverage of `middleware/` modules: each phase keeps its own context, request middleware sees
  * no principal, and only the two helpers make a module.
  */
-import { defineErrors, maximus, ok } from '../src/index.ts';
+import { defineErrors, maximus, ok } from '../../src/index.ts';
 import {
   collectMiddleware,
   defineMiddleware,
   defineOperationMiddleware,
   useProjectMiddleware,
-} from '../src/project/config.ts';
+} from '../../src/project/config.ts';
 
 const base = maximus<{ prefix: string }>({
   name: 'project',

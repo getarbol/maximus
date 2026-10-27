@@ -17,8 +17,15 @@ async function pluginsOf(option: unknown): Promise<unknown[]> {
   return nested.flat();
 }
 
-/** The configuration files Vite reads, in the order it looks for them. */
-const VITE_CONFIGS = ['vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs'];
+/** The configuration files Vite reads, in the order it looks for them: the first it finds is the one it loads. */
+const VITE_CONFIGS = [
+  'vite.config.js',
+  'vite.config.mjs',
+  'vite.config.ts',
+  'vite.config.cjs',
+  'vite.config.mts',
+  'vite.config.cts',
+];
 
 /** The API of the Maximus plugin among a configuration's plugins, if it has one. */
 function projectApi(plugin: unknown): ProjectApi | undefined {

@@ -74,7 +74,7 @@ bindings.secret()` line goes away. A `workers.dev` origin is served there, and a
 Worker's custom domain unless `domains` or a fetch trigger routes it. [Configuration](reference/configuration.md)
 lists every option.
 
-Then delete `maximus.config.ts`, `cloudflare.config.ts` (the plugin refuses a project that still has one),
+Then delete `maximus.config.ts` and `cloudflare.config.ts`, which the plugin refuses to find beside it,
 the Worker entry (`src/index.ts` or `src/worker.ts`) and any `vitest.config.ts`: `vp test` reads
 `vite.config.ts`. Add `.maximus/` to `.gitignore`; it is generated on every `vp dev`, `vp build` and
 `vp test`.

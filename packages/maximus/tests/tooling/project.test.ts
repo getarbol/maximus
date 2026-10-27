@@ -75,6 +75,28 @@ test('an email recipient whose domain ends in dev, prod or test keeps it, beside
   ]);
 });
 
+test('a middleware, cron or queue module named with a suffix other than .dev or .prod is refused', () => {
+  for (const file of [
+    'middleware/00-cors.development.ts',
+    'crons/debug.local.ts',
+    'queues/reminders.staging.dev.ts',
+  ]) {
+    const root = project({ [file]: 'export default {};' });
+    expect(() => prepare(root), file).toThrow(
+      `Name a module without dots but its mode suffix, .dev or .prod: ${file}`
+    );
+  }
+});
+
+test('an email module named after neither a recipient nor _default, which no message would reach, is refused', () => {
+  for (const file of ['email/_default.local.ts', 'email/support.ts', 'email/help@localhost.ts']) {
+    const root = project({ [file]: 'export default {};' });
+    expect(() => prepare(root), file).toThrow(
+      `Name an email module after the recipient it handles, such as help@example.com, or _default: ${file}`
+    );
+  }
+});
+
 test('a route file is named by its method; any other name is refused with the convention', () => {
   for (const name of ['routes/v1/notes.ts', 'routes/v1/notes.head.ts', 'routes/v1/notes/index.ts']) {
     const root = project({ [name]: ROUTE });
@@ -86,7 +108,7 @@ test('a route file is named by its method; any other name is refused with the co
 
 test('suffixed modules declare one method each and share a path', () => {
   const root = project({
-    'routes/v1/tasks/index.get.ts': `throw new Error("must not execute"); export default defineHandler(list, { output: {} });`,
+    'routes/v1/tasks/index.get.ts': 'export default defineHandler(list, { output: {} });',
     'routes/v1/tasks/index.post.ts': ROUTE,
     'routes/v1/tasks/[taskId].delete.ts': `${ROUTE} export type Removed = true;`,
     'routes/v1/debug.get.dev.ts': ROUTE,
@@ -102,7 +124,7 @@ test('suffixed modules declare one method each and share a path', () => {
   expect(generated(root, 'app.ts')).toContain('"/v1/debug", "GET"');
 });
 
-test('a method of a path has one owner, wherever the files that claim it sit', () => {
+test('a method of a path has one owner, wherever the files that claim it sit and whatever its parameters are named', () => {
   const root = project({ 'routes/v1/tasks.get.ts': ROUTE, 'routes/v1/tasks/index.post.ts': ROUTE });
   prepare(root);
   const app = generated(root, 'app.ts');
@@ -114,6 +136,10 @@ test('a method of a path has one owner, wherever the files that claim it sit', (
   expect(generated(root, 'app.ts')).toBe(app);
   const grouped = project({ 'routes/v1/tasks.get.ts': ROUTE, 'routes/(admin)/v1/tasks.get.ts': ROUTE });
   expect(() => prepare(grouped)).toThrow('Multiple route files claim GET /v1/tasks');
+  const renamed = project({ 'routes/v1/tasks/[id].get.ts': ROUTE, 'routes/v1/tasks/[taskId].get.ts': ROUTE });
+  expect(() => prepare(renamed)).toThrow(
+    'Multiple route files claim GET /v1/tasks/{taskId}: routes/v1/tasks/[id].get.ts and routes/v1/tasks/[taskId].get.ts.'
+  );
 });
 
 test('route modules cannot be symlinks, which could pull code from outside the project', () => {

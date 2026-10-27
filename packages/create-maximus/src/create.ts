@@ -110,7 +110,7 @@ export async function create(
     [
       `Created ${choice.name}, ${serves}${choice.web ? ' with a web app' : ''}.`,
       '',
-      `  cd ${relative(directory, resolve(directory, choice.directory)) || '.'}`,
+      `  cd ${relative(directory, resolve(directory, choice.directory))}`,
       '  bun install',
       '  bun run dev',
       '',

@@ -30,9 +30,18 @@ export interface ProjectApi {
 }
 
 /**
+ * What the Worker's configuration and exports follow from a prepared project: Cloudflare's plugin reads them as
+ * the server starts, so only a restart applies a change to them.
+ */
+function workerShape({ webApp, durableObjects, crons, queues }: PreparedProject): string {
+  return JSON.stringify({ webApp, durableObjects, crons, queues });
+}
+
+/**
  * Prepares the project before every build and before Vite reloads source modules during development, and
- * asks for a restart when the Worker itself changes: a web app appears or goes, or a Durable Object does.
- * The project is prepared for `development` under `vp dev` alone; every build is `production`.
+ * asks for a restart when the Worker itself changes: a web app appears or goes, a Durable Object does, or a
+ * trigger its cron and queue modules state. The project is prepared for `development` under `vp dev` alone;
+ * every build is `production`.
  */
 export function maximusProject(project: ProjectOptionsSource): Plugin<ProjectApi> & { api: ProjectApi } {
   let root = process.cwd();
@@ -42,10 +51,7 @@ export function maximusProject(project: ProjectOptionsSource): Plugin<ProjectApi
     prepareProject(directory, preparing, project(resolve(directory), preparing));
   const reconcile = () => {
     const current = prepare(root, mode);
-    const restart =
-      previous !== undefined &&
-      (previous.webApp !== current.webApp ||
-        previous.durableObjects.join('\n') !== current.durableObjects.join('\n'));
+    const restart = previous !== undefined && workerShape(previous) !== workerShape(current);
     previous = current;
     return { ...current, restart };
   };

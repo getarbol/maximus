@@ -30,19 +30,28 @@ afterEach(() => {
   }
 });
 
-/** Runs the `config` hook of maximus()'s own plugin, as Vite does before Cloudflare's: a build by default. */
+/** The `config` hook of one of maximus()'s plugins, by its name. */
+function configHook(plugins: Plugin[], name: string) {
+  const hook = plugins.find((plugin) => plugin.name === name)?.config;
+  if (typeof hook !== 'function') {
+    throw new TypeError(`${name} has no config hook`);
+  }
+  return hook;
+}
+
+/**
+ * Runs the `config` hooks of maximus()'s plugins in Vite's order, its own and then maximusProject()'s, before
+ * Cloudflare's: a build by default. Answers what maximus()'s own hook adds to the configuration.
+ */
 async function configure(
   plugins: Plugin[],
   config: Record<string, unknown>,
   environment: { mode?: string; command?: 'build' | 'serve'; isPreview?: boolean } = {}
 ) {
-  const plugin = plugins.find(({ name }) => name === 'maximus');
-  const hook = plugin?.config;
-  if (typeof hook !== 'function') {
-    throw new TypeError('maximus() has no config hook');
-  }
   const { mode = 'production', command = 'build', isPreview = false } = environment;
-  return (await hook.call({} as never, config, { mode, command, isPreview })) as Record<string, unknown>;
+  const added = await configHook(plugins, 'maximus').call({} as never, config, { mode, command, isPreview });
+  await configHook(plugins, 'maximus-project').call({} as never, config, { mode, command, isPreview });
+  return added as Record<string, unknown>;
 }
 
 test('prepares the project and keeps Cloudflare’s plugin after its own, out of Vitest alone', async () => {
@@ -129,11 +138,17 @@ test('the stand-in for cloudflare:workers keeps what a test constructs a class w
   expect(workers.tracing.getActiveSpan).toBeUndefined();
 });
 
-test('refuses cloudflare.config.ts, which a second Worker configuration would be', async () => {
-  const root = project({ 'cloudflare.config.ts': 'export default {};' });
-  await expect(
-    configure(maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' }), { root })
-  ).rejects.toThrow("maximus() configures the Worker: move cloudflare.config.ts into maximus()'s options.");
+test('refuses cloudflare.config.ts and maximus.config.ts, which a second configuration would be', async () => {
+  for (const [file, subject] of [
+    ['cloudflare.config.ts', 'the Worker'],
+    ['maximus.config.ts', 'the application'],
+  ] as const) {
+    const root = project({ [file]: 'export default {};' });
+    await expect(
+      configure(maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' }), { root }),
+      file
+    ).rejects.toThrow(`maximus() configures ${subject}: move ${file} into maximus()'s options.`);
+  }
 });
 
 test('serves a web app from the root, refusing a base or assets directory that would move its build', async () => {
@@ -169,14 +184,24 @@ test("minifies the Worker's build, and only it, unless the configuration decides
 });
 
 test('development is vp dev: a build or a preview is production, whatever its Vite mode', async () => {
-  const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});' });
+  const root = project({
+    'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});',
+    'routes/v1/debug.get.dev.ts': 'export default defineHandler(() => {});',
+  });
   const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
-  const declared = async (environment: Parameters<typeof configure>[2]) => {
+  // What both hooks leave prepared: the development token and the development route, or neither.
+  const development = async (environment: Parameters<typeof configure>[2]) => {
     await configure(plugins, { root, lint: {}, fmt: {} }, environment);
-    return readFileSync(join(root, '.maximus/config.ts'), 'utf-8').includes('DEVELOPMENT_TOKEN');
+    return [
+      readFileSync(join(root, '.maximus/config.ts'), 'utf-8').includes('DEVELOPMENT_TOKEN'),
+      readFileSync(join(root, '.maximus/app.ts'), 'utf-8').includes('"/v1/debug"'),
+    ];
   };
-  expect(await declared({ command: 'serve', mode: 'development' })).toBe(true);
-  expect(await declared({ command: 'serve', mode: 'staging' })).toBe(true);
-  expect(await declared({ command: 'build', mode: 'development' })).toBe(false);
-  expect(await declared({ command: 'serve', mode: 'development', isPreview: true })).toBe(false);
+  expect(await development({ command: 'serve', mode: 'development' })).toEqual([true, true]);
+  expect(await development({ command: 'serve', mode: 'staging' })).toEqual([true, true]);
+  expect(await development({ command: 'build', mode: 'development' })).toEqual([false, false]);
+  expect(await development({ command: 'serve', mode: 'development', isPreview: true })).toEqual([
+    false,
+    false,
+  ]);
 });

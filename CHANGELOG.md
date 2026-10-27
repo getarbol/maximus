@@ -1,103 +1,132 @@
 # Changelog
 
-Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/maximus` on npm, since
-7.0.0. The entries before it come from the framework's earlier private repository, where every
-`@getarbol/maximus*` package shared the version shown unless an entry says otherwise and
-`@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
-dates of the release commits.
+Notable changes to Maximus, newest first. Since 8.0.0, `@arbol-ai/maximus`, `@arbol-ai/vite-plugin` and
+`create-maximus` are released together at one version; from 7.0.0 to 7.4.0, Maximus was the one package
+`@arbol-ai/maximus`. The entries before 7.0.0 come from the framework's earlier private repository, where
+every `@getarbol/maximus*` package shared the version shown unless an entry says otherwise and
+`@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
+of the release commits.
 
-## Unreleased
+## 8.0.0 (2026-10-27)
 
-Breaking, so the next release is 8.0.0:
+A Maximus service is a project configured by one file, `vite.config.ts`, whose routes are files: each
+declares its contract once and is served over HTTP with OpenAPI, to MCP clients when it says so, and to
+other Workers over native RPC. [Upgrading to 8.0](docs/upgrading-to-8.md) moves a 7.x service setting by
+setting.
 
+Breaking:
+
+- `maximus()` from the new `@arbol-ai/vite-plugin` states the application and its Worker in
+  `vite.config.ts`, with Cloudflare's own names for the Worker's settings, and composes Cloudflare's Vite
+  plugin. Gone: `maximus.config.ts` and `defineConfig` and `cloudflare.config.ts`, both of which the plugin
+  refuses to find;
+  the `src/application.ts` and `src/worker.ts` entries; the service starter and `maximus init --layout`;
+  route modules that export `GET` or a route factory, `defineRoute` and `.maximus/routes.ts`; middleware
+  modules that export a bare function and the `defineRequestMiddleware` alias; `readWebhookBody`;
+  `sameSchema`; and the migration guides of earlier majors.
 - The `@arbol-ai/maximus/client` entry is removed: `createClient` and its types (`Envelope`,
   `ClientOptions`, `ClientFailure`, `CallOptions`, `BinaryCallOptions`, `AppClientContract`,
   `ClientManifest`, `ResponseMode`, `OperationName`, `ReadOperationName`, `OperationInput`,
-  `OperationOutput`), with its guide. Call a service over HTTP with `fetch` and its bearer token, and type
-  each call with `Static` of `typeof app.operations.<name>.input` and `.output`; Workers of the same
-  account keep native RPC.
+  `OperationOutput`). Call a service over HTTP with `fetch` and the caller's token, typed by its routes'
+  schemas, or over native RPC between Workers of one account.
+- Development is `vp dev`: every build and preview is a production build, whatever its Vite mode, so the
+  development token, `.dev` modules and the forwarding of Vite's modules never reach a deployed Worker.
+- A service fails when it starts, with a `TypeError` that names the rule, for what used to pass and fail
+  later: under `tokens.scheme` `oauth+bearer`, an operation that names no `actorKinds`; a schema reference
+  that names no single definition (both answered 500 to the first request for the OpenAPI document); an
+  application name that is not a lowercase kebab-case word of 2 to 64 characters, an operation name over
+  100 characters, and an error code that is not uppercase words joined by underscores (analytics dropped
+  every event of such a service); and a `DELETE` route that declares `effect: 'read'`.
+- A domain failure that a context, a derive or middleware answers, and that the operation does not declare,
+  is answered as `INTERNAL_ERROR` and reported, as one its handler answers always was.
+- An MCP JSON-RPC batch is admitted whole: every message passes the rate limit as a request of its own
+  before any of them runs, a ping or a listing as much as a tool call, and a batch over the limit answers
+  `429` with the `RATE_LIMITED` failure, none of it run. The JSON-RPC error `-32000` is gone. A custom
+  transport's `TransportContext` carries `admitCarried`, `refused` and `body` in place of `admitRequest`
+  and `bodyBytes`.
+- Input decoding refuses an object with its own `__proto__` key, at any depth, and a query field named
+  `__proto__`, as `INVALID_INPUT` on HTTP, MCP and RPC and in `checkSchema`. Only a schema mismatch or a
+  `SchemaValidationError` refuses input: any other error an input codec throws is the server's, answered as
+  `INTERNAL_ERROR` and reported, and `decodeInput` and `checkSchema` throw it.
+- `analytics()` records a pseudonym of each actor, the SHA-256 of its organization and actor ids, unless
+  `actor: 'id'` asks for the id.
+- The webhook verifiers throw a `TypeError` for a missing or empty secret, before they read any header.
+- `withTenantTransaction` refuses an empty or `null` isolation level and an organization id that is not a
+  string, before it checks a connection out.
+- `yaml` is no longer a dependency: `/openapi.yaml` and a skill's frontmatter are written by a small writer
+  for JSON data.
 
 Everything else:
 
-- `@arbol-ai/vite-plugin` makes `vite.config.ts` a project's only configuration: `maximus()` states the
-  application (origin, token issuer, RPC callers, limits) and its Worker with Cloudflare's names
-  (compatibility date, bindings in `env`, triggers and every other setting), with no `maximus.config.ts`
-  or `cloudflare.config.ts`. It prepares the project on every build and source change, generates `Env` in
-  `.maximus/env.d.ts` from the bindings by Cloudflare's own inference, declares the development token and the
-  policy that accepts it in development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
-  trigger and brings the lint and format presets a configuration lacks. It is released with
-  `@arbol-ai/maximus` at the same version.
-- A project configured in `vite.config.ts` describes its MCP server in Markdown: `mcp/instructions.md`
-  for every client that connects, `mcp/guides/<name>.md` as resources and prompts titled by their first
-  heading, and `mcp/skills/<name>.md` as Agent Skills whose frontmatter states their description. The
-  Worker serves MCP when any of them exists. Other layouts set `mcp` in code and refuse the files.
-- With `index.html` at its root, a project configured in `vite.config.ts` is a web app: `maximus()`
-  declares the `ASSETS` binding and Worker-first assets, and the same Worker serves the API under `/api`
-  and the app's build. The pages are the files of `app/routes/` (`[taskId].tsx` is `:taskId`), each a
-  React Router route module whose default export is its component, around an optional `app/root.tsx`
-  layout; `maximus prepare` lists them in `.maximus/app-routes.ts` as lazy, case-sensitive routes. The
-  same files decide which paths answer `index.html`, so an unknown path is a 404; `public/` is served by
-  name, the hashed `/assets/` for good, and Vite's modules only in development. Pages that claim the API,
-  discovery, MCP, the build's assets or `pages/` are refused, as is a Vite `base` or `build.assetsDir`
-  that would move the build. `examples/project-tasks` has a React app
-  that calls the API with `fetch`, typed by the routes' schemas.
-- `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
-  may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot, and refuses
-  the issuer, audience or any other field that would override the configured policy. With
-  `errors.ts`, they complete an application `vite.config.ts` configures. `PreparedContext` types
-  operation middleware with what `context.ts` prepares.
-- `maximus prepare` prepares a project configured in `vite.config.ts` through its plugin, which Vite loads
-  as every `vp` command does.
-- The project starter is `vite.config.ts`, routes, a page and a middleware: its token policy names an
-  OAuth issuer, which MCP clients discover, and its types come from `@cloudflare/workers-types` and the
-  generated `Env`.
-- `defineHandler(handler, contract)` declares a route as a plain value: the handler receives one object
-  (`{ input, principal, env, fail, …context }`) and returns its output or `fail(code)`, typed by the
-  contract's failures and their data; the contract's `input` and `output` take schemas or the fields of
-  strict objects. The contract is optional, so a route without one takes no input and answers the empty
-  object, and it may live in a `const` with `satisfies HandlerOptions`. Binding derives what a route
-  leaves out: its operation name (`postV1TasksTaskIdComplete`, or `operationId`), its effect from the
-  method, its scope (`<namespace>:<resource>:read|write`), its title and its tool's idempotent hint; a
-  `DELETE` route that declares `effect: 'read'` is refused. `defineTool(handler, contract)` declares a tool
-  only MCP serves. A project registers its base and error catalog in the global `MaximusRegister`, which
-  types every handler's context and failures.
-- The OpenAPI document leaves out an operation's empty description.
-- The project layout discovers `routes/**/<name>.<method>.ts` files, each default-exporting one
-  `defineHandler` (`tasks/[taskId].delete.ts` answers `DELETE /v1/tasks/{taskId}`; `.dev` and `.prod`
-  follow the method), and `mcp/tools/<name>.ts` files, each a `defineTool`. Several suffixed files share a
-  path, one per method. `maximus prepare` writes `.maximus/register.d.ts`, and a root `errors.ts` that
-  default-exports the catalog types every handler's failures; the generated base checks the application
-  uses it. The generated Worker adds the MCP transport when a route or tool declares MCP. Route modules
-  that export `GET` or a default factory keep working and own their whole path.
-- The project starter declares its greeting as `routes/v1/greeting.get.ts` and `greeting.post.ts`, includes
-  `.maximus/*.ts` in `tsconfig.json` (TypeScript skipped the bare `.maximus` entry) and names its Worker
-  entry by path in `cloudflare.config.ts`, which no longer makes the Worker's types depend on themselves
-  once the configuration derives context from its bindings.
-- The oxlint preset accepts a route file named after its path parameter, such as `[taskId].get.ts` or
-  `[noteId].ts`, which kebab-case refused although the parameter must match its input field.
-- The root entry's declarations no longer load the Workers declarations: a Node consumer type-checks them
-  without Workers types, as the release checks require. The release checks also verify the project
-  starter.
-- `operation()` accepts every field `.operation()` does, including `failures`, `maxBodyBytes` and
-  `maxOutputBytes`. Both, and the project route helper, share one handler type, and `Failure` is
-  derived from `FailureSchema`, so the type and the wire schema cannot drift apart.
-- The `service` starter's CI workflow pins its actions by commit, keeps the checkout token from later
-  steps, stops after 15 minutes and no longer hands a GitHub Packages token to `bun install`. Its
-  `cloudflare.config.ts` pins the compatibility date of the day the project is created.
-- Project discovery keeps an email recipient whose domain ends in `.dev`, `.prod`, `.test` or `.spec`:
-  `email/support@company.dev.ts` handles `support@company.dev` in every mode, where it was read as the
-  development handler of `support@company`, and `email/help@example.test.ts` was skipped as a test.
-- `createAssetHandler` answers a path below an immutable prefix as an immutable asset only when it is a
-  plain path: an encoded slash, an encoded character or a dot segment there is a 404, never a file the
-  binding resolves elsewhere and a browser caches for a year.
-- `maximus` reports an unknown option, or one without its value, in one sentence like its other
-  refusals, instead of a stack trace.
-- Project discovery sees the MCP tool of a route declared as a `const` it default-exports, which it
-  missed, leaving the Worker without the MCP transport. A route whose fields it cannot read, behind a
-  spread, a computed key or another module, is refused instead of silently left unserved.
-- `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds
-  a method to itself in its constructor, as socket handlers often do, no longer fails to construct; the
-  bound method still runs inside its instance's diagnostics.
+- `bun create maximus my-api` (the new `create-maximus` package) asks whether the project serves MCP and
+  has a React app, then runs `maximus init` of its own release. `maximus init` lays the starter out in
+  layers (the API, its MCP server unless `--no-mcp`, a web app with `--web`) with tests that call the API in
+  Node, and links the installed Maximus skill into `.agents/skills`, `.claude/skills` and `.codex/skills`.
+  `maximus skills` links it in an existing project, and `maximus gen route` and `maximus gen tool` write a
+  route or a tool file where `prepare` reads it. Every command says what it did in a sentence, or prints
+  JSON with `--json`.
+- A route is `defineHandler(handler, contract?)` in `routes/**/<name>.<method>.ts`: the handler receives
+  `{ input, principal, env, fail, …context }` and answers its output or `fail(code)`, typed by the
+  contract. Binding derives what a contract leaves out: the operation's name, its effect, its scope
+  `<service>:<resource>:read|write`, its title and its tool's idempotent hint. `defineTool` declares a tool
+  only MCP serves, in `mcp/tools/`. A project registers its base and error catalog in the global
+  `MaximusRegister`, which types every handler's context and failures.
+- `context.ts` (`defineContext`) prepares what every handler receives, `errors.ts` declares the error
+  catalog and `auth.ts` (`defineAuth`) verifies tokens the application issues; `defineAuth` refuses the
+  issuer, the audience and every other field `vite.config.ts` states. `PreparedContext` types operation
+  middleware.
+- `.maximus/env.d.ts` types `Env` from the declared bindings with Cloudflare's own inference, and types a
+  binding to one of the Worker's own Durable Object classes as `DurableObjectNamespace` of that class.
+- Each cron module's literal schedule becomes its trigger, and each queue module subscribes the Worker to
+  the queue it names unless the options declare that consumer themselves.
+- The MCP server is described in Markdown: `mcp/instructions.md`, `mcp/guides/<name>.md` as resources and
+  prompts and `mcp/skills/<name>.md` as Agent Skills. The refusals the server answers itself (a hidden or
+  unknown tool, a call over its operation's limit) are observed as admissions.
+- With `index.html` at its root, a project is a web app: the same Worker serves the API under `/api` and a
+  React app whose pages are the files of `app/routes/`, with a Content Security Policy that admits the token
+  issuer, HSTS and same-origin policies, which `webApp.headers` adjusts. A Vite `base` or `build.assetsDir`
+  that would move the build is refused.
+- A route with a byte body reads it with `body.read()`, whose failure is the answer itself
+  (`REQUEST_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE` or `INVALID_INPUT`, typed as `BodyFailure`).
+- The Worker is minified, and `mcp()` loads the MCP SDK on the first MCP request, in a chunk of its own: a
+  Worker with one route and no MCP builds to about 170 kB (50 kB gzip).
+- `maximus prepare` writes `.maximus/http.ts`, the API as the Worker serves it, for tests in Node, and under
+  Vitest `maximus()` resolves `cloudflare:workers` to a stand-in whose entrypoint and Durable Object classes
+  keep the context and bindings a test gives them.
+- A `workers.dev` origin is served there; any other origin becomes the Worker's custom domain unless
+  `domains` or a fetch trigger route it.
+- A telemetry switch that throws turns telemetry off for the call instead of failing it, and an unexpected
+  error on the MCP endpoint is reported under the `mcp` surface.
+- The router decodes every path segment before it matches one, so an encoded fixed segment reaches its own
+  route. A transport refuses an operation whose scope the caller lacks with `FORBIDDEN`, also when the token
+  names no client. `createWorker` runs every handler besides `fetch` (queue, email, scheduled, tail) inside
+  the application's diagnostics. The MCP listing of a union input includes a record member's key patterns.
+- `createAssetHandler` answers an immutable asset only for a plain path: an encoded slash, an encoded
+  character or a dot segment there is a 404.
+- `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds a
+  method to itself in its constructor constructs.
+- Project discovery sees the MCP tool of a route declared as a `const`, refuses a route whose fields it
+  cannot read, reads cron schedules before it replaces any output, and keeps an email recipient whose domain
+  ends like a mode or test suffix.
+- `maximus prepare` refuses, before any Worker starts, what used to fail later or never work: a page at a
+  path the Worker answers otherwise, by the same rule the Worker applies; two routes of one method whose
+  paths differ only in a parameter's name, naming both files; an import of a generated module from a page,
+  a queue, an email or a Durable Object module, as from any other; a middleware, cron or queue module whose
+  name keeps a dot besides `.dev` or `.prod`; and an email module named after neither a recipient nor
+  `_default`, which no message would reach. It reads the configuration file Vite reads, in Vite's order.
+- `maximus gen tool` and `maximus skills` refuse to write through a symlinked folder of the project.
+- `observability` options merge key by key over the defaults, so a partial setting keeps query strings
+  redacted, and logs and traces follow `enabled` unless set. Two cron modules on one schedule make one
+  trigger, and `vp dev` restarts when a queue or cron module is added or removed.
+- Seven examples deploy to Cloudflare as they are, each with tests in Node and an end-to-end suite: tasks
+  with a web app, notes in D1, two Workers over RPC, a queue with a dead letter queue, Browser Run, documents
+  in R2 and a Durable Object that books appointments.
+- CI runs the build, types, lint and format, the tests with coverage on Node 22 and 24, the Postgres suite,
+  the packed packages and every example's end-to-end suite on each pull request and push to `main`;
+  publishing follows a green CI on `main`, with provenance, and releases the version on GitHub with its
+  section of this file.
+- Dependencies: Vite+ 1.4, Vitest 5, TypeScript 7, Cloudflare's Vite plugin 2.0 beta, `cf` 1.0 beta,
+  the MCP server SDK 2.4 and Bun 1.4.4.
 
 ## 7.4.0 (2026-10-26)
 

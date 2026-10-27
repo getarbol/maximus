@@ -1,16 +1,17 @@
 /**
  * `maximus gen` and `maximus skills`: a route or tool file named and placed by the conventions prepare reads,
  * laid out as the formatter writes it, never over an existing file or a route another file answers; and the
- * Maximus skill linked for each coding agent without replacing what is there.
+ * Maximus skill linked for each coding agent without replacing what is there. Neither writes through a folder
+ * linked from elsewhere.
  */
-import { lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, symlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import { linkAgentSkills } from '../../src/tooling/internal/agent-skills.ts';
 import { generateRoute, generateTool } from '../../src/tooling/internal/generate.ts';
-import { generated, prepare, project, removeProjects, ROUTE } from './fixtures.ts';
+import { generated, prepare, project, removeProjects, ROUTE, temporary } from './fixtures.ts';
 
 afterEach(removeProjects);
 
@@ -104,6 +105,25 @@ test('a tool file is named in kebab-case and its tool in snake_case, and an exis
   expect(() => generateTool(root, '../escape')).toThrow('Name a tool file in kebab-case');
 });
 
+/** A new project whose `folder` is a symlink to a new empty directory elsewhere, and that directory. */
+function linkedProject(folder: string): { root: string; elsewhere: string } {
+  const root = project({});
+  const elsewhere = temporary();
+  mkdirSync(join(root, dirname(folder)), { recursive: true });
+  symlinkSync(elsewhere, join(root, folder));
+  return { root, elsewhere };
+}
+
+test('a tool is never written through mcp/ or mcp/tools/ linked from elsewhere', () => {
+  for (const folder of ['mcp', 'mcp/tools']) {
+    const { root, elsewhere } = linkedProject(folder);
+    expect(() => generateTool(root, 'summarize-tasks'), folder).toThrow(
+      `Project directory cannot be a symlink: ${folder}`
+    );
+    expect(readdirSync(elsewhere), folder).toEqual([]);
+  }
+});
+
 test('the Maximus skill is linked for each agent once, and anything else at a link path is refused', () => {
   const root = project({});
   expect(linkAgentSkills(root)).toEqual([
@@ -126,4 +146,17 @@ test('the Maximus skill is linked for each agent once, and anything else at a li
   mkdirSync(join(elsewhere, '.codex/skills'), { recursive: true });
   symlinkSync('/somewhere/else', join(elsewhere, '.codex/skills/maximus'));
   expect(() => linkAgentSkills(elsewhere)).toThrow('.codex/skills/maximus exists');
+});
+
+test('the skill is never linked through an agent folder or its skills folder linked from elsewhere', () => {
+  for (const folder of ['.claude', '.codex/skills']) {
+    const { root, elsewhere } = linkedProject(folder);
+    expect(() => linkAgentSkills(root), folder).toThrow(`Project directory cannot be a symlink: ${folder}`);
+    expect(readdirSync(elsewhere), folder).toEqual([]);
+    // Nothing was linked before the refusal.
+    expect(
+      lstatSync(join(root, '.agents/skills/maximus'), { throwIfNoEntry: false }),
+      folder
+    ).toBeUndefined();
+  }
 });

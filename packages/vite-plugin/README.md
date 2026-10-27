@@ -47,7 +47,8 @@ export default defineHandler(
 directories before every build and source change, generates `Env` from the bindings, brings the Maximus
 lint and format presets unless `vite.config.ts` sets its own, and runs Cloudflare's Vite plugin with the
 Worker the options describe: its entry, `nodejs_compat`, the development token in development alone and a
-trigger for each cron module. `vp dev` runs it, `vp build` builds it and `cf deploy --prebuilt` deploys it.
+trigger for each schedule its cron modules state. `vp dev` runs it, `vp build` builds it and
+`cf deploy --prebuilt` deploys it.
 
 With `index.html` at the root, the project is also a web app: the same Worker serves the API under `/api`
 and the build, whose React Router pages are the files of `app/routes/`. Add `react()` from

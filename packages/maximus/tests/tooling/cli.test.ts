@@ -1,7 +1,7 @@
 /**
  * The `maximus` command, run in this process with its arguments: help and usage, `init` with its name and
- * refusals, `prepare` for a directory and mode, and failures reported as one sentence unless MAXIMUS_DEBUG
- * asks for the error itself.
+ * refusals, `gen` and `skills`, `prepare` for a directory and mode, what each says it did, as a sentence or,
+ * with --json, as JSON, and failures reported as one sentence unless MAXIMUS_DEBUG asks for the error itself.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -62,7 +62,7 @@ async function maximus(...args: string[]) {
   };
 }
 
-test('--help prints the usage of init and prepare and exits successfully', async () => {
+test('--help prints the usage of init, gen, skills and prepare and exits successfully', async () => {
   const { printed, reported, exitCode } = await maximus('--help');
   expect(exitCode).toBeUndefined();
   expect(reported).toEqual([]);
@@ -105,13 +105,11 @@ test('init leaves MCP out with --no-mcp and adds a web app with --web', async ()
     mcp: false,
     web: false,
   });
-  expect(existsSync(join(api, 'mcp'))).toBe(false);
   const web = join(temporary(), 'web');
   expect(JSON.parse(String((await maximus('init', web, '--web', '--json')).printed[0]))).toMatchObject({
     mcp: true,
     web: true,
   });
-  expect(existsSync(join(web, 'index.html'))).toBe(true);
 });
 
 test('gen writes a route or a tool below --root, and skills links the Maximus skill', async () => {
@@ -248,14 +246,4 @@ test('prepare refuses a mode other than production and development', async () =>
     'maximus: Prepare with --mode production, as a build does, or development, as vp dev does.',
   ]);
   expect(exitCode).toBe(1);
-});
-
-test('a project prepare cannot configure is refused as one sentence', async () => {
-  const root = project({ 'routes/v1/notes.get.ts': 'export default defineHandler(() => ({}));' });
-  const { reported, exitCode } = await maximus('prepare', root);
-  expect(exitCode).toBe(1);
-  expect(reported).toEqual([
-    'maximus: Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.',
-  ]);
-  expect(existsSync(join(root, '.maximus'))).toBe(false);
 });

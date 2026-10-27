@@ -2,7 +2,7 @@
  * `maximus prepare`: Vite loads the project's `vite.config.ts`, and the plugin in it prepares the project as a
  * build would. A project without one, or whose configuration has no `maximus()`, is refused.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,10 +35,24 @@ test('prepares a project through the plugin its vite.config.ts configures, neste
   );
 });
 
+test('of two configuration files, it reads the one Vite reads: vite.config.js before vite.config.ts', async () => {
+  const root = project(
+    {
+      'vite.config.js': `import { maximusProject } from ${JSON.stringify(PLUGIN)};\nexport default { plugins: [maximusProject(() => (${JSON.stringify(options())}))] };\n`,
+      'vite.config.ts': 'export default { plugins: [{ name: "other" }] };',
+      'routes/v1/tasks.get.ts': ROUTE,
+    },
+    CACHE
+  );
+  expect(await prepareConfiguredProject(root)).toMatchObject({ mode: 'production', modules: { routes: 1 } });
+});
+
 test('a project without vite.config.ts, or whose configuration has no maximus(), is refused', async () => {
-  await expect(prepareConfiguredProject(project({ 'routes/v1/tasks.get.ts': ROUTE }))).rejects.toThrow(
+  const bare = project({ 'routes/v1/tasks.get.ts': ROUTE });
+  await expect(prepareConfiguredProject(bare)).rejects.toThrow(
     'Configure the project in vite.config.ts with maximus() from @arbol-ai/vite-plugin.'
   );
+  expect(existsSync(join(bare, '.maximus'))).toBe(false);
   const unconfigured = project(
     { 'vite.config.ts': 'export default { plugins: [{ name: "other" }] };' },
     CACHE

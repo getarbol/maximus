@@ -167,7 +167,7 @@ test('a page is a name or a [parameter], and the root layout is one module', () 
   );
 });
 
-test('public/ files are served by plain names, and neither symlinks nor app/ itself may lead elsewhere', () => {
+test('public/ files are served by plain names, and neither symlinks nor app/, its layout or its pages may lead elsewhere', () => {
   const spaced = project({ 'index.html': '', 'public/my logo.png': '' });
   expect(() => prepare(spaced, 'production', web)).toThrow(
     'Name public files with letters, digits, dots, underscores, tildes and hyphens: public/my logo.png'
@@ -185,4 +185,16 @@ test('public/ files are served by plain names, and neither symlinks nor app/ its
   const linkedApp = project({ 'index.html': '', 'elsewhere/routes/index.tsx': page });
   symlinkSync(join(linkedApp, 'elsewhere'), join(linkedApp, 'app'));
   expect(() => prepare(linkedApp, 'production', web)).toThrow('Project directory cannot be a symlink: app');
+  const linkedLayout = project({
+    'index.html': '',
+    'elsewhere/root.tsx': page,
+    'app/routes/index.tsx': page,
+  });
+  symlinkSync(join(linkedLayout, 'elsewhere/root.tsx'), join(linkedLayout, 'app/root.tsx'));
+  expect(() => prepare(linkedLayout, 'production', web)).toThrow('The app/root module cannot be a symlink.');
+  const linkedPages = project({ 'index.html': '', 'elsewhere/index.tsx': page, 'app/root.tsx': page });
+  symlinkSync(join(linkedPages, 'elsewhere'), join(linkedPages, 'app/routes'));
+  expect(() => prepare(linkedPages, 'production', web)).toThrow(
+    'Project directory cannot be a symlink: app/routes'
+  );
 });

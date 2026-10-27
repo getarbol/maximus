@@ -81,13 +81,21 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   webApp?: WebAppOptions;
 }
 
-/** The observability a Worker gets unless the options set their own: logs and traces, query strings redacted. */
-const OBSERVABILITY: WorkerConfig['observability'] = {
-  enabled: true,
-  redactQueryString: true,
-  logs: { enabled: true, invocationLogs: true },
-  traces: { enabled: true },
-};
+/**
+ * The Worker's observability: the options' own settings, key by key over the defaults, which are logs with
+ * invocation logs and traces, query strings redacted. Logs and traces follow `enabled` unless the options set
+ * theirs, so turning observability off turns them off too.
+ */
+function observability(own: WorkerConfig['observability'] = {}): WorkerConfig['observability'] {
+  const enabled = own.enabled ?? true;
+  return {
+    enabled,
+    redactQueryString: true,
+    ...own,
+    logs: { enabled, invocationLogs: true, ...own.logs },
+    traces: { enabled, ...own.traces },
+  };
+}
 
 /** A Worker and scope namespace name: lowercase letters, digits and single hyphens, 2 to 63 characters. */
 const SERVICE_NAME = /^(?=.{2,63}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -327,9 +335,10 @@ export interface DiscoveredEvents {
 
 /**
  * The Worker Cloudflare's plugin builds: the options' settings, the generated entry, `nodejs_compat`, which
- * Maximus needs for its diagnostics, the bindings of the phase, where it is served, a cron trigger for each
- * cron module, a consumer trigger for each queue module the options do not subscribe themselves and, for a
- * web app, its build as assets every request reaches through the Worker, which decides what they answer.
+ * Maximus needs for its diagnostics, the bindings of the phase, where it is served, its observability, a cron
+ * trigger for each schedule the cron modules state, a consumer trigger for each queue module the options do not
+ * subscribe themselves and, for a web app, its build as assets every request reaches through the Worker,
+ * which decides what they answer.
  */
 export function workerConfig(
   root: string,
@@ -345,19 +354,26 @@ export function workerConfig(
   const consumers = queues
     .filter((queue) => !subscribed.has(queue))
     .map((queue) => triggers.queue({ name: queue }));
-  const scheduled = crons.map(({ file, cron }) => {
+  // One trigger per schedule, whose events run every cron module that states it; the options' own is kept.
+  const declared = new Set(
+    (worker.triggers ?? []).flatMap((trigger) => (trigger.type === 'scheduled' ? [trigger.schedule] : []))
+  );
+  const schedules = crons.map(({ file, cron }) => {
     if (cron === undefined) {
       throw new TypeError(
         `${file}: export the schedule as a string literal, export const cron = '0 8 * * *'.`
       );
     }
-    return triggers.scheduled({ schedule: cron });
+    return cron;
   });
+  const scheduled = [...new Set(schedules)]
+    .filter((schedule) => !declared.has(schedule))
+    .map((schedule) => triggers.scheduled({ schedule }));
   return {
     ...hosting(options, worker),
     previewUrls: false,
-    observability: OBSERVABILITY,
     ...worker,
+    observability: observability(worker.observability),
     name: identity(root, options).name,
     compatibilityFlags: [...new Set(['nodejs_compat', ...(worker.compatibilityFlags ?? [])])],
     entrypoint: './.maximus/entry.ts',

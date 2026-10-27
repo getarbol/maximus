@@ -8,9 +8,10 @@ import { join, relative, resolve, sep } from 'node:path';
 
 import type { ApplicationConfiguration } from '../../builder.ts';
 import { ownsPrefix, VERSIONED_PATH } from '../../internal/http-layout.ts';
+import { checkPagePaths } from '../../project/pages.ts';
 import type { TokenPolicy } from '../../tokens.ts';
 import { cronExpression, declarationExports, readProjectModule } from './project-exports.ts';
-import { PROJECT_DIRECTORIES, projectFiles, projectPath, publicFiles } from './project-files.ts';
+import { PROJECT_DIRECTORIES, projectFiles, projectPath, publicFiles, routeShape } from './project-files.ts';
 import type { ProjectFile } from './project-files.ts';
 import { mcpMarkdown } from './project-markdown.ts';
 
@@ -136,13 +137,15 @@ function discoverRoutes(root: string, files: readonly ProjectFile[], imports: Im
     }
     const method = suffix[1].toUpperCase();
     const path = projectPath(name.slice(0, -suffix[0].length), 'routes');
-    const owner = owners.get(`${method} ${path}`);
+    // `{taskId}` and `{id}` match the same paths.
+    const claim = `${method} ${routeShape(path)}`;
+    const owner = owners.get(claim);
     if (owner) {
       throw new TypeError(
         `Multiple route files claim ${method} ${path}: ${relative(root, owner)} and ${relative(root, file)}.`
       );
     }
-    owners.set(`${method} ${path}`, file);
+    owners.set(claim, file);
     mcp = declarationExports(file, 'defineHandler').mcp || mcp;
     const identifier = imports.add(`route_${index}`, file);
     return `.mount(bindRoute(base, ${identifier}, ${JSON.stringify(path)}, ${JSON.stringify(method)}))`;
@@ -165,8 +168,16 @@ function discoverTools(root: string, files: readonly ProjectFile[], imports: Imp
   });
 }
 
-/** The pages `pages/` declares: native responses at fixed paths outside the API. */
-function discoverPages(files: readonly ProjectFile[], imports: Imports) {
+/**
+ * The pages `pages/` declares: native responses at fixed paths outside the API, refused at a path the generated
+ * Worker answers otherwise, as it would refuse them when it starts.
+ */
+function discoverPages(
+  files: readonly ProjectFile[],
+  imports: Imports,
+  project: ProjectOptions,
+  mcp: boolean
+) {
   const paths = new Set<string>();
   const entries = files.map(({ name, file }, index) => {
     const path = projectPath(name, 'pages');
@@ -175,6 +186,11 @@ function discoverPages(files: readonly ProjectFile[], imports: Imports) {
     }
     paths.add(path);
     return `${JSON.stringify(path)}: ${imports.add(`page_${index}`, file)}`;
+  });
+  // The generated Worker answers the API, its own paths and, when it mounts mcp(), MCP at /mcp.
+  checkPagePaths(paths, project.application.tokens, {
+    http: project.worker.http,
+    transports: mcp ? [{ path: '/mcp' }] : [],
   });
   return { paths, entries };
 }
@@ -402,6 +418,10 @@ export function prepareProject(directory: string, mode: string, project: Project
   for (const { file } of files.middleware) {
     readProjectModule(file, 'middleware');
   }
+  // The modules only the generated Worker imports, which may use the application but not the Worker.
+  for (const { file } of [...files.pages, ...files.queues, ...files.email, ...files['durable-objects']]) {
+    readProjectModule(file, 'worker');
+  }
   // Each cron module's schedule, when it states it as a literal: the Worker's triggers.
   const schedules = files.crons.map(({ file }) => ({ file, cron: cronExpression(file) }));
   // What mcp/ describes of the MCP server in Markdown.
@@ -424,7 +444,7 @@ export function prepareProject(directory: string, mode: string, project: Project
   );
 
   const worker = new Imports(output);
-  const pages = discoverPages(files.pages, worker);
+  const pages = discoverPages(files.pages, worker, project, servesMcp);
   const crons = files.crons.map(({ file }, index) => {
     worker.add(`cron_${index}, { cron as schedule_${index} }`, file);
     return `{ cron: schedule_${index}, handler: cron_${index} }`;

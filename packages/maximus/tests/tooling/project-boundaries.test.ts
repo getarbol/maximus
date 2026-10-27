@@ -2,8 +2,8 @@
  * What project discovery refuses at its boundaries, beside the generator's main matrix: root modules and
  * generated output that are symlinks or not ordinary files, runtime imports of generated modules that would
  * form a cycle for each kind of module, Workers-only imports in the modules that complete the application,
- * modules that do not parse, cron schedules that are not literal constants, and pages, events and Durable
- * Objects whose names collide.
+ * modules that do not parse, cron schedules that are not literal constants, pages at paths the Worker answers
+ * otherwise, and pages, events and Durable Objects whose names collide.
  */
 import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -103,6 +103,21 @@ test('middleware may not import the generated base or app at runtime, but may na
   expect(prepare(typed).modules).toMatchObject({ middleware: 1 });
 });
 
+test('a tool, page, queue, email or Durable Object module may not import at runtime the generated module that imports it', () => {
+  for (const [file, source] of [
+    ['mcp/tools/summarize.ts', '#maximus/app'],
+    ['pages/about.ts', '#maximus/worker'],
+    ['queues/reminders.ts', '#maximus/worker'],
+    ['email/help@example.test.ts', '#maximus/worker'],
+    ['durable-objects/session-store.ts', '../.maximus/worker.ts'],
+  ] as const) {
+    const root = project({ [file]: `import generated from '${source}';\nexport default generated;` });
+    expect(() => prepare(root), file).toThrow(
+      `Runtime import ${source} creates a generated-module cycle in ${join(root, file)}.`
+    );
+  }
+});
+
 test('the modules that complete the application stay importable outside workerd: Workers-only imports are refused, their types are not', () => {
   for (const [file, contents, source] of [
     ['auth.ts', "import { env } from 'cloudflare:workers';\nexport default env;", 'cloudflare:workers'],
@@ -162,18 +177,18 @@ test("a cron module's schedule is a declarator of an exported const; a let, a fu
   expect(prepare(root).crons.map(({ cron }) => cron)).toEqual(['0 8 * * *', undefined, undefined, undefined]);
 });
 
-test('a cron module that does not parse, or imports the Worker that imports it, is refused before any output is replaced', () => {
+test('a cron module that imports the Worker that imports it is refused before any output is replaced', () => {
   const root = project({ 'routes/v1/notes.get.ts': ROUTE });
   prepare(root);
   const worker = generated(root, 'worker.ts');
-  for (const contents of [
-    "export const cron = '0 8 * * *';\nexport default () => {",
-    "import { Service } from '#maximus/worker';\nexport const cron = '0 8 * * *';\nexport default () => Service;",
-  ]) {
-    write(root, { 'crons/daily.ts': contents });
-    expect(() => prepare(root), contents).toThrow(join(root, 'crons/daily.ts'));
-    expect(generated(root, 'worker.ts')).toBe(worker);
-  }
+  write(root, {
+    'crons/daily.ts':
+      "import { Service } from '#maximus/worker';\nexport const cron = '0 8 * * *';\nexport default () => Service;",
+  });
+  expect(() => prepare(root)).toThrow(
+    `Runtime import #maximus/worker creates a generated-module cycle in ${join(root, 'crons/daily.ts')}.`
+  );
+  expect(generated(root, 'worker.ts')).toBe(worker);
 });
 
 test('a cron module may use the generated application, which does not import it', () => {
@@ -193,6 +208,20 @@ test('two page files may not claim one path', () => {
     'pages/about/index.ts': 'export default {};',
   });
   expect(() => prepare(root)).toThrow('Multiple page files claim /about.');
+});
+
+test('a page may not claim a path the API, its health check, a versioned route or MCP answers', () => {
+  const page = 'export default () => new Response();';
+  for (const [files, path] of [
+    [{ 'pages/health.ts': page }, '/health'],
+    [{ 'pages/api/status.ts': page }, '/api/status'],
+    [{ 'pages/v1/tasks.ts': page }, '/v1/tasks'],
+    [{ 'pages/mcp.ts': page, 'mcp/tools/summarize.ts': 'export default defineTool({});' }, '/mcp'],
+  ] as const) {
+    expect(() => prepare(project(files)), path).toThrow(
+      `Page path is reserved or malformed: ${path}. Move the API with http.basePath.`
+    );
+  }
 });
 
 test('each queue module names the queue it consumes', () => {

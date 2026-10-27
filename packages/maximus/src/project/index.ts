@@ -1,13 +1,13 @@
 /** Optional Workers composition for projects whose modules are discovered by `maximus prepare`. */
 import { standardErrors } from '../errors.ts';
 import type { HttpRoute } from '../http.ts';
-import { nativePaths, ownsPrefix, VERSIONED_PATH } from '../internal/http-layout.ts';
 import type { AppManifest, OperationShape } from '../manifest.ts';
 import { createAssetHandler } from '../workers/assets.ts';
 import { createWorker } from '../workers/runtime.ts';
 import type { WorkerOptions, WorkerRuntime } from '../workers/runtime.ts';
 import { projectHandlers } from './handlers.ts';
 import type { ProjectEvents } from './handlers.ts';
+import { checkPagePaths } from './pages.ts';
 
 export type { ProjectCron, ProjectEvents } from './handlers.ts';
 
@@ -29,22 +29,7 @@ export function createProjectWorker<E, C, O extends Record<string, OperationShap
     throw new TypeError('Worker assets and an HTTP fallback cannot both own unmatched paths.');
   }
   const pages = new Map(Object.entries(modules.pages ?? {}));
-  const native = nativePaths(app.tokens, options.http ?? {});
-  for (const path of pages.keys()) {
-    if (
-      !/^\/(?:[a-zA-Z0-9._~-]+(?:\/[a-zA-Z0-9._~-]+)*)?$/.test(path) ||
-      path.split('/').some((segment) => segment === '.' || segment === '..') ||
-      native.reserved.has(path) ||
-      (native.base && ownsPrefix(native.base, path)) ||
-      VERSIONED_PATH.test(path) ||
-      ownsPrefix('/.well-known', path) ||
-      Object.hasOwn(options.routes ?? {}, path) ||
-      Object.keys(options.http?.mounts ?? {}).some((prefix) => ownsPrefix(prefix, path)) ||
-      options.transports?.some((transport) => ownsPrefix(transport.path, path))
-    ) {
-      throw new TypeError(`Page path is reserved or malformed: ${path}. Move the API with http.basePath.`);
-    }
-  }
+  checkPagePaths(pages.keys(), app.tokens, options);
   const fallback = options.assets ? createAssetHandler(options.assets) : options.http?.fallback;
   return createWorker(app, {
     ...options,

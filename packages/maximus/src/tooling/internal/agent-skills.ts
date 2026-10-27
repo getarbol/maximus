@@ -6,6 +6,8 @@
 import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
+import { checkProjectFolder } from './project-files.ts';
+
 /** The installed skill, from the project's root. */
 const INSTALLED = 'node_modules/@arbol-ai/maximus/skills/maximus';
 /** The folders coding agents read a project's skills from. */
@@ -14,7 +16,8 @@ const HARNESSES = ['.agents', '.claude', '.codex'] as const;
 /**
  * Links the installed Maximus skill into each agent's skills folder of the project at `directory`, and
  * returns the links it created. A link already in place is kept; anything else at a link's path is refused,
- * never replaced. A link may point at nothing until `bun install` installs the package.
+ * never replaced, and so is an agent's folder or skills folder that is a symlink. A link may point at nothing
+ * until `bun install` installs the package.
  */
 export function linkAgentSkills(directory: string): string[] {
   const root = resolve(directory);
@@ -23,7 +26,8 @@ export function linkAgentSkills(directory: string): string[] {
     const link = join(folder, 'maximus');
     return { folder, link, target: relative(folder, join(root, INSTALLED)) };
   });
-  for (const { link, target } of planned) {
+  for (const { folder, link, target } of planned) {
+    checkProjectFolder(root, folder);
     const present = lstatSync(link, { throwIfNoEntry: false });
     if (present && !(present.isSymbolicLink() && readlinkSync(link) === target)) {
       throw new TypeError(`${relative(root, link)} exists and is not the Maximus skill link; move it first.`);

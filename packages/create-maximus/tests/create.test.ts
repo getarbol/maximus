@@ -92,9 +92,8 @@ test('creates the project with maximus init and says what to run next, or shows 
   const [said] = io.print.mock.lastCall ?? [];
   expect(said).toContain('Created clinic, an API and its MCP server with a web app.');
   expect(said).toContain('  cd apps/clinic\n  bun install\n  bun run dev');
-  // A project made where the command runs is entered as it is.
-  await create(['/work', '--no-mcp'], io, '/work');
-  expect(io.print.mock.lastCall?.[0]).toMatch(/^Created work, an API\.\n\n {2}cd \.\n/);
+  await create(['tasks', '--no-mcp'], io, '/work');
+  expect(io.print.mock.lastCall?.[0]).toMatch(/^Created tasks, an API\.\n\n {2}cd tasks\n/);
   io.maximus.mockClear();
   await create(['--help'], io, '/work');
   expect(io.print).toHaveBeenLastCalledWith(USAGE);

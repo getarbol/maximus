@@ -1,4 +1,7 @@
-/** Deterministic module discovery: only ordinary source files inside the convention directories are read. */
+/**
+ * Deterministic module discovery: only ordinary source files inside the convention directories are read, and
+ * the project's commands write through no folder linked from elsewhere.
+ */
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
@@ -22,6 +25,8 @@ export interface ProjectFile {
 
 /** A full recipient, `local@domain.tld`: what an email module is named after. */
 const RECIPIENT = /^[^@/]+@[^@/]+\.[^@./]+$/;
+/** The convention directories whose module names have no dots, so `.dev` and `.prod` alone name a mode. */
+const UNDOTTED = new Set(['middleware', 'crons', 'queues']);
 
 /**
  * Whether a `.dev`, `.prod`, `.test` or `.spec` ending is the last label of an email module's recipient,
@@ -34,6 +39,20 @@ function endsRecipient(directory: string, name: string, rest: string): boolean {
 /** Sort by code units so generated imports are identical on every locale and platform. */
 export function compareNames(a: string, b: string): number {
   return a < b ? -1 : Number(a > b);
+}
+
+/**
+ * Refuses `folder`, or a folder of the project on the way to it, that is a symlink: what a command writes
+ * below it would land wherever the link leads. The project's root itself may be reached through one.
+ */
+export function checkProjectFolder(root: string, folder: string): void {
+  let current = root;
+  for (const segment of relative(root, folder).split(sep).filter(Boolean)) {
+    current = join(current, segment);
+    if (lstatSync(current, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new TypeError(`Project directory cannot be a symlink: ${relative(root, current)}`);
+    }
+  }
 }
 
 /** Discover without following symlinks or importing user code into the build host. */
@@ -74,6 +93,19 @@ export function projectFiles(root: string, directory: string, mode: string): Pro
         if (marker && (marker[1] === 'd' || !endsRecipient(directory, name, name.slice(0, marker.index)))) {
           continue;
         }
+        // A message reaches the module named after its recipient, or `_default`: any other name never would.
+        const own = name.slice(name.lastIndexOf('/') + 1);
+        if (directory === 'email' && own !== '_default' && !RECIPIENT.test(own)) {
+          throw new TypeError(
+            `Name an email module after the recipient it handles, such as help@example.com, or _default: ${relative(root, file)}`
+          );
+        }
+        // A dot left is a misspelled mode, such as `.development` or `.local`, which would join every mode.
+        if (UNDOTTED.has(directory) && own.includes('.')) {
+          throw new TypeError(
+            `Name a module without dots but its mode suffix, .dev or .prod: ${relative(root, file)}`
+          );
+        }
         if (environment && (environment[1] === 'dev' ? mode !== 'development' : mode !== 'production')) {
           continue;
         }
@@ -112,6 +144,11 @@ export function projectPath(name: string, kind: 'routes' | 'pages' | 'app'): str
     throw new TypeError(`Operation file must live below routes/v1/ (or another version): ${name}`);
   }
   return path;
+}
+
+/** A route path's shape: `/v1/tasks/{taskId}` and `/v1/tasks/{id}` match the same paths. */
+export function routeShape(path: string): string {
+  return path.replaceAll(/\{[^}]+\}/g, '{}');
 }
 
 /**

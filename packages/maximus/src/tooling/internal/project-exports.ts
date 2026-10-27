@@ -5,10 +5,11 @@ import { parseSync } from 'vite';
 
 /**
  * Parses a project module, refusing runtime imports of generated modules that would form a cycle and, in the
- * modules that complete the application, imports that only load in workerd. A cron module may use the
- * application: only the generated Worker, which imports it, would form a cycle.
+ * modules that complete the application, imports that only load in workerd. A module only the generated Worker
+ * imports (a page, a cron, queue or email handler, a Durable Object) may use the application: only the Worker,
+ * which imports it, would form a cycle.
  */
-export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config' | 'cron') {
+export function readProjectModule(file: string, role: 'route' | 'middleware' | 'config' | 'worker') {
   const parsed = parseSync(file, readFileSync(file, 'utf-8'));
   if (parsed.errors.length) {
     throw new TypeError(`Cannot discover ${file}: ${parsed.errors[0]?.message}`);
@@ -38,7 +39,7 @@ export function readProjectModule(file: string, role: 'route' | 'middleware' | '
       generated &&
       (role === 'config' ||
         ['worker', 'entry'].includes(generated) ||
-        (role !== 'cron' && generated === 'app') ||
+        (role !== 'worker' && generated === 'app') ||
         (role === 'middleware' && generated === 'base'))
     ) {
       throw new TypeError(
@@ -189,7 +190,7 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
  * a project configured in `vite.config.ts` declares as the Worker's cron trigger. Undefined otherwise.
  */
 export function cronExpression(file: string): string | undefined {
-  for (const node of readProjectModule(file, 'cron').program.body) {
+  for (const node of readProjectModule(file, 'worker').program.body) {
     const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : undefined;
     if (declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
       for (const { id, init } of declaration.declarations) {

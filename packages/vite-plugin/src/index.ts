@@ -58,10 +58,14 @@ export function maximus(options: MaximusOptions): Plugin[] {
       const root = resolve(config.root ?? process.cwd());
       // Development is `vp dev`: a build or a preview is production, whatever its Vite mode.
       const phase: Phase = command === 'serve' && !isPreview ? 'development' : 'production';
-      if (existsSync(join(root, 'cloudflare.config.ts'))) {
-        throw new TypeError(
-          "maximus() configures the Worker: move cloudflare.config.ts into maximus()'s options."
-        );
+      // A configuration file of the 7.x layouts would be a second, silently ignored, source of settings.
+      for (const [file, subject] of [
+        ['cloudflare.config.ts', 'the Worker'],
+        ['maximus.config.ts', 'the application'],
+      ] as const) {
+        if (existsSync(join(root, file))) {
+          throw new TypeError(`maximus() configures ${subject}: move ${file} into maximus()'s options.`);
+        }
       }
       checkWebAppBuild(root, config);
       worker = workerConfig(root, phase, options, project.api.prepare(root, phase));

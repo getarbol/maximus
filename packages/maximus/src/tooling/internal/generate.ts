@@ -6,7 +6,7 @@
 import { existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
-import { projectFiles, projectPath } from './project-files.ts';
+import { checkProjectFolder, projectFiles, projectPath, routeShape } from './project-files.ts';
 
 /** The methods a route file may answer, by the suffix its name takes. */
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
@@ -45,17 +45,16 @@ function routeSegments(path: string): string[] {
   return segments;
 }
 
-/** A route template's shape: `{taskId}` and `{id}` match the same paths. */
-function shape(template: string): string {
-  return template.replaceAll(/\{[^}]+\}/g, '{}');
-}
-
-/** Writes a new file of the project, refusing an existing one and a path that leads outside the project. */
+/**
+ * Writes a new file of the project, refusing an existing one, a path that leads outside the project and a
+ * folder on the way that is a symlink.
+ */
 function writeModule(root: string, path: string, text: string): string {
   const target = resolve(root, path);
   if (relative(root, target).startsWith('..')) {
     throw new TypeError(`${path} is outside the project.`);
   }
+  checkProjectFolder(root, dirname(target));
   if (existsSync(target) || lstatSync(target, { throwIfNoEntry: false })) {
     throw new TypeError(`${path} exists; edit it instead.`);
   }
@@ -84,7 +83,7 @@ export function generateRoute(directory: string, method: string, path: string, t
     const suffix = /\.(get|post|put|patch|delete)$/.exec(name);
     if (
       suffix?.[1] === verb &&
-      shape(projectPath(name.slice(0, -suffix[0].length), 'routes')) === shape(routePath)
+      routeShape(projectPath(name.slice(0, -suffix[0].length), 'routes')) === routeShape(routePath)
     ) {
       throw new TypeError(`${relative(root, file)} already answers ${verb.toUpperCase()} ${routePath}.`);
     }

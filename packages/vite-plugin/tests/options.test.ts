@@ -1,7 +1,7 @@
 /**
  * What follows from vite.config.ts's options: the application the generated modules carry, with defaults
  * from package.json, the development token declared in development alone, and the Worker Cloudflare's plugin
- * builds, with a trigger for each cron module.
+ * builds, with its observability over the defaults and a trigger for each schedule its cron modules state.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -102,7 +102,7 @@ test('the development token is declared in development alone, under its own bind
   );
 });
 
-test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a trigger per cron module', () => {
+test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a trigger per cron schedule', () => {
   const daily = triggers.scheduled({ schedule: '0 1 * * *' });
   const options: MaximusOptions = {
     ...minimal,
@@ -130,17 +130,35 @@ test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a
     env: { TASKS: { type: 'kv' } },
     triggers: [daily, { type: 'scheduled', schedule: '0 8 * * *' }],
   });
-  const development = workerConfig(
-    root(),
-    'development',
-    { ...minimal, observability: { enabled: false } },
-    NONE
-  );
-  expect(development).toMatchObject({
+  expect(workerConfig(root(), 'development', minimal, NONE)).toMatchObject({
     compatibilityFlags: ['nodejs_compat'],
-    observability: { enabled: false },
     env: { DEVELOPMENT_TOKEN: { type: 'secret' } },
     triggers: [],
+  });
+});
+
+test('the options’ observability joins the defaults key by key, and turning it off turns logs and traces off', () => {
+  const observability = (own: MaximusOptions['observability']) =>
+    workerConfig(root(), 'production', { ...minimal, observability: own }, NONE).observability;
+  // A sampling rate keeps the logs, the traces and the redacted query strings.
+  expect(observability({ headSamplingRate: 0.1 })).toEqual({
+    enabled: true,
+    headSamplingRate: 0.1,
+    redactQueryString: true,
+    logs: { enabled: true, invocationLogs: true },
+    traces: { enabled: true },
+  });
+  expect(observability({ redactQueryString: false, logs: { invocationLogs: false } })).toEqual({
+    enabled: true,
+    redactQueryString: false,
+    logs: { enabled: true, invocationLogs: false },
+    traces: { enabled: true },
+  });
+  expect(observability({ enabled: false })).toEqual({
+    enabled: false,
+    redactQueryString: true,
+    logs: { enabled: false, invocationLogs: true },
+    traces: { enabled: false },
   });
 });
 
@@ -151,6 +169,22 @@ test('a cron module states its schedule as a literal, which becomes its trigger'
       queues: [],
     })
   ).toThrow("crons/hourly.ts: export the schedule as a string literal, export const cron = '0 8 * * *'.");
+});
+
+test('cron modules that state one schedule share its trigger, and the options’ own trigger for it is kept', () => {
+  const hourly = triggers.scheduled({ schedule: '0 * * * *' });
+  const crons = [
+    { file: 'crons/digest.ts', cron: '0 8 * * *' },
+    { file: 'crons/reminders.ts', cron: '0 8 * * *' },
+    { file: 'crons/sweep.ts', cron: '0 * * * *' },
+  ];
+  const { triggers: declared } = workerConfig(
+    root(),
+    'production',
+    { ...minimal, triggers: [hourly] },
+    { crons, queues: [] }
+  );
+  expect(declared).toEqual([hourly, { type: 'scheduled', schedule: '0 8 * * *' }]);
 });
 
 test('a web app, index.html at the root, gets its assets binding in every mode and reaches every request', () => {
