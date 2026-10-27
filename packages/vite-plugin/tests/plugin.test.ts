@@ -82,3 +82,18 @@ test('serves a web app from the root, refusing a base or assets directory that w
   // Without index.html, the build is the project's own business.
   await configure(plugins, { root: project({}), base: '/app/' });
 });
+
+test("minifies the Worker's build, and only it, unless the configuration decides", () => {
+  const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
+  const hook = plugins.find(({ name }) => name === 'maximus')?.configEnvironment;
+  if (typeof hook !== 'function') {
+    throw new TypeError('maximus() has no configEnvironment hook');
+  }
+  const environment = (name: string, config: Record<string, unknown>) =>
+    hook.call({} as never, name, config as never, { mode: 'production', command: 'build' } as never);
+  expect(environment('tasks', {})).toEqual({ build: { minify: true } });
+  expect(environment('tasks', { build: { minify: false } })).toBeUndefined();
+  expect(environment('tasks', { build: { minify: 'terser' } })).toBeUndefined();
+  // The browser's build keeps Vite's own default.
+  expect(environment('client', {})).toBeUndefined();
+});

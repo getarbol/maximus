@@ -64,6 +64,14 @@ export function maximus(options: MaximusOptions): Plugin[] {
       worker = workerConfig(root, mode, options, project.api.prepare(root, mode).crons);
       return await presets(config);
     },
+    // The Worker's build is minified unless the configuration says otherwise: a smaller upload, and less code
+    // for each isolate to parse. Its source map still maps stack traces back to the sources.
+    configEnvironment(name, config) {
+      if (name !== 'client' && config.build?.minify === undefined) {
+        return { build: { minify: true } };
+      }
+      return undefined;
+    },
   };
   // Cloudflare's plugin parses what the customizer returns with its input schema, as it parses
   // cloudflare.config.ts; its type names the parsed form.

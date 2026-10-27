@@ -4,7 +4,6 @@
  * plain routes and mounts. Every operation call goes through the same admission: the token, then the
  * rate limit, then the bounded body, then the shared execution path.
  */
-import { stringify } from 'yaml';
 
 import type { Attachment } from './attachment-schema.ts';
 import { attachmentResponse, binaryBody } from './binary.ts';
@@ -26,6 +25,7 @@ import {
 import { queryInput, queryKinds } from './internal/http-query.ts';
 import type { QueryKind } from './internal/http-query.ts';
 import { mediaType } from './internal/json.ts';
+import { toYaml } from './internal/yaml.ts';
 import {
   DEFAULT_MAX_BODY_BYTES,
   isPublicOperation,
@@ -289,7 +289,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
   const texts: { json?: string; yaml?: string } = {};
   /** The origin's OpenAPI document as the text one of its URLs serves. */
   const contractText = (format: 'json' | 'yaml') =>
-    (texts[format] ??= format === 'json' ? JSON.stringify(contract()) : stringify(contract()));
+    (texts[format] ??= format === 'json' ? JSON.stringify(contract()) : toYaml(contract()));
   /** The default RFC 9728 protected-resource metadata: the public scopes the origin serves. */
   const metadata = () => ({
     resource: tokenAudiences(manifest.tokens)[0],

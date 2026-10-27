@@ -1,7 +1,7 @@
 /**
  * `@arbol-ai/maximus/testing`: a contract smoke test for a local or deployed service.
  */
-import { parse } from 'yaml';
+import { toYaml } from '../internal/yaml.ts';
 
 /** One deployed contract smoke; security and protocol matrices remain framework tests. */
 export async function verifyContract(fetch: (request: Request) => Promise<Response>, origin: string) {
@@ -11,7 +11,7 @@ export async function verifyContract(fetch: (request: Request) => Promise<Respon
     throw new Error('OpenAPI is unavailable.');
   }
   const schema = (await json.json()) as { paths: Record<string, Record<string, { operationId: string }>> };
-  if (JSON.stringify(schema) !== JSON.stringify(parse(await yaml.text()))) {
+  if (toYaml(schema) !== (await yaml.text())) {
     throw new Error('OpenAPI JSON/YAML differ.');
   }
   return {

@@ -7,17 +7,17 @@
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vite-plus/test';
-import { stringify } from 'yaml';
-import type * as Yaml from 'yaml';
 
 import { createHttpHandler, defineErrors, ok, t } from '../../src/index.ts';
+import { toYaml } from '../../src/internal/yaml.ts';
+import type * as Yaml from '../../src/internal/yaml.ts';
 import { defineApp, operation } from '../../src/internals.ts';
 import { mcp } from '../../src/mcp/index.ts';
 
 // Counts the YAML serializations of the OpenAPI document, which the real implementation still performs.
-vi.mock('yaml', async (importOriginal) => {
+vi.mock('../../src/internal/yaml.ts', async (importOriginal) => {
   const yaml = await importOriginal<typeof Yaml>();
-  return { ...yaml, stringify: vi.fn(yaml.stringify) };
+  return { ...yaml, toYaml: vi.fn(yaml.toYaml) };
 });
 
 /** The rate limit binding the application declares, as Workers provides it. */
@@ -247,7 +247,7 @@ it('rate limits every call of a JSON-RPC batch like a request of its own', async
 
 it('rate limits every request of a JSON-RPC batch, and serializes the OpenAPI document once', async () => {
   const fresh = createHttpHandler(manifest, { transports: [mcp()], verify: async () => claims });
-  vi.mocked(stringify).mockClear();
+  vi.mocked(toYaml).mockClear();
   // Admission and the second read pass; the third read is refused, however cheap it would be.
   const limit = limiter(2);
   const reads = [1, 2, 3].map((id) => ({
@@ -268,7 +268,7 @@ it('rate limits every request of a JSON-RPC batch, and serializes the OpenAPI do
     await fresh(new Request('https://example.test/openapi.yaml'), { LIMIT: { limit } })
   ).text();
   expect(read).toStrictEqual([served, served]);
-  expect(stringify).toHaveBeenCalledOnce();
+  expect(toYaml).toHaveBeenCalledOnce();
 });
 
 it("reports only the server's own failures, and never sends their text to the client", async () => {

@@ -9,10 +9,10 @@ import type { CallToolResult, McpServer, StandardSchemaV1, Tool } from '@modelco
 import { Type } from '@sinclair/typebox';
 import type { Static, TSchema } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { stringify } from 'yaml';
 
 import type { McpSkill } from '../index.ts';
 import { sha256Hex } from '../internal/digest.ts';
+import { toYaml } from '../internal/yaml.ts';
 
 /** The official Skills extension (SEP-2640) a server declares in its capabilities. */
 export const SKILLS_EXTENSION = 'io.modelcontextprotocol/skills';
@@ -46,7 +46,7 @@ function skillUri(skill: McpSkill): string {
 
 /** The served `SKILL.md`: frontmatter generated from the name and description, then the instructions. */
 function skillDocument(skill: McpSkill): string {
-  const frontmatter = stringify({ name: skill.name, description: skill.description }, { lineWidth: 0 });
+  const frontmatter = toYaml({ name: skill.name, description: skill.description });
   return `---\n${frontmatter}---\n\n${skill.text.trim()}\n`;
 }
 
