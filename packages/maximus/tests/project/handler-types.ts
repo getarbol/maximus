@@ -86,10 +86,22 @@ defineHandler(() => ({ count: 1 }), {
 defineHandler(
   async ({ body }) => {
     const read = await body.read();
-    return { count: read.ok ? read.value.byteLength : 0 };
+    // A failure to read the body is one the route answers as it is.
+    return read.ok ? { count: read.value.byteLength } : read.error;
   },
   {
     output: { count: t.Integer() },
+    http: { body: 'bytes' },
+  }
+);
+defineHandler(
+  // @ts-expect-error The body's failure is answered as it is, never unwrapped into the output.
+  async ({ body }) => {
+    const read = await body.read();
+    return read.ok ? read.value.byteLength : read.error.failure;
+  },
+  {
+    output: t.Integer(),
     http: { body: 'bytes' },
   }
 );

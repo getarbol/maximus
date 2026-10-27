@@ -9,10 +9,11 @@
 import { KindGuard, Type } from '@sinclair/typebox';
 import type { Static, TObject, TProperties, TSchema } from '@sinclair/typebox';
 
-import type { BinaryBody } from './binary.ts';
+import type { BodyFailure } from './binary.ts';
 import type { ApplicationBuilder } from './builder.ts';
 import type { CreateArguments, ErrorDefinition, Failure, standardErrors } from './errors.ts';
 import type { Exposure, Invocation, OperationShape } from './manifest.ts';
+import type { Result } from './result.ts';
 import type { StaticDecode } from './schema-types.ts';
 import type { STANDARD_FAILURES } from './standard-failures.ts';
 import type { TokenPolicy } from './tokens.ts';
@@ -116,13 +117,25 @@ export type DeclaredFields<F, H, M, R, E, V, N> = Field<'failures', F> &
   Field<'visibility', V> &
   Field<'operationId', N>;
 
+/**
+ * A route's byte body, read on demand once the route has admitted its target: its bytes, or the failure the
+ * route answers as it is, `if (!bytes.ok) return bytes.error`.
+ */
+export interface RouteBody {
+  /**
+   * Reads the body, once, within the route's `maxBodyBytes`: `REQUEST_TOO_LARGE` beyond it,
+   * `UNSUPPORTED_MEDIA_TYPE` for a compressed body and `INVALID_INPUT` for one that broke off.
+   */
+  read: () => Promise<Result<Uint8Array<ArrayBuffer>, Failed<BodyFailure['code']>>>;
+}
+
 /** What a handler receives: the prepared context, its decoded input, `fail` and, for a byte body, its reader. */
-export type HandlerArguments<C, I extends TSchema, X> = Omit<C, 'input'> & {
+export type HandlerArguments<C, I extends TSchema, X> = Omit<C, 'input' | 'body'> & {
   /** The input, decoded against its schema. */
   readonly input: StaticDecode<I>;
   /** Answers a failure of the catalog: `return fail('TASK_NOT_FOUND')`. */
   readonly fail: Fail<AllowedCode<X>>;
-} & (X extends { http: { body: 'bytes' } } ? { readonly body: BinaryBody } : unknown);
+} & (X extends { http: { body: 'bytes' } } ? { readonly body: RouteBody } : unknown);
 /** What a handler answers: its output, or a failure from `fail`, at once or as a promise. */
 export type HandlerAnswer<O extends TSchema, X> = Answer<Static<O>, X>;
 /** A value, or a failure from `fail`, at once or as a promise. */

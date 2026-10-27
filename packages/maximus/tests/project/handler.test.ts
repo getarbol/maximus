@@ -143,28 +143,45 @@ describe('routes', () => {
     expect(lists.operations.deleteV1TaskListsListId).not.toHaveProperty('mcp');
   });
 
-  it('read a declared byte body', async () => {
+  it('read a declared byte body, and answer a failure to read it as it is', async () => {
     const upload = defineHandler(
       async ({ body }) => {
-        const read = await body.read();
-        return { bytes: read.ok ? read.value.byteLength : -1 };
+        const bytes = await body.read();
+        return bytes.ok ? { bytes: bytes.value.byteLength } : bytes.error;
       },
       {
         input: { taskId: t.String() },
         output: { bytes: t.Integer() },
         http: { body: 'bytes' },
+        maxBodyBytes: 4,
       }
     );
     const uploads = base.mount(bindRoute(base, upload, '/v1/tasks/{taskId}/attachment', 'PUT')).build();
-    const response = await createHttpHandler(uploads)(
-      new Request('http://localhost:5173/v1/tasks/task-1/attachment', {
-        method: 'PUT',
-        headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/octet-stream' },
-        body: new Uint8Array([1, 2, 3]),
-      }),
-      env
-    );
-    expect(await response.json()).toMatchObject({ data: { bytes: 3 } });
+    /** Uploads the bytes with these headers besides the token. */
+    const put = async (bytes: Uint8Array<ArrayBuffer>, headers: Record<string, string> = {}) => {
+      const response = await createHttpHandler(uploads)(
+        new Request('http://localhost:5173/v1/tasks/task-1/attachment', {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/octet-stream',
+            ...headers,
+          },
+          body: bytes,
+        }),
+        env
+      );
+      return { status: response.status, body: await response.json() };
+    };
+    expect(await put(new Uint8Array([1, 2, 3]))).toMatchObject({ status: 200, body: { data: { bytes: 3 } } });
+    expect(await put(new Uint8Array(5))).toMatchObject({
+      status: 413,
+      body: { error: { code: 'REQUEST_TOO_LARGE' } },
+    });
+    expect(await put(new Uint8Array([1]), { 'content-encoding': 'gzip' })).toMatchObject({
+      status: 415,
+      body: { error: { code: 'UNSUPPORTED_MEDIA_TYPE' } },
+    });
   });
 });
 

@@ -12,15 +12,20 @@ import { readBodyBytes } from './internal/body.ts';
 import { exactLength } from './internal/exact-length.ts';
 import type { Result } from './result.ts';
 
+/** Why a byte body could not be read: it exceeds the limit, it is compressed, or it broke off. */
+export type BodyFailure = Failure & {
+  code: 'REQUEST_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'INVALID_INPUT';
+};
+
 /** The raw body of an operation declared with `http.body: 'bytes'`, read on demand. */
 export interface BinaryBody {
   /** Read once within this operation's byte limit, after the owner admits the target resource. */
-  read: () => Promise<Result<Uint8Array<ArrayBuffer>, Failure>>;
+  read: () => Promise<Result<Uint8Array<ArrayBuffer>, BodyFailure>>;
 }
 
 /** A request-local reader; constructing it never pulls bytes or records headers/content. */
 export function binaryBody(request: Request, maxBytes: number): BinaryBody {
-  let reading: Promise<Result<Uint8Array<ArrayBuffer>, Failure>> | undefined;
+  let reading: Promise<Result<Uint8Array<ArrayBuffer>, BodyFailure>> | undefined;
   return {
     read() {
       reading ??= (async () => {

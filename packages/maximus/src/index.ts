@@ -37,6 +37,7 @@ export type {
   HandlerMcp,
   HandlerOptions,
   PreparedContext,
+  RouteBody,
   SchemaOf,
   SchemaOrFields,
   ToolDeclaration,
@@ -63,7 +64,7 @@ export { Page, PageInfoSchema, PageQueryFields, pageLimit } from './pagination.t
 export type { PageInfo, PageQuery, TPage } from './pagination.ts';
 export { AttachmentOutputSchema } from './attachment-schema.ts';
 export type { Attachment } from './attachment-schema.ts';
-export type { BinaryBody } from './binary.ts';
+export type { BinaryBody, BodyFailure } from './binary.ts';
 
 // Results and the error catalog.
 export { ok, err, isResult } from './result.ts';

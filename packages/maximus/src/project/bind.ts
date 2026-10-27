@@ -5,6 +5,7 @@
  */
 import type { TSchema } from '@sinclair/typebox';
 
+import type { BinaryBody } from '../binary.ts';
 import type { ApplicationBuilder, KnownOperationFields } from '../builder.ts';
 import type { ErrorCatalog } from '../errors.ts';
 import { Failed, isContextDeclaration, isHandlerDeclaration, isToolDeclaration } from '../handler.ts';
@@ -12,6 +13,7 @@ import type {
   ContextDeclaration,
   HandlerDeclaration,
   HandlerOptions,
+  RouteBody,
   ToolDeclaration,
   ToolOptions,
 } from '../handler.ts';
@@ -131,14 +133,29 @@ function catalogFail(errors: ErrorCatalog) {
   };
 }
 
+/** A byte body as a route reads it: a failure to read is one the route answers as it is. */
+function routeBody(body: BinaryBody): RouteBody {
+  return {
+    async read() {
+      const bytes = await body.read();
+      return bytes.ok ? bytes : err(new Failed(bytes.error));
+    },
+  };
+}
+
 /**
  * Runs a declaration's handler as an operation: its output answers a success and `fail(code)` the catalog's
  * failure. The execution path checks the declared failures and the output once, as for every operation.
  */
 function execute(errors: ErrorCatalog, handler: (args: never) => unknown) {
   const fail = catalogFail(errors);
-  return async (context: object, input: unknown) => {
-    const answer = await (handler as (args: object) => unknown)({ ...context, input, fail });
+  return async (context: { body?: BinaryBody }, input: unknown) => {
+    const answer = await (handler as (args: object) => unknown)({
+      ...context,
+      input,
+      fail,
+      ...(context.body ? { body: routeBody(context.body) } : {}),
+    });
     return Failed.is(answer) ? err(answer.failure) : ok(answer);
   };
 }
