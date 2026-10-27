@@ -159,7 +159,9 @@ and no page runs.
 A page has no parameters, and its path may not be one the Worker answers otherwise: the API's base path
 and everything below it, the health path (`/health` by default), a versioned path such as `/v1/notes`,
 `/.well-known` and, when the Worker serves MCP, `/mcp`. No token admits a request to a page, so a page
-holds no tenant data; that belongs to routes.
+holds no tenant data; that belongs to routes. A page has none of a route's other protections either: no
+body limit but the one it reads with, no rate limit and no cross-origin handling. A page that browsers can
+post to, such as a form, protects itself against cross-site requests.
 
 ```ts
 // pages/index.ts
