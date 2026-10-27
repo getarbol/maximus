@@ -181,7 +181,7 @@ export function declarationExports(
   }
   if (names.size !== 1 || !names.has('default')) {
     throw new TypeError(
-      `${file} must default-export its ${helper} declaration and nothing else. Keep helpers private or in _files.`
+      `${relative(root, file)} must default-export its ${helper} declaration and nothing else. Keep helpers private or in _files.`
     );
   }
   if (helper === 'defineTool') {
@@ -190,7 +190,7 @@ export function declarationExports(
   const mcp = declaresMcp(defaultExpression(parsed.program.body), parsed.program.body);
   if (mcp === undefined) {
     throw new TypeError(
-      `${file} must write its defineHandler contract as an object, in the call or in a const of the module: prepare reads from it whether the route is an MCP tool.`
+      `${relative(root, file)} must write its defineHandler contract as an object, in the call or in a const of the module: prepare reads from it whether the route is an MCP tool.`
     );
   }
   return { mcp };

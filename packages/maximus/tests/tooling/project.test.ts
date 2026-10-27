@@ -169,7 +169,7 @@ test('a route module exports its declaration and nothing else', () => {
   ]) {
     const root = project({ 'routes/v1/tasks.get.ts': contents });
     expect(() => prepare(root), contents).toThrow(
-      'must default-export its defineHandler declaration and nothing else'
+      /^routes\/v1\/tasks\.get\.ts must default-export its defineHandler declaration and nothing else\./
     );
   }
 });
@@ -235,7 +235,7 @@ test('a route whose contract prepare cannot read is refused rather than left wit
   ]) {
     const root = project({ 'routes/v1/tasks.get.ts': contents });
     expect(() => prepare(root), contents).toThrow(
-      'must write its defineHandler contract as an object, in the call or in a const of the module'
+      /^routes\/v1\/tasks\.get\.ts must write its defineHandler contract as an object, in the call or in a const/
     );
   }
 });
