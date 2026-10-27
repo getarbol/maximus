@@ -228,6 +228,8 @@ A service fails when it starts, with a `TypeError` that names the rule, when it 
   name over 100 characters;
 - an error code that is not uppercase words joined by underscores, such as `RECORD_NOT_FOUND`;
 - a `DELETE` route that declares `effect: 'read'`;
+- a `telemetry` switch that is neither a boolean nor a function, or an observer whose callbacks are not
+  functions, which only code TypeScript does not check can give;
 - a record whose keys follow a pattern (`t.Record(t.String({ pattern }), …)`) without
   `additionalProperties: false`, which let a key outside the pattern through with any value;
 - MCP guide or skill names that collide with each other or with the OpenAPI document's resources.

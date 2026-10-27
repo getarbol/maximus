@@ -36,7 +36,9 @@ Breaking:
   that names no single definition (both answered 500 to the first request for the OpenAPI document); an
   application name that is not a lowercase kebab-case word of 2 to 64 characters, an operation name over
   100 characters, and an error code that is not uppercase words joined by underscores (analytics dropped
-  every event of such a service); and a `DELETE` route that declares `effect: 'read'`.
+  every event of such a service); a `DELETE` route that declares `effect: 'read'`; and, from code that
+  TypeScript does not check, a `telemetry` switch that is neither a boolean nor a function (`'false'` left
+  telemetry on) or an observer that is not an object of functions (which failed every call it observed).
 - A domain failure that a context, a derive or middleware answers, and that the operation does not declare,
   is answered as `INTERNAL_ERROR` and reported, as one its handler answers always was.
 - An MCP JSON-RPC batch is admitted whole: every message passes the rate limit as a request of its own

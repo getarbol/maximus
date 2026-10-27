@@ -1,5 +1,5 @@
 /**
- * What `.build()` refuses, rule by rule: the namespace, origin and limits of the application, each
+ * What `.build()` refuses, rule by rule: the namespace, origin, limits and telemetry of the application, each
  * operation's name, scopes, actors, schemas, byte bodies, attachments, headers, limits and routes, schema
  * references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with the rule's message,
  * and an application that breaks several rules always meets the same one first.
@@ -107,6 +107,31 @@ it('refuses an application body limit outside 1 byte to 16 MiB, and an origin th
   expect(build(readRecord, 'readRecord', { origin: 'http://records.example.test' })).toThrow(
     new TypeError('Application origin must use HTTPS.')
   );
+});
+
+it('refuses telemetry that code untyped by TypeScript gives a malformed switch, observer or trace id accessor', () => {
+  const refusal = new TypeError(
+    'Telemetry takes enabled as true, false or a function of env, observers as a list of objects whose execution, admission and error are functions, and traceId as a function.'
+  );
+  for (const telemetry of [
+    null,
+    { enabled: 'false' },
+    { enabled: 0 },
+    { observers: 42 },
+    { observers: [null] },
+    { observers: [{ execution: 'record' }] },
+    { traceId: 'trace' },
+  ]) {
+    expect(build(readRecord, 'readRecord', { telemetry } as never), JSON.stringify(telemetry)).toThrow(
+      refusal
+    );
+  }
+  const observer = { execution: async () => undefined, error: () => undefined };
+  expect(
+    build(readRecord, 'readRecord', {
+      telemetry: { enabled: () => true, observers: [observer, {}], traceId: () => null },
+    })
+  ).not.toThrow();
 });
 
 it('refuses a scope match other than any or all, and actor kinds that name no eligible actor once', () => {

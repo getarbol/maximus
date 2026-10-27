@@ -15,6 +15,7 @@ import type { AppManifest, McpConfiguration, McpGuide, McpSkill, OperationShape 
 import { createOpenApi } from './openapi.ts';
 import { hasSchemaReferences } from './schema-bundle.ts';
 import { isNamespacedScope } from './scopes.ts';
+import type { TelemetryConfig } from './telemetry.ts';
 import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
 
@@ -103,6 +104,7 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
   if (new URL(manifest.origin).protocol !== 'https:') {
     throw new TypeError('Application origin must use HTTPS.');
   }
+  checkTelemetry(manifest.telemetry);
   checkTokenAuthority(manifest.tokens);
   tokenAudiences(manifest.tokens);
   if (
@@ -113,6 +115,47 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
     // 401 challenge would otherwise point clients at a 404.
     throw new TypeError(
       'tokens.resources requires tokens.resourceMetadataUrl: name the metadata a 401 challenge points at.'
+    );
+  }
+}
+
+/** The callbacks an observer may have, each a function when present. */
+const OBSERVER_CALLBACKS = ['execution', 'admission', 'error'] as const;
+
+/** Whether a value is an observer: an object whose callbacks, when present, are functions. */
+function isObserver(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    OBSERVER_CALLBACKS.every((name) => {
+      const callback: unknown = Reflect.get(value, name);
+      return callback === undefined || typeof callback === 'function';
+    })
+  );
+}
+
+/**
+ * The telemetry option, as code untyped by TypeScript may give it: a switch that is a boolean or a function,
+ * observers that are objects whose callbacks are functions, and a trace id accessor that is a function. A
+ * malformed observer would fail every call it observes, and a switch such as `'false'` would leave telemetry
+ * on.
+ */
+function checkTelemetry<Env>(telemetry: TelemetryConfig<Env> | undefined): void {
+  if (telemetry === undefined) {
+    return;
+  }
+  if (
+    typeof telemetry !== 'object' ||
+    telemetry === null ||
+    (telemetry.enabled !== undefined &&
+      typeof telemetry.enabled !== 'boolean' &&
+      typeof telemetry.enabled !== 'function') ||
+    (telemetry.observers !== undefined &&
+      (!Array.isArray(telemetry.observers) || !telemetry.observers.every(isObserver))) ||
+    (telemetry.traceId !== undefined && typeof telemetry.traceId !== 'function')
+  ) {
+    throw new TypeError(
+      'Telemetry takes enabled as true, false or a function of env, observers as a list of objects whose execution, admission and error are functions, and traceId as a function.'
     );
   }
 }
