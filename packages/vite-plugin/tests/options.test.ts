@@ -147,3 +147,36 @@ test('a cron module states its schedule as a literal, which becomes its trigger'
     workerConfig(root(), 'production', minimal, [{ file: 'crons/hourly.ts', cron: undefined }])
   ).toThrow("crons/hourly.ts: export the schedule as a string literal, export const cron = '0 8 * * *'.");
 });
+
+test('a web app, index.html at the root, gets its assets binding in every mode and reaches every request', () => {
+  const app = root();
+  writeFileSync(join(app, 'index.html'), '<!doctype html><div id="root"></div>');
+  const options: MaximusOptions = { ...minimal, env: { TASKS: bindings.kv() } };
+  expect(projectOptions(app, options)).toMatchObject({
+    worker: { http: { basePath: '/api', healthPath: '/health' }, assets: { binding: 'ASSETS' } },
+    env: {
+      production: { TASKS: { type: 'kv' }, ASSETS: { type: 'assets' } },
+      development: {
+        TASKS: { type: 'kv' },
+        ASSETS: { type: 'assets' },
+        DEVELOPMENT_TOKEN: { type: 'secret' },
+      },
+    },
+  });
+  const worker = workerConfig(app, 'production', options, []);
+  expect(worker.assets).toEqual({ htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true });
+  expect(worker.env).toEqual({ TASKS: { type: 'kv' }, ASSETS: { type: 'assets' } });
+  // Without index.html, the Worker has no assets.
+  expect(workerConfig(root(), 'production', options, []).assets).toBeUndefined();
+  expect(projectOptions(root(), options)?.worker).toEqual({
+    http: { basePath: '/api', healthPath: '/health' },
+  });
+});
+
+test('a web app refuses a binding of its own named ASSETS', () => {
+  const app = root();
+  writeFileSync(join(app, 'index.html'), '<!doctype html>');
+  expect(() => projectOptions(app, { ...minimal, env: { ASSETS: bindings.r2() } })).toThrow(
+    'ASSETS serves the web app index.html starts: Maximus declares it.'
+  );
+});

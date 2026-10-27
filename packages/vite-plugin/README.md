@@ -47,5 +47,9 @@ lint and format presets unless `vite.config.ts` sets its own, and runs Cloudflar
 Worker the options describe: its entry, `nodejs_compat`, the development token in development alone and a
 trigger for each cron module. `vp dev` runs it, `vp build` builds it and `cf deploy --prebuilt` deploys it.
 
+With `index.html` at the root, the project is also a web app: the same Worker serves the API under `/api`
+and the build, whose React Router pages are the files of `app/routes/`. Add `react()` from
+`@vitejs/plugin-react` to the plugins.
+
 `errors.ts`, `context.ts` and `auth.ts` complete the application in code. See the
 [project structure](https://github.com/getarbol/maximus/blob/main/docs/guides/project-structure.md) guide.

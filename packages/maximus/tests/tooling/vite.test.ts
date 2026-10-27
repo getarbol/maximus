@@ -3,7 +3,7 @@
  * every build, watches the discovered modules and the convention directories, and in development turns a
  * change to a project module into nothing, a full reload or a server restart.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -270,4 +270,47 @@ test('a discovery failure is thrown to Vite and keeps the previous graph until t
   write(root, { 'routes/v1/notes.ts': 'export const GET = {}; export const POST = {};' });
   expect((await hotUpdate(plugin, join(root, 'routes/v1/notes.ts'))).sent).toEqual([{ type: 'full-reload' }]);
   expect(generated(root, 'app.ts')).toContain('routes_0.POST("/v1/notes", "POST")');
+});
+
+test('index.html coming or going restarts the server, and a page coming or going reloads the app', async () => {
+  const root = project({ 'routes/v1/tasks.get.ts': 'export default defineHandler({});' });
+  // What the plugin of vite.config.ts reports: a web app while index.html is at the root.
+  const plugin = maximusProject((directory) => ({
+    ...options,
+    worker: {
+      ...options.worker,
+      ...(existsSync(join(directory, 'index.html')) ? { assets: { binding: 'ASSETS' } } : {}),
+    },
+  }));
+  configure(plugin, { root });
+  write(root, { 'index.html': '<!doctype html>' });
+  expect(await hotUpdate(plugin, join(root, 'index.html'))).toEqual({ answer: [], restarts: 1, sent: [] });
+  const home = 'export default function Home() {\n  return null;\n}\n';
+  write(root, { 'app/root.tsx': home, 'app/routes/index.tsx': home, 'public/favicon.svg': '<svg/>' });
+  expect(await hotUpdate(plugin, join(root, 'app/routes/index.tsx'))).toEqual({
+    answer: undefined,
+    restarts: 0,
+    sent: [{ type: 'full-reload' }],
+  });
+  expect(buildStart(plugin)).toEqual(
+    expect.arrayContaining([
+      join(root, 'app'),
+      join(root, 'app/root.tsx'),
+      join(root, 'app/routes/index.tsx'),
+      join(root, 'public'),
+    ])
+  );
+  // Editing a page or a public file changes no generated module: Vite updates it as it is.
+  write(root, { 'app/routes/index.tsx': home.replace('null', '"home"') });
+  expect(await hotUpdate(plugin, join(root, 'app/routes/index.tsx'))).toEqual({
+    answer: undefined,
+    restarts: 0,
+    sent: [],
+  });
+  rmSync(join(root, 'app'), { recursive: true });
+  expect((await hotUpdate(plugin, join(root, 'app/routes/index.tsx'))).sent).toEqual([
+    { type: 'full-reload' },
+  ]);
+  unlinkSync(join(root, 'index.html'));
+  expect((await hotUpdate(plugin, join(root, 'index.html'))).restarts).toBe(1);
 });

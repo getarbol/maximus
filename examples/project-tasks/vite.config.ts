@@ -1,13 +1,16 @@
 /**
- * The only configuration: the application and its Worker. Maximus generates .maximus/ from routes/, mcp/,
- * errors.ts and context.ts, and Cloudflare's Vite plugin builds, runs and deploys the Worker.
+ * The only configuration: the application, its Worker and its web app. Maximus generates .maximus/ from
+ * routes/, mcp/, app/routes/, errors.ts and context.ts, and Cloudflare's Vite plugin builds, runs and deploys
+ * the Worker, which serves the API under /api and the React app index.html starts.
  */
 import { maximus } from '@arbol-ai/vite-plugin';
+import react from '@vitejs/plugin-react';
 import { bindings } from 'cf/config';
 import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
   plugins: [
+    react(),
     maximus({
       name: 'example-tasks',
       namespace: 'tasks',

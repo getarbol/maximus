@@ -63,8 +63,9 @@ dependency. See [Project structure](../guides/project-structure.md).
 
 `maximus(options)`: one `vite.config.ts` configures the application and its Cloudflare Worker. It
 prepares the project before every build and source change, brings the lint and format presets a
-configuration lacks, and runs Cloudflare's Vite plugin with the Worker its options describe. Types
-`MaximusOptions` and `TokenOptions`. It depends on `@cloudflare/vite-plugin` and takes `@arbol-ai/maximus`
+configuration lacks, and runs Cloudflare's Vite plugin with the Worker its options describe; with
+`index.html` at the root, it also serves the web app the build makes. Types `MaximusOptions` and
+`TokenOptions`. It depends on `@cloudflare/vite-plugin` and takes `@arbol-ai/maximus`
 (its own version), `cf` and `vite` as peers.
 
 ## @arbol-ai/maximus/mcp

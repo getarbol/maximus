@@ -10,6 +10,9 @@ import { PROJECT_DIRECTORIES } from './internal/project-files.ts';
 
 export type { ProjectOptions } from './internal/prepare-project.ts';
 
+/** A web app's pages and layout, and the files its build serves by name. */
+const WEB_APP_DIRECTORIES = ['app', 'public'] as const;
+
 /**
  * What a plugin that configures the project in `vite.config.ts` derives for a root and a Vite mode; nothing
  * when `maximus.config.ts` or the 7.3 `src/` entries configure it.
@@ -34,9 +37,11 @@ export function maximusProject(project?: ProjectOptionsSource): Plugin<ProjectAp
     prepareProject(directory, preparing, project?.(resolve(directory), preparing));
   const reconcile = () => {
     const current = prepare(root, mode);
+    // A new configuration, Durable Object or web app changes the Worker Cloudflare's plugin configured.
     const restart =
       previous !== undefined &&
       (previous.config !== current.config ||
+        previous.webApp !== current.webApp ||
         previous.durableObjects.join('\n') !== current.durableObjects.join('\n'));
     previous = current;
     return { ...current, restart };
@@ -44,9 +49,10 @@ export function maximusProject(project?: ProjectOptionsSource): Plugin<ProjectAp
   const isProjectFile = (file: string) => {
     const path = relative(root, file).split(/[\\/]/);
     return (
-      PROJECT_DIRECTORIES.some((name) => name === path[0]) ||
+      [...PROJECT_DIRECTORIES, ...WEB_APP_DIRECTORIES].some((name) => name === path[0]) ||
       (path.length === 1 &&
-        /^(?:maximus\.config|errors|auth|context)\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '')) ||
+        (/^(?:maximus\.config|errors|auth|context)\.(?:ts|mts|js|mjs)$/.test(path[0] ?? '') ||
+          path[0] === 'index.html')) ||
       (path[0] === 'src' && ['application.ts', 'worker.ts'].includes(path[1] ?? ''))
     );
   };
@@ -68,7 +74,7 @@ export function maximusProject(project?: ProjectOptionsSource): Plugin<ProjectAp
       if (current.config) {
         this.addWatchFile(resolve(root, current.config));
       }
-      for (const directory of PROJECT_DIRECTORIES) {
+      for (const directory of [...PROJECT_DIRECTORIES, ...WEB_APP_DIRECTORIES]) {
         const path = resolve(root, directory);
         if (existsSync(path)) {
           this.addWatchFile(path);

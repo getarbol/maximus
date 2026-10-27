@@ -16,13 +16,15 @@ routes/v1/greeting.get.ts   One defineHandler per route and method: GET /api/v1/
 mcp/tools/summarize.ts     Optional MCP-only tools, named by their file
 middleware/10-response.ts   Ordered HTTP request middleware
 pages/index.ts             Optional public response at /
+index.html                 Optional web app, served by the same Worker; app/routes/ are its pages
+app/routes/tasks/index.tsx  Optional React Router page: /tasks
 crons/daily.ts             Optional scheduled handler and its literal cron expression
 queues/notifications.ts    Optional physical queue consumer
 email/help@example.com.ts  Optional exact-recipient email handler
 durable-objects/session.ts Optional class, exported as Session
 db/                       Application-owned schemas and migrations
 src/                      Optional shared domain code; no framework entrypoints required
-public/                   Assets, when explicitly configured
+public/                   Files a web app serves by name, or assets you configure
 tests/                    Explicitly run tests; never discovered as routes
 .maximus/                 Generated composition and types, ignored by Git
 ```
@@ -437,14 +439,89 @@ root. They serve GET and HEAD at fixed paths. Other methods return 405. The proj
 pages that claim API, discovery or protocol paths. Native request ids, errors and security headers
 still apply. A page owns any authentication it needs; tenant operations belong in `routes/`.
 
-This is response rendering, not a UI framework: React/Vue/Svelte/Solid layouts, loaders, Markdown and
-dynamic page routes are not supplied. Choose a rendering adapter explicitly when the product needs
-one. `.tsx`/`.jsx` modules use the application's Vite JSX configuration.
+This is response rendering, not a UI framework: for a React app, see [A web app](#a-web-app).
+`.tsx`/`.jsx` modules use the application's Vite JSX configuration.
 
-`public/` is a convention for application assets, not implicit publication. Configure an ASSETS
-binding and `options.assets` with admitted files or SPA paths as described in
+Outside a web app, `public/` is a convention for application assets, not implicit publication.
+Configure an ASSETS binding and `options.assets` with admitted files or SPA paths as described in
 [Worker composition](worker-composition.md#static-assets). Discovered pages take precedence over the
 assets fallback. Database migrations likewise remain explicit; discovery never runs SQL.
+
+## A web app
+
+`index.html` at the root makes a project configured in `vite.config.ts` a web app, as it makes any Vite
+project one. `maximus()` then declares the `ASSETS` binding and sends every request to the Worker first:
+the API under `/api`, discovery, MCP and `/health` keep their paths, and the app's build answers the rest.
+React lives in `app/`:
+
+```text
+index.html                     Loads /app/main.tsx
+app/main.tsx                   Mounts React Router with the generated routes
+app/root.tsx                   Optional layout around every page, with <Outlet />
+app/routes/index.tsx           /
+app/routes/tasks/index.tsx     /tasks
+app/routes/tasks/[taskId].tsx  /tasks/:taskId
+public/favicon.svg             /favicon.svg, as it is
+```
+
+Install `react`, `react-dom`, `react-router` and `@vitejs/plugin-react`, and add `react()` to the
+plugins. A page default-exports its component and may export what a React Router route module does:
+`loader`, `action`, `ErrorBoundary` and the rest.
+
+```tsx
+// app/routes/tasks/index.tsx
+import { Link, redirect, useLoaderData } from 'react-router';
+
+import { api, signedIn } from '../../api.ts';
+
+export async function loader() {
+  if (!signedIn()) {
+    throw redirect('/');
+  }
+  return await api.getV1Tasks({});
+}
+
+export default function Tasks() {
+  const { tasks } = useLoaderData<typeof loader>();
+  return (
+    <ul>
+      {tasks.map((task) => (
+        <li key={task.taskId}>
+          <Link to={`/tasks/${task.taskId}`}>{task.title}</Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+`maximus prepare` lists the pages in `.maximus/app-routes.ts`, which `app/main.tsx` passes to
+`createBrowserRouter(routes)`. Each page loads when it is first visited, and paths match case-sensitively.
+The same files decide what the Worker answers with `index.html`: only the paths of pages, so an unknown
+path is a 404, never the app. Files in `public/` are served by name and revalidated, and the hashed files
+of `/assets/` are cached for good. In `vp dev`, Vite's own modules reach Vite through the binding; a build
+forwards nothing else. Without `app/routes/`, `index.html` is the one page, at `/`.
+
+Groups and `index` work as they do for routes. A page may not claim the API's base path, `/health`,
+`/.well-known`, `/mcp`, `/assets`, a versioned path or a `pages/` path, and two pages may not claim one
+path, whatever their parameters are named. The API needs its own base path, `/api` by default.
+
+The browser calls the API with the typed client and the application's type alone:
+
+```ts
+// app/api.ts
+import { createClient } from '@arbol-ai/maximus/client';
+
+import type { app } from '../.maximus/app.ts';
+
+export const api = createClient<typeof app>(new URL('/api', location.origin).href, getToken, {
+  response: 'data',
+});
+```
+
+Each route is a method named after its method and path, such as `getV1Tasks` or
+`postV1TasksTaskIdComplete`, typed by the route's input and output. Tokens come from your identity
+provider; never build one into the app. `examples/project-tasks` is a complete web app.
 
 ## Scheduled work, queues and email
 

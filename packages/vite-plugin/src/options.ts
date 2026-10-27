@@ -26,10 +26,11 @@ export type TokenOptions = Omit<
 
 /**
  * What `vite.config.ts` states: the application's configuration, and the Worker's settings as Cloudflare
- * names them. Maximus owns the Worker's entry, adds `nodejs_compat` and, in development, the development
- * token; the code that completes the application is `errors.ts`, `auth.ts` and `context.ts`.
+ * names them. Maximus owns the Worker's entry and, for a web app, its assets; it adds `nodejs_compat` and, in
+ * development, the development token. The code that completes the application is `errors.ts`, `auth.ts` and
+ * `context.ts`.
  */
-export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint' | 'env'> {
+export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint' | 'env' | 'assets'> {
   /**
    * The service's name: the Worker's, the MCP server's and the scopes' prefix. By default, the package's name
    * without its scope.
@@ -109,6 +110,14 @@ function split(options: MaximusOptions) {
   };
 }
 
+/** The binding a web app's build is served through. */
+const ASSETS = 'ASSETS';
+
+/** Whether the project is a web app: `index.html` at its root, which Vite builds for the browser. */
+function servesWebApp(root: string): boolean {
+  return existsSync(join(root, 'index.html'));
+}
+
 /** The service's name and version: the options', else the package's, its name without a scope. */
 function identity(root: string, options: MaximusOptions): { name: string; version: string } {
   const path = join(root, 'package.json');
@@ -138,8 +147,11 @@ function developmentToken(options: MaximusOptions): TokenDevelopment | undefined
   return development === false ? undefined : (development ?? { binding: 'DEVELOPMENT_TOKEN' });
 }
 
-/** The Worker's bindings in a mode: the declared ones and, in development alone, the development token. */
-function workerEnv(options: MaximusOptions, mode: string): Record<string, unknown> {
+/**
+ * The Worker's bindings in a mode: the declared ones, a web app's assets and, in development alone, the
+ * development token.
+ */
+function workerEnv(root: string, options: MaximusOptions, mode: string): Record<string, unknown> {
   const declared = Object.fromEntries(Object.entries(options.env ?? {}).filter(([, binding]) => binding));
   const development = developmentToken(options);
   if (development && Object.hasOwn(declared, development.binding)) {
@@ -147,9 +159,15 @@ function workerEnv(options: MaximusOptions, mode: string): Record<string, unknow
       `${development.binding} is the development token: Maximus declares it in development alone, so no deployed Worker carries it.`
     );
   }
-  return development && mode === 'development'
-    ? { ...declared, [development.binding]: bindings.secret() }
-    : declared;
+  const web = servesWebApp(root);
+  if (web && Object.hasOwn(declared, ASSETS)) {
+    throw new TypeError(`${ASSETS} serves the web app index.html starts: Maximus declares it.`);
+  }
+  return {
+    ...declared,
+    ...(web ? { [ASSETS]: bindings.assets() } : {}),
+    ...(development && mode === 'development' ? { [development.binding]: bindings.secret() } : {}),
+  };
 }
 
 /** What the generated modules carry: the application this file configures, or none for `maximus.config.ts`. */
@@ -179,14 +197,19 @@ export function projectOptions(root: string, options: MaximusOptions): ProjectOp
         basePath: application.http?.basePath ?? '/api',
         healthPath: application.http?.healthPath ?? '/health',
       },
+      ...(servesWebApp(root) ? { assets: { binding: ASSETS } } : {}),
     },
-    env: { production: workerEnv(options, 'production'), development: workerEnv(options, 'development') },
+    env: {
+      production: workerEnv(root, options, 'production'),
+      development: workerEnv(root, options, 'development'),
+    },
   };
 }
 
 /**
  * The Worker Cloudflare's plugin builds: the options' settings, the generated entry, `nodejs_compat`, which
- * Maximus needs for its diagnostics, the bindings of the mode and a cron trigger for each cron module.
+ * Maximus needs for its diagnostics, the bindings of the mode, a cron trigger for each cron module and, for a
+ * web app, its build as assets every request reaches through the Worker, which decides what they answer.
  */
 export function workerConfig(
   root: string,
@@ -211,7 +234,10 @@ export function workerConfig(
     name: identity(root, options).name,
     compatibilityFlags: [...new Set(['nodejs_compat', ...(worker.compatibilityFlags ?? [])])],
     entrypoint: './.maximus/entry.ts',
-    env: workerEnv(options, mode) as WorkerConfig['env'],
+    ...(servesWebApp(root)
+      ? { assets: { htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true } }
+      : {}),
+    env: workerEnv(root, options, mode) as WorkerConfig['env'],
     triggers: [...(worker.triggers ?? []), ...scheduled],
   };
 }

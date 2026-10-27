@@ -1,11 +1,12 @@
 /** Build-time source generation preserves each operation's literal type and keeps filesystem code out of Workers. */
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
 import type { ApplicationConfiguration } from '../../builder.ts';
+import { ownsPrefix, VERSIONED_PATH } from '../../internal/http-layout.ts';
 import type { TokenPolicy } from '../../tokens.ts';
 import { cronExpression, declarationExports, readProjectModule, routeExports } from './project-exports.ts';
-import { PROJECT_DIRECTORIES, projectFiles, projectPath } from './project-files.ts';
+import { PROJECT_DIRECTORIES, projectFiles, projectPath, publicFiles } from './project-files.ts';
 
 /**
  * A project configured entirely in `vite.config.ts`: the application's configuration besides its code, the
@@ -22,19 +23,25 @@ export interface ProjectOptions {
     /** The rate limiting binding's name, which the generated application checks against `Env`. */
     rateLimit?: { binding: string; retryAfter?: number };
   };
-  /** The API's base path and the health path the Worker serves. */
-  worker: { http: { basePath: string; healthPath: string } };
+  /**
+   * The API's base path and the health path the Worker serves, and, for a web app (`index.html` at the
+   * project's root), the static assets binding its build is served through.
+   */
+  worker: { http: { basePath: string; healthPath: string }; assets?: { binding: string } };
   /** The bindings each mode declares, as `cf/config` states them: the generated `Env` is inferred from them. */
   env: { production: Readonly<Record<string, unknown>>; development: Readonly<Record<string, unknown>> };
 }
 
-/** The one root module of a convention (`maximus.config`, `errors`, …), in any module extension, if any. */
-function rootModule(root: string, name: string): string | undefined {
-  const found = ['ts', 'mts', 'js', 'mjs']
+/**
+ * The one module of a convention (`maximus.config`, `errors`, `app/root`, …), in any of its extensions, if
+ * any.
+ */
+function rootModule(root: string, name: string, extensions = ['ts', 'mts', 'js', 'mjs']): string | undefined {
+  const found = extensions
     .map((extension) => `${name}.${extension}`)
     .filter((file) => existsSync(join(root, file)));
   if (found.length > 1) {
-    throw new TypeError(`Keep at most one ${name} module at the project root.`);
+    throw new TypeError(`Keep at most one ${name} module: ${found.join(' or ')}.`);
   }
   const [module] = found;
   if (module && lstatSync(join(root, module)).isSymbolicLink()) {
@@ -226,6 +233,65 @@ export function prepareProject(directory: string, mode = 'production', project?:
     classes.add(className);
     return `export const ${className} = worker.durableObject(${identifier});`;
   });
+  // A web app: index.html at the root, which the plugin found, and the pages app/routes/ declares. The same
+  // files make React Router's routes and the paths the Worker answers with the app's shell.
+  const web = project?.worker.assets;
+  if (project && !web && existsSync(join(root, 'app/routes'))) {
+    throw new TypeError('app/routes/ holds the pages of a web app: add its index.html at the project root.');
+  }
+  if (web && existsSync(join(root, 'app')) && lstatSync(join(root, 'app')).isSymbolicLink()) {
+    throw new TypeError('Project directory cannot be a symlink: app');
+  }
+  const appLayout = web ? rootModule(root, 'app/root', ['tsx', 'jsx', 'ts', 'js']) : undefined;
+  const appPages = web ? projectFiles(root, 'app/routes', mode) : [];
+  // Without app/routes/, index.html is the one page, at the root.
+  const shell = { paths: appPages.length ? [] : ['/'], patterns: [] as string[] };
+  const claimed = new Map<string, string>();
+  const pageRoutes = appPages.map(({ name, file }) => {
+    const route = projectPath(name, 'app');
+    // `:taskId` and `:id` match the same paths.
+    const owner = claimed.get(route.replaceAll(/:[^/]+/g, ':'));
+    if (owner) {
+      throw new TypeError(
+        `Multiple page files claim ${route}: ${relative(root, owner)} and ${relative(root, file)}.`
+      );
+    }
+    claimed.set(route.replaceAll(/:[^/]+/g, ':'), file);
+    if (route.includes(':')) {
+      shell.patterns.push(`/^${route.replaceAll(/:[^/]+/g, '[^/]+').replaceAll('/', String.raw`\/`)}$/`);
+    } else {
+      shell.paths.push(route);
+    }
+    return `{ path: ${JSON.stringify(route)}, caseSensitive: true, lazy: () => import(${source(file)}).then(page) }`;
+  });
+  if (web && project) {
+    const { basePath, healthPath } = project.worker.http;
+    if (basePath === '' || basePath === '/') {
+      throw new TypeError(
+        'A web app answers at the root: keep the API below http.basePath, /api by default.'
+      );
+    }
+    for (const route of [...shell.paths, ...appPages.map(({ name }) => projectPath(name, 'app'))]) {
+      if (
+        [basePath, '/.well-known', '/mcp', '/assets'].some((prefix) => ownsPrefix(prefix, route)) ||
+        route === healthPath ||
+        VERSIONED_PATH.test(route) ||
+        pagePaths.has(route)
+      ) {
+        throw new TypeError(
+          `The page ${route} claims a path the API, discovery, MCP, the build's assets or pages/ answer: move it in app/routes/.`
+        );
+      }
+    }
+  }
+  const appRoutes = appPages.length
+    ? `${header}import type { ComponentType } from 'react';\nimport type { RouteObject } from 'react-router';\n${appLayout ? `\nimport * as layout from ${source(join(root, appLayout))};\n` : ''}\n/** A page module: its default export renders the page, and its other exports are React Router's. */\nfunction page<Module extends { default: ComponentType }>({ default: Component, ...route }: Module) {\n  return { ...route, Component };\n}\n\n/** The pages app/routes/ declares, each loaded when it is first visited. */\nexport const routes: RouteObject[] = ${appLayout ? `[{ ...page(layout), children: [${pageRoutes.join(', ')}] }]` : `[${pageRoutes.join(', ')}]`};\n`
+    : undefined;
+  // The build's shell for the pages, public/ by name, the hashed /assets/ for good, and in development,
+  // Vite's modules through the binding; a production build forwards nothing else.
+  const assetPolicy = web
+    ? `, assets: { binding: ${JSON.stringify(web.binding)}, pages: { paths: ${JSON.stringify(shell.paths)}, patterns: [${shell.patterns.join(', ')}] }, files: ${JSON.stringify(web ? publicFiles(root) : [])}, immutablePrefixes: ['/assets'], development: ${mode === 'development'} }`
+    : '';
   let optionsImport = "import { options } from '../src/worker.ts';";
   if (project) {
     optionsImport = "import { worker as options } from './config.ts';";
@@ -236,13 +302,13 @@ export function prepareProject(directory: string, mode = 'production', project?:
   const transports = servesMcp
     ? "import { mcp } from '@arbol-ai/maximus/mcp';\nconst transports = options.transports?.some(({ protocol }) => protocol === 'mcp') ? options.transports : [...(options.transports ?? []), mcp()];\n"
     : 'const transports = options.transports;\n';
-  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\n${transports}const worker: WorkerRuntime<${environment}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, transports, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
+  const worker = `${header}import { createProjectWorker } from '@arbol-ai/maximus/project';\nimport type { WorkerRuntime } from '@arbol-ai/maximus/workers';\nimport type { ProjectEnv } from '@arbol-ai/maximus/config';\nimport type { base } from './base.ts';\nimport { app } from './app.ts';\n${optionsImport}\nimport { requestMiddleware } from './middleware.ts';\n${imports.join('\n')}\n${transports}const worker: WorkerRuntime<${environment}, typeof app.operations> = createProjectWorker(app, { pages: { ${pageEntries.join(', ')} }, crons: [${crons.join(', ')}], queues: { ${queues.join(', ')} }, email: { ${email.join(', ')} } }, { ...options, transports${assetPolicy}, http: { ...options.http, middleware: [...(options.http?.middleware ?? []), ...requestMiddleware] } });\nexport default worker.handler;\nexport const Service = worker.entrypoint;\n${durableObjects.join('\n')}\n`;
   mkdirSync(output, { recursive: true });
   // What vite.config.ts states, as data the Worker carries, and the bindings `Env` is inferred from by
   // Cloudflare's own inference: a JSON value is also its own literal type.
   const options = project
     ? {
-        'config.ts': `${header}import type { WorkerOptions } from '@arbol-ai/maximus/workers';\n\nexport const application = ${JSON.stringify(project.application)} as const;\nexport const worker: WorkerOptions<Env> = ${JSON.stringify(project.worker)};\n`,
+        'config.ts': `${header}import type { WorkerOptions } from '@arbol-ai/maximus/workers';\n\nexport const application = ${JSON.stringify(project.application)} as const;\nexport const worker: WorkerOptions<Env> = ${JSON.stringify({ ...project.worker, assets: undefined })};\n`,
         'env.d.ts': `${header}type Bindings = import('cf/config').InferEnv<\n  { env: ${JSON.stringify(project.env.production)} } | { env: ${JSON.stringify(project.env.development)} }\n>;\n\ndeclare global {\n  namespace Cloudflare {\n    interface Env extends Bindings {}\n  }\n  interface Env extends Cloudflare.Env {}\n}\n\nexport {};\n`,
       }
     : {};
@@ -256,9 +322,12 @@ export function prepareProject(directory: string, mode = 'production', project?:
     'worker.ts': worker,
     'entry.ts':
       "// Generated by maximus prepare. Stable Cloudflare entrypoint.\nexport { default } from './worker.ts';\nexport * from './worker.ts';\n",
+    ...(appRoutes ? { 'app-routes.ts': appRoutes } : {}),
   };
+  // The routes of pages that are gone would import missing modules: the file goes with them.
+  const stale = appRoutes ? [] : ['app-routes.ts'].filter((name) => existsSync(join(output, name)));
   // Validate every destination before replacing any output. A failed discovery keeps the old graph.
-  for (const name of Object.keys(generated)) {
+  for (const name of [...Object.keys(generated), ...stale]) {
     const target = join(output, name);
     if (existsSync(target) && (lstatSync(target).isSymbolicLink() || !lstatSync(target).isFile())) {
       throw new TypeError(`Generated files must be ordinary files: ${name}`);
@@ -277,6 +346,10 @@ export function prepareProject(directory: string, mode = 'production', project?:
       renameSync(temporary, target);
     }
   }
+  for (const name of stale) {
+    rmSync(join(output, name));
+    changed = true;
+  }
   let layout = 'legacy';
   if (project) {
     layout = 'options';
@@ -291,9 +364,18 @@ export function prepareProject(directory: string, mode = 'production', project?:
     config,
     durableObjects: files['durable-objects']?.map(({ file }) => file) ?? [],
     crons: schedules,
-    files: Object.values(files)
-      .flat()
-      .map(({ file }) => file),
-    modules: Object.fromEntries(Object.entries(files).map(([kind, entries]) => [kind, entries.length])),
+    // Whether the project is a web app, whose Worker serves its build through the assets binding.
+    webApp: Boolean(web),
+    files: [
+      ...Object.values(files)
+        .flat()
+        .map(({ file }) => file),
+      ...appPages.map(({ file }) => file),
+      ...(appLayout ? [join(root, appLayout)] : []),
+    ],
+    modules: {
+      ...Object.fromEntries(Object.entries(files).map(([kind, entries]) => [kind, entries.length])),
+      app: appPages.length,
+    },
   };
 }

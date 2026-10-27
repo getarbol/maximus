@@ -16,6 +16,15 @@ dates of the release commits.
   development builds alone, adds `nodejs_compat`, turns each cron module's literal schedule into its
   trigger and brings the lint and format presets a configuration lacks. It is released with
   `@arbol-ai/maximus` at the same version.
+- With `index.html` at its root, a project configured in `vite.config.ts` is a web app: `maximus()`
+  declares the `ASSETS` binding and Worker-first assets, and the same Worker serves the API under `/api`
+  and the app's build. The pages are the files of `app/routes/` (`[taskId].tsx` is `:taskId`), each a
+  React Router route module whose default export is its component, around an optional `app/root.tsx`
+  layout; `maximus prepare` lists them in `.maximus/app-routes.ts` as lazy, case-sensitive routes. The
+  same files decide which paths answer `index.html`, so an unknown path is a 404; `public/` is served by
+  name, the hashed `/assets/` for good, and Vite's modules only in development. Pages that claim the API,
+  discovery, MCP, the build's assets or `pages/` are refused. `examples/project-tasks` has a React app
+  that calls the API with the typed client.
 - `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
   may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot. With
   `errors.ts`, they complete an application `vite.config.ts` configures. `PreparedContext` types

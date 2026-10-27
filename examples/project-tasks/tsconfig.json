@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node", "@cloudflare/workers-types"]
+    "types": ["node", "@cloudflare/workers-types"],
+    "jsx": "react-jsx"
   },
-  "include": ["routes", "mcp", "src", "errors.ts", "context.ts", "vite.config.ts", ".maximus/*.ts"]
+  "include": ["app", "routes", "mcp", "src", "errors.ts", "context.ts", "vite.config.ts", ".maximus/*.ts"]
 }

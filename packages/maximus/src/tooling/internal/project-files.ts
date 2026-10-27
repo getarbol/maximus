@@ -86,20 +86,23 @@ export function projectFiles(root: string, directory: string, mode: string): Pro
   return files;
 }
 
-/** Convert groups, index files and dynamic operation segments into a native Maximus path. */
-export function projectPath(name: string, kind: 'routes' | 'pages'): string {
+/**
+ * Convert groups, index files and dynamic segments into a native Maximus path, or into the React Router path
+ * of a web app's page (`app/routes/tasks/[taskId].tsx` is `/tasks/:taskId`).
+ */
+export function projectPath(name: string, kind: 'routes' | 'pages' | 'app'): string {
   const segments = name.split('/').filter((segment) => !/^\([a-zA-Z0-9_-]+\)$/.test(segment));
   if (segments.at(-1) === 'index') {
     segments.pop();
   }
   const parts = segments.map((segment) => {
     const parameter = /^\[([a-zA-Z][a-zA-Z0-9_]*)\]$/.exec(segment)?.[1];
-    if (parameter && kind === 'routes') {
-      return `{${parameter}}`;
+    if (parameter && kind !== 'pages') {
+      return kind === 'routes' ? `{${parameter}}` : `:${parameter}`;
     }
     if (!/^[a-zA-Z0-9_-]+$/.test(segment)) {
       throw new TypeError(
-        `Unsupported ${kind} segment: ${segment}. Pages use fixed paths; operations support [parameter].`
+        `Unsupported ${kind} segment: ${segment}. Pages use fixed paths; operations and app pages support [parameter].`
       );
     }
     return segment;
@@ -109,4 +112,43 @@ export function projectPath(name: string, kind: 'routes' | 'pages'): string {
     throw new TypeError(`Operation file must live below routes/v1/ (or another version): ${name}`);
   }
   return path;
+}
+
+/**
+ * The files of a web app's `public/`, which its build copies to the root as they are: the paths the Worker
+ * serves them at, such as `/favicon.svg`. Dotfiles stay out; symlinks and other names are refused.
+ */
+export function publicFiles(root: string): string[] {
+  const folder = resolve(root, 'public');
+  if (!existsSync(folder)) {
+    return [];
+  }
+  if (lstatSync(folder).isSymbolicLink()) {
+    throw new TypeError('Project directory cannot be a symlink: public');
+  }
+  const paths: string[] = [];
+  function visit(current: string): void {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const file = join(current, entry.name);
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+      if (entry.isSymbolicLink()) {
+        throw new TypeError(`Public files cannot be symlinks: ${relative(root, file)}`);
+      }
+      if (entry.isDirectory()) {
+        visit(file);
+      } else if (entry.isFile()) {
+        const path = `/${relative(folder, file).split(sep).join('/')}`;
+        if (!/^(?:\/[a-zA-Z0-9._~-]+)+$/.test(path)) {
+          throw new TypeError(
+            `Name public files with letters, digits, dots, underscores, tildes and hyphens: ${relative(root, file)}`
+          );
+        }
+        paths.push(path);
+      }
+    }
+  }
+  visit(folder);
+  return paths.toSorted(compareNames);
 }
