@@ -78,17 +78,17 @@ These rules hold in every convention folder:
   parentheses such as `(admin)` groups files without adding a segment, and `[noteId]` is a parameter in
   routes and in a web app's pages.
 
-| Folder             | A file declares                                   | Its name                                  | Example                                                         |
-| ------------------ | ------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| `routes/`          | A route, `defineHandler`                          | Its path below a version, then its method | `routes/v1/notes/[noteId].get.ts`: `GET /api/v1/notes/{noteId}` |
-| `mcp/tools/`       | A tool only MCP serves, `defineTool`              | The tool, in kebab-case                   | `mcp/tools/summarize-notes.ts`: `summarize_notes`               |
-| `middleware/`      | `defineMiddleware` or `defineOperationMiddleware` | Its place in the order; no dots           | `middleware/10-headers.ts`                                      |
-| `pages/`           | A response handler, `HttpRoute<Env>`              | A fixed path, then any method but `GET`   | `pages/legal/privacy.ts`: `GET /legal/privacy`                  |
-| `crons/`           | A scheduled handler and `export const cron`       | Any name without dots                     | `crons/sweep.ts`                                                |
-| `queues/`          | A queue consumer                                  | The queue's name, at the top level        | `queues/reminders.ts` consumes `reminders`                      |
-| `email/`           | An email handler                                  | The full recipient, or `_default`         | `email/help@example.com.ts`                                     |
-| `durable-objects/` | A Durable Object class                            | Kebab-case, at the top level              | `durable-objects/day-schedule.ts`: `DaySchedule`                |
-| `app/routes/`      | A page of the web app, a React component          | Its path                                  | `app/routes/notes/[noteId].tsx`: `/notes/:noteId`               |
+| Folder             | A file declares                                   | Its name                                     | Example                                                         |
+| ------------------ | ------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------- |
+| `routes/`          | A route, `defineHandler`                          | Its path below a version, then its method    | `routes/v1/notes/[noteId].get.ts`: `GET /api/v1/notes/{noteId}` |
+| `mcp/tools/`       | A tool only MCP serves, `defineTool`              | The tool, in kebab-case                      | `mcp/tools/summarize-notes.ts`: `summarize_notes`               |
+| `middleware/`      | `defineMiddleware` or `defineOperationMiddleware` | Its place in the order; no dots              | `middleware/10-headers.ts`                                      |
+| `pages/`           | A response handler, `HttpRoute<Env>`              | A fixed path, then its method, `GET` if none | `pages/legal/privacy.ts`: `GET /legal/privacy`                  |
+| `crons/`           | A scheduled handler and `export const cron`       | Any name without dots                        | `crons/sweep.ts`                                                |
+| `queues/`          | A queue consumer                                  | The queue's name, at the top level           | `queues/reminders.ts` consumes `reminders`                      |
+| `email/`           | An email handler                                  | The full recipient, or `_default`            | `email/help@example.com.ts`                                     |
+| `durable-objects/` | A Durable Object class                            | Kebab-case, at the top level                 | `durable-objects/day-schedule.ts`: `DaySchedule`                |
+| `app/routes/`      | A page of the web app, a React component          | Its path                                     | `app/routes/notes/[noteId].tsx`: `/notes/:noteId`               |
 
 ## Routes
 
@@ -104,7 +104,7 @@ least one segment below it. Its default export is `defineHandler(handler, contra
 | `routes/v1/notes/[noteId]/archive.post.ts` | `POST /api/v1/notes/{noteId}/archive`    |
 | `routes/(admin)/v1/audits.get.ts`          | `GET /api/v1/audits`                     |
 | `routes/v2/notes/index.get.ts`             | `GET /api/v2/notes`                      |
-| `routes/v1/debug.get.dev.ts`               | `GET /api/v1/debug`, under `vp dev` only |
+| `routes/v1/debug.get.dev.ts`               | `GET /api/v1/debug`, in development only |
 
 `/api` is the API's base path, `http.basePath` in `maximus()`. Each method of a path belongs to one file:
 `notes.get.ts` and `notes/index.get.ts` claim the same route, and so do `[id].get.ts` and `[noteId].get.ts`,
@@ -309,7 +309,7 @@ through one.
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `Project directory cannot be a symlink: <folder>`       | A convention folder, `app/`, `app/routes/`, `public/`, `mcp/guides/` or `mcp/skills/` that is a link. |
 | `Project modules cannot be symlinks: <file>`            | A link inside a convention folder.                                                                    |
-| `The <name> module cannot be a symlink.`                | `errors`, `auth`, `context` or `app/root` as a link.                                                  |
+| `The <name> module cannot be a symlink.`                | `errors`, `auth`, `context`, `telemetry` or `app/root` as a link.                                     |
 | `MCP Markdown must be an ordinary file: <path>`         | `mcp/instructions.md`, a guide or a skill that is a link or a folder.                                 |
 | `Public files cannot be symlinks: <path>`               | A link in `public/`.                                                                                  |
 | `The generated .maximus directory cannot be a symlink.` | `.maximus/` itself as a link.                                                                         |

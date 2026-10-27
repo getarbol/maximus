@@ -142,7 +142,8 @@ What changes:
   (`notes:notes:read`) and its title. **Keep every name and scope your clients and tokens depend on** by
   declaring `operationId` and `scope` where the derived ones differ: the operation's name is its OpenAPI
   `operationId` and its RPC method, and a token holds scopes by their exact text.
-- A read tool is idempotent by default; `mcp: { name, idempotent, openWorld }` states otherwise.
+- A route's tool is idempotent by default for `GET`, `PUT` and `DELETE`, and a tool of `mcp/tools/` when it
+  reads; `mcp: { name, idempotent, openWorld }` states otherwise.
 
 A 7.3 or 7.4 route module that exports `GET`, a route factory or `defineRoute` becomes the same kind of
 file, one per method. An operation that has an MCP tool but no HTTP route becomes a file of `mcp/tools/`

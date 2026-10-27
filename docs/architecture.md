@@ -71,8 +71,8 @@ every Node entry loads, and that a new project passes its own `bun run verify`.
 ## Stable boundaries
 
 - **Core**: results, schemas and the error catalog; verified principals and token policy; the builder,
-  `defineHandler`, `defineTool`, `defineContext` and `defineAuth`; the one execution path; the native HTTP
-  handler; the OpenAPI document; middleware; and the observer interfaces.
+  `defineHandler`, `defineTool`, `defineContext`, `defineAuth` and `defineTelemetry`; the one execution
+  path; the native HTTP handler; the OpenAPI document; middleware; and the observer interfaces.
 - **Workers**: `createWorker`, which serves an application as a Worker: its fetch handler, its RPC
   entrypoint, the instrumentation of the Worker's own entrypoints and Durable Objects, span annotations and
   static assets.

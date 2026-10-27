@@ -67,7 +67,7 @@ export default defineConfig({
       origin: 'https://notes.example.com',
       tokens: { issuer: 'https://auth.example.com/' },
       compatibilityDate: '2026-10-26',
-      env: { NOTES_DB: bindings.d1({ name: 'notes' }) },
+      env: { NOTES: bindings.kv() },
     }),
   ],
 });

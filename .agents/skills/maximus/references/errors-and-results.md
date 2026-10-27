@@ -57,20 +57,20 @@ by the error's name alone.
 
 Every operation may answer these without listing them:
 
-| Code                      | Status | Retryable | When                                                                                    |
-| ------------------------- | ------ | --------- | --------------------------------------------------------------------------------------- |
-| `INVALID_INPUT`           | 400    | No        | The input does not match its schema; `data.issues` lists up to ten `{ path, message }`. |
-| `UNAUTHORIZED`            | 401    | No        | No valid token; RPC props or principal refused.                                         |
-| `FORBIDDEN`               | 403    | No        | The token lacks the scope, the actor kind is not admitted.                              |
-| `NOT_FOUND`               | 404    | No        | No route answers the method and path, before any token is read.                         |
-| `HTTP_METHOD_NOT_ALLOWED` | 405    | No        | A method the path does not answer, such as `POST /health`.                              |
-| `REQUEST_TOO_LARGE`       | 413    | No        | The body exceeds its limit.                                                             |
-| `UNSUPPORTED_MEDIA_TYPE`  | 415    | No        | A body that is not JSON, or a compressed byte upload.                                   |
-| `RATE_LIMITED`            | 429    | Yes, 60 s | The rate limit refused the caller.                                                      |
-| `INTERNAL_ERROR`          | 500    | No        | Anything unexpected.                                                                    |
-| `OUTCOME_UNKNOWN`         | 502    | No        | A write may have happened and its answer was lost.                                      |
-| `UPSTREAM_UNAVAILABLE`    | 503    | Yes       | A service this one depends on could not answer.                                         |
-| `UPSTREAM_TIMEOUT`        | 504    | Yes       | A service this one depends on did not answer in time.                                   |
+| Code                      | Status | Retryable | When                                                                                                                                                        |
+| ------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `INVALID_INPUT`           | 400    | No        | The input does not match its schema; `data.issues` lists up to ten `{ path, message }`.                                                                     |
+| `UNAUTHORIZED`            | 401    | No        | No valid token; RPC props or principal refused.                                                                                                             |
+| `FORBIDDEN`               | 403    | No        | The token lacks the scope, the actor kind is not admitted.                                                                                                  |
+| `NOT_FOUND`               | 404    | No        | No route answers the method and path, before any token is read.                                                                                             |
+| `HTTP_METHOD_NOT_ALLOWED` | 405    | No        | A method the health path, discovery, a page or a web app's file does not answer, such as `POST /health`; on an API route an unserved method is `NOT_FOUND`. |
+| `REQUEST_TOO_LARGE`       | 413    | No        | The body exceeds its limit.                                                                                                                                 |
+| `UNSUPPORTED_MEDIA_TYPE`  | 415    | No        | A body that is not JSON, or a compressed byte upload.                                                                                                       |
+| `RATE_LIMITED`            | 429    | Yes, 60 s | The rate limit refused the caller.                                                                                                                          |
+| `INTERNAL_ERROR`          | 500    | No        | Anything unexpected.                                                                                                                                        |
+| `OUTCOME_UNKNOWN`         | 502    | No        | A write may have happened and its answer was lost.                                                                                                          |
+| `UPSTREAM_UNAVAILABLE`    | 503    | Yes       | A service this one depends on could not answer.                                                                                                             |
+| `UPSTREAM_TIMEOUT`        | 504    | Yes       | A service this one depends on did not answer in time.                                                                                                       |
 
 A handler answers the last three itself, with `fail('UPSTREAM_UNAVAILABLE')` for instance.
 

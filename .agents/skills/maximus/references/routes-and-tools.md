@@ -16,7 +16,7 @@ A file of `routes/` declares one operation; its name gives its path and method, 
   version folder, `routes/v1/`.
 - `[name]` is a parameter that fills a whole segment; a folder in parentheses, `(admin)`, groups files
   without changing the path.
-- `<name>.dev.ts` exists under `vp dev` alone and `<name>.prod.ts` in builds alone. Files that start with `_`
+- `<name>.dev.ts` exists in development alone (`vp dev` and `vp test`) and `<name>.prod.ts` in builds alone. Files that start with `_`
   or `.`, and `*.test.ts`, `*.spec.ts` and `*.d.ts` files, are not routes.
 - `prepare` refuses two files for one method whose paths differ only in a parameter's name, and a file
   without a method.

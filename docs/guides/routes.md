@@ -443,8 +443,9 @@ export default defineHandler(
 ## Pages
 
 A file of `pages/` answers a fixed path outside the API, such as `pages/index.ts` for `GET /`, with a plain
-`Response` and without a token. A page is no route: it has no contract, answers `GET` and `HEAD` alone, and
-is absent from the OpenAPI document. [Project structure](project-structure.md#pages) gives the paths a page
+`Response` and without a token. A page is no route: it has no contract, answers `GET` and `HEAD`, or the
+method its file's name ends with (`pages/webhooks/payments.post.ts` answers `POST`), and is absent from the
+OpenAPI document. [Project structure](project-structure.md#pages) gives the paths a page
 may take, and [Worker composition](worker-composition.md#pages) what it answers.
 
 ## The OpenAPI document

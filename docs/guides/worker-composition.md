@@ -7,8 +7,10 @@ the Worker's other entrypoints. Read it when a project's conventions do not cove
 
 ## Pages
 
-A file of `pages/` answers `GET` and `HEAD` at a fixed path outside the API, without a token: a landing
-page, a status page, a `robots.txt`. Its default export is a plain route, a function of the request:
+A file of `pages/` answers at a fixed path outside the API, without a token: a landing page, a status
+page, a `robots.txt`, a provider's webhook. It answers `GET` and `HEAD`, or the method its file's name ends
+with, as `pages/webhooks/payments.post.ts` answers `POST`. Its default export is a plain route, a function
+of the request:
 
 ```ts
 // pages/index.ts
@@ -23,8 +25,9 @@ const home: HttpRoute<Env> = () =>
 export default home;
 ```
 
-A page answers `HEAD` as it answers `GET`, without the body, and any other method with `405` and
-`allow: GET, HEAD`, without running. It may set its own `cache-control`; any other answer is
+A page that answers `GET` answers `HEAD` the same way, without the body. A method that no file of the
+path declares answers `405` with an `allow` header listing the ones that do, `GET, HEAD` for a page that
+answers `GET`, and no page runs. It may set its own `cache-control`; any other answer is
 `private, no-store`. A page cannot claim a path the Worker answers otherwise: the API's base path and
 everything below it, the health check, the versioned paths, `/.well-known` and `/mcp`. Such a page is
 refused with `Page path is reserved or malformed: <path>. Move the API with http.basePath.`

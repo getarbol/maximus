@@ -98,7 +98,7 @@ A page is a file of `app/routes/`, named as routes are, with `[name]` for a para
 | `app/routes/tasks/index.tsx`        | `/tasks`                      |
 | `app/routes/tasks/[taskId].tsx`     | `/tasks/:taskId`              |
 | `app/routes/(account)/settings.tsx` | `/settings`                   |
-| `app/routes/debug.dev.tsx`          | `/debug`, under `vp dev` only |
+| `app/routes/debug.dev.tsx`          | `/debug`, in development only |
 | `app/routes/_format.ts`             | Nothing: a helper             |
 
 A page's default export is its component, and its other exports are what a React Router route module

@@ -120,9 +120,9 @@ export default defineHandler(
   `forward` or `backward` from that cursor, `forward` by default; and `limit`, an integer from 1 to 100,
   25 by default. Spread the fields beside the list's own:
   `t.Object({ ...PageQueryFields, done: t.Optional(t.Boolean()) }, { additionalProperties: false })`.
-- `inputSchema()` applies the defaults before the handler runs, so it always receives `direction` and
-  `limit` (the type `PageQuery`), and publishes both as optional. Without it the defaults still apply, but the
-  OpenAPI document and the MCP tool listing mark the two fields required.
+- Decoding applies the defaults before the handler runs, so it always receives `direction` and `limit` (the
+  type `PageQuery`), and the OpenAPI document and the MCP tool listing publish both as optional, since a
+  caller may leave them out. `inputSchema()` makes no difference to either.
 - `pageLimit()` gives a list whose items are costly a lower maximum:
   `{ ...PageQueryFields, limit: pageLimit({ maximum: 20 }) }`. Its default becomes the smaller of 25 and the
   maximum, unless you pass `default`. It refuses
