@@ -60,6 +60,9 @@ dates of the release commits.
   development handler of `support@company`, and `email/help@example.test.ts` was skipped as a test.
 - `maximus` reports an unknown option, or one without its value, in one sentence like its other
   refusals, instead of a stack trace.
+- Project discovery sees the MCP tool of a route declared as a `const` it default-exports, which it
+  missed, leaving the Worker without the MCP transport. A route whose fields it cannot read, behind a
+  spread, a computed key or another module, is refused instead of silently left unserved.
 
 ## 7.4.0 (2026-10-26)
 

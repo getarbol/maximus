@@ -90,10 +90,89 @@ export function routeExports(file: string): { legacy: boolean; methods: readonly
   return { legacy: false, methods };
 }
 
+/** A module's statements, as Oxc parses them. */
+type Statement = ReturnType<typeof readProjectModule>['program']['body'][number];
+/** What a module may default-export: an expression or declaration, or the initializer of a const it names. */
+type Exported =
+  | Extract<Statement, { type: 'ExportDefaultDeclaration' }>['declaration']
+  | Extract<Statement, { type: 'VariableDeclaration' }>['declarations'][number]['init'];
+
+/** What a module default-exports: `export default x`, or the initializer of the local const it names. */
+function defaultExpression(body: readonly Statement[]): Exported | undefined {
+  let local: string | undefined;
+  let expression: Exported | undefined;
+  for (const node of body) {
+    if (node.type === 'ExportDefaultDeclaration') {
+      if (node.declaration.type === 'Identifier') {
+        local = node.declaration.name;
+      } else {
+        expression = node.declaration;
+      }
+    } else if (node.type === 'ExportNamedDeclaration' && !node.source) {
+      for (const specifier of node.specifiers) {
+        const exported = specifier.exported.type === 'Identifier' ? specifier.exported.name : undefined;
+        if (exported === 'default' && specifier.local.type === 'Identifier') {
+          local = specifier.local.name;
+        }
+      }
+    }
+  }
+  for (const node of body) {
+    const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    if (local && declaration?.type === 'VariableDeclaration' && declaration.kind === 'const') {
+      for (const declarator of declaration.declarations) {
+        if (declarator.id.type === 'Identifier' && declarator.id.name === local) {
+          expression = declarator.init;
+        }
+      }
+    }
+  }
+  return expression;
+}
+
+/** An expression without the `as`, `satisfies`, `!` or parentheses around it, which leave its value as it is. */
+function unwrap(expression: Exported | undefined): Exported | undefined {
+  let current = expression;
+  while (
+    current?.type === 'TSAsExpression' ||
+    current?.type === 'TSSatisfiesExpression' ||
+    current?.type === 'TSNonNullExpression' ||
+    current?.type === 'ParenthesizedExpression'
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/**
+ * Whether a `defineHandler` call's fields name an MCP tool: true or false as its object literal shows it, or
+ * undefined when a spread, a computed key or another argument hides them.
+ */
+function declaresMcp(expression: Exported | undefined): boolean | undefined {
+  const call = unwrap(expression);
+  const [first] = call?.type === 'CallExpression' ? call.arguments : [];
+  const argument = first?.type === 'SpreadElement' ? undefined : unwrap(first);
+  if (argument?.type !== 'ObjectExpression') {
+    return undefined;
+  }
+  let hidden = false;
+  for (const property of argument.properties) {
+    if (property.type !== 'Property' || (property.computed && property.key.type !== 'Literal')) {
+      hidden = true;
+    } else if (
+      (property.key.type === 'Identifier' && !property.computed && property.key.name === 'mcp') ||
+      (property.key.type === 'Literal' && property.key.value === 'mcp')
+    ) {
+      return true;
+    }
+  }
+  return hidden ? undefined : false;
+}
+
 /**
  * A `defineHandler` route or `defineTool` module: one default export, the declaration, and types. Returns
- * whether the declaration names an MCP tool, as its object literal shows it; the generated Worker serves MCP
- * when one does.
+ * whether the declaration names an MCP tool, as its fields show it; the generated Worker serves MCP when one
+ * does. A route whose fields prepare cannot see is refused, so a tool is never silently left unserved.
  */
 export function declarationExports(file: string, helper: 'defineHandler' | 'defineTool'): { mcp: boolean } {
   const parsed = readProjectModule(file, 'route');
@@ -110,19 +189,16 @@ export function declarationExports(file: string, helper: 'defineHandler' | 'defi
       `${file} must default-export its ${helper} declaration and nothing else. Keep helpers private or in _files.`
     );
   }
-  const exported = parsed.program.body.find((node) => node.type === 'ExportDefaultDeclaration');
-  const declaration = exported?.type === 'ExportDefaultDeclaration' ? exported.declaration : undefined;
-  const [argument] = declaration?.type === 'CallExpression' ? declaration.arguments : [];
-  return {
-    mcp:
-      argument?.type === 'ObjectExpression' &&
-      argument.properties.some(
-        (property) =>
-          property.type === 'Property' &&
-          ((property.key.type === 'Identifier' && property.key.name === 'mcp') ||
-            (property.key.type === 'Literal' && property.key.value === 'mcp'))
-      ),
-  };
+  if (helper === 'defineTool') {
+    return { mcp: true };
+  }
+  const mcp = declaresMcp(defaultExpression(parsed.program.body));
+  if (mcp === undefined) {
+    throw new TypeError(
+      `${file} must default-export defineHandler({ ... }) with its fields written in the call, as a const it names or directly: prepare reads from them whether the route is an MCP tool.`
+    );
+  }
+  return { mcp };
 }
 
 /**

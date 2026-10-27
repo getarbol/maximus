@@ -224,7 +224,10 @@ zero-padded numeric prefixes for middleware order. Segment casing is preserved. 
 organize source: putting a file in `(staff)` does not make it private. Declare its scope and visibility.
 
 A suffixed file default-exports its declaration and nothing else: keep schemas and helpers unexported,
-in an ignored helper module or in `src/`. Type-only exports are allowed. `get.ts` names a resource
+in an ignored helper module or in `src/`. Type-only exports are allowed. Write the declaration's fields
+in the `defineHandler({ ... })` call, default-exported directly or as a `const`: prepare reads from them
+whether the route is an MCP tool, and refuses a spread, a computed key or a declaration it cannot see
+rather than leave a tool unserved. `get.ts` names a resource
 literally called `get`; only a suffix after another name selects a method. `HEAD` and `OPTIONS` are not
 operation methods; HTTP transport handling remains owned by the native pipeline.
 

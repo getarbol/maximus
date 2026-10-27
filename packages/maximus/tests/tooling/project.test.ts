@@ -235,6 +235,39 @@ test('MCP tools are named by their file and bring the MCP transport, as a route 
   expect(plainWorker).toContain('const transports = options.transports;');
 });
 
+test('a route declared as a const it default-exports is an MCP tool as its fields show', () => {
+  const transport = (contents: string) => {
+    const root = project({ 'routes/v1/tasks.get.ts': contents });
+    prepareProject(root);
+    return readFileSync(join(root, '.maximus/worker.ts'), 'utf-8').includes('mcp()');
+  };
+  expect(
+    transport('const listTasks = defineHandler({ mcp: { name: "list_tasks" } });\nexport default listTasks;')
+  ).toBe(true);
+  expect(
+    transport(
+      'const listTasks = defineHandler({ ["mcp"]: { name: "list_tasks" } } as const);\nexport { listTasks as default };'
+    )
+  ).toBe(true);
+  expect(transport('export default defineHandler({ output, handler }) satisfies object;')).toBe(false);
+  expect(transport('const listTasks = defineHandler({ rpc: true });\nexport default listTasks;')).toBe(false);
+});
+
+test('a route whose fields prepare cannot read is refused rather than left without its MCP tool', () => {
+  for (const contents of [
+    'export default defineHandler({ ...shared, handler });',
+    'export default defineHandler(declaration);',
+    'export default defineHandler({ [field]: true });',
+    'let listTasks = defineHandler({});\nexport default listTasks;',
+    "export { default } from '../../src/tasks.ts';",
+  ]) {
+    const root = project({ 'routes/v1/tasks.get.ts': contents });
+    expect(() => prepareProject(root), contents).toThrow(
+      'must default-export defineHandler({ ... }) with its fields written in the call'
+    );
+  }
+});
+
 test('an MCP module outside mcp/tools/, nested or misnamed is refused', () => {
   for (const name of ['mcp/helpers.ts', 'mcp/tools/team/summarize.ts', 'mcp/tools/Summarize.ts']) {
     const root = project({ [name]: 'export default defineTool({});' });
