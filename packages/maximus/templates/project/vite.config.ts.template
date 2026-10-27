@@ -3,14 +3,15 @@ import { defineConfig } from 'vite-plus';
 
 /**
  * The only configuration: the application and the Worker that serves it. Add bindings with
- * `env: { NAME: bindings.kv() }`, from cf/config; Env is generated from them.
+ * `env: { NOTES: bindings.kv() }` from cf/config; the generated Env is inferred from them.
  */
 export default defineConfig({
   plugins: [
     maximus({
+      // The public HTTPS origin: the Worker's workers.dev URL, or the custom domain it is served at.
       origin: 'https://__PROJECT_NAME__.example.com',
       // OAuth access tokens from your authorization server, which MCP clients discover. `vp dev` also
-      // accepts the development token in .dev.vars, from localhost only.
+      // accepts the development token in .dev.vars, from localhost alone.
       tokens: { issuer: 'https://auth.example.com/' },
       compatibilityDate: '__COMPATIBILITY_DATE__',
     }),

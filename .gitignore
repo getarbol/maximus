@@ -15,5 +15,6 @@ coverage/
 packages/maximus/skills/
 packages/maximus/LICENSE
 packages/vite-plugin/LICENSE
+packages/create-maximus/LICENSE
 
 .vite-plus/

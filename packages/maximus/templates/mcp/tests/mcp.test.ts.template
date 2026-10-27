@@ -1,0 +1,36 @@
+import { expect, it } from 'vite-plus/test';
+
+import { handler } from '#maximus/http';
+
+/** The development token `vp test` accepts from localhost, as in greeting.test.ts. */
+const token = 'test-development-token-for-local-tests';
+const env = { DEVELOPMENT_TOKEN: token } as Env;
+
+/** Sends one JSON-RPC request to the MCP server and returns its answer, which arrives as a server-sent event. */
+async function rpc(method: string, params: object = {}) {
+  const response = await handler(
+    new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2025-11-25',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    }),
+    env
+  );
+  const text = await response.text();
+  return JSON.parse(/data: (\{[^\n]*)/u.exec(text)?.[1] ?? text) as { result: Record<string, unknown> };
+}
+
+it('lists the greeting route as the MCP tool get_greeting', async () => {
+  const { result } = await rpc('tools/list');
+  expect(result.tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'get_greeting' })]));
+});
+
+it('runs get_greeting as the route runs', async () => {
+  const { result } = await rpc('tools/call', { name: 'get_greeting', arguments: {} });
+  expect(result).toMatchObject({ structuredContent: { message: 'Hello World' } });
+});

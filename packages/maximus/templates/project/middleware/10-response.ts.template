@@ -1,9 +1,12 @@
 import { defineMiddleware } from '@arbol-ai/maximus/config';
 
-/** Global HTTP policy; protected operations still pass through native token and scope admission. */
+/**
+ * Request middleware, run in filename order around every request before its token is verified: it can add
+ * headers, never authenticate a caller. Policy that needs the verified caller is defineOperationMiddleware's.
+ */
 export default defineMiddleware<Env>(async (_request, _env, _context, proceed) => {
   const response = await proceed();
-  // Reconstructing a WebSocket upgrade would lose its attached socket.
+  // Rebuilding a WebSocket upgrade would lose its socket.
   if (response.status === 101) {
     return response;
   }

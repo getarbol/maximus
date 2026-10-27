@@ -2,6 +2,9 @@
   "name": "@maximus-examples/project-tasks",
   "private": true,
   "type": "module",
+  "imports": {
+    "#maximus/*": "./.maximus/*.ts"
+  },
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",

@@ -1,6 +1,7 @@
 /**
  * What `vite.config.ts` states and what follows from it: the application the generated modules carry and
- * the Worker Cloudflare's plugin builds.
+ * the Worker Cloudflare's plugin builds. Development is `vp dev`: every build is a production build, whatever
+ * its Vite mode, so no deployed Worker carries what only development needs.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,6 +12,9 @@ import { bindings, triggers } from 'cf/config';
 import type { WorkerConfig } from 'cf/config';
 import type { UserConfig } from 'vite';
 
+/** Where the Worker runs: `development` under `vp dev`, `production` in every build. */
+export type Phase = 'development' | 'production';
+
 /** How tokens are verified, as configuration states it; the code that verifies them itself is `auth.ts`. */
 export type TokenOptions = Omit<
   TokenPolicy,
@@ -19,17 +23,28 @@ export type TokenOptions = Omit<
   /** The audience tokens must carry, or several any one of which they may carry; by default, the origin. */
   audience?: TokenPolicy['audience'];
   /**
-   * The token `vp dev` accepts from localhost: its binding, `DEVELOPMENT_TOKEN` by default, which only the
-   * development build declares. `false` accepts none.
+   * The token `vp dev` accepts from localhost: its binding, `DEVELOPMENT_TOKEN` by default, which only
+   * `vp dev` declares. `false` accepts none.
    */
   development?: TokenDevelopment | false;
 };
 
+/** What a web app (`index.html` at the project's root) answers with, besides its build. */
+export interface WebAppOptions {
+  /**
+   * Response headers for the app's pages and files, merged over Maximus's defaults: a Content Security Policy
+   * that admits the app's own origin and its token issuer, `frame-ancestors 'none'`, `no-referrer`, same-origin
+   * opener and resource policies, and HSTS. A header set to `false` is left out. Under `vp dev` the policy and
+   * HSTS are left out, since Vite's development client runs inline scripts over plain HTTP.
+   */
+  headers?: Readonly<Record<string, string | false>>;
+}
+
 /**
  * What `vite.config.ts` states: the application's configuration, and the Worker's settings as Cloudflare
- * names them. Maximus owns the Worker's entry and, for a web app, its assets; it adds `nodejs_compat` and, in
- * development, the development token. The code that completes the application is `errors.ts`, `auth.ts` and
- * `context.ts`.
+ * names them. Maximus owns the Worker's entry and, for a web app, its assets; it adds `nodejs_compat` and,
+ * under `vp dev`, the development token. The code that completes the application is `errors.ts`, `auth.ts`
+ * and `context.ts`.
  */
 export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint' | 'env' | 'assets'> {
   /**
@@ -43,7 +58,10 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   title?: string;
   /** The version OpenAPI, the MCP server and `/health` report; by default, the package's version. */
   version?: string;
-  /** The public HTTPS origin OpenAPI, MCP resources and OAuth discovery advertise. */
+  /**
+   * The public HTTPS origin OpenAPI, MCP resources and OAuth discovery advertise. A `workers.dev` origin is
+   * served there; any other is the Worker's custom domain, unless `domains` or a fetch trigger route it.
+   */
   origin: string;
   /** How tokens are verified: the OAuth issuer, the audience and the development token. */
   tokens?: TokenOptions;
@@ -59,6 +77,8 @@ export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint'
   rateLimit?: { binding: string; retryAfter?: number };
   /** The Worker's bindings, from `cf/config`'s `bindings`; the generated `Env` is inferred from them. */
   env?: WorkerConfig['env'];
+  /** What a web app answers with besides its build: its response headers. */
+  webApp?: WebAppOptions;
 }
 
 /** The observability a Worker gets unless the options set their own: logs and traces, query strings redacted. */
@@ -92,6 +112,7 @@ function split(options: MaximusOptions) {
     maxOutputBytes,
     rateLimit,
     env,
+    webApp,
     ...worker
   } = options;
   return {
@@ -109,6 +130,7 @@ function split(options: MaximusOptions) {
       rateLimit,
     },
     env,
+    webApp,
     worker,
   };
 }
@@ -167,15 +189,15 @@ function developmentToken(options: MaximusOptions): TokenDevelopment | undefined
 }
 
 /**
- * The Worker's bindings in a mode: the declared ones, a web app's assets and, in development alone, the
+ * The Worker's bindings in a phase: the declared ones, a web app's assets and, under `vp dev` alone, the
  * development token.
  */
-function workerEnv(root: string, options: MaximusOptions, mode: string): Record<string, unknown> {
+function workerEnv(root: string, options: MaximusOptions, phase: Phase): Record<string, unknown> {
   const declared = Object.fromEntries(Object.entries(options.env ?? {}).filter(([, binding]) => binding));
   const development = developmentToken(options);
   if (development && Object.hasOwn(declared, development.binding)) {
     throw new TypeError(
-      `${development.binding} is the development token: Maximus declares it in development alone, so no deployed Worker carries it.`
+      `${development.binding} is the development token: Maximus declares it under vp dev alone, so no deployed Worker carries it.`
     );
   }
   const web = servesWebApp(root);
@@ -185,15 +207,71 @@ function workerEnv(root: string, options: MaximusOptions, mode: string): Record<
   return {
     ...declared,
     ...(web ? { [ASSETS]: bindings.assets() } : {}),
-    ...(development && mode === 'development' ? { [development.binding]: bindings.secret() } : {}),
+    ...(development && phase === 'development' ? { [development.binding]: bindings.secret() } : {}),
   };
 }
 
+/** The origins the web app's pages may call besides their own: the token issuer's and its token endpoint's. */
+function tokenOrigins(tokens: TokenOptions | undefined): string[] {
+  if (!tokens?.issuer) {
+    return [];
+  }
+  const issuer = new URL(tokens.issuer);
+  const endpoint = new URL(tokens.tokenEndpoint ?? 'oauth/token', issuer);
+  return [...new Set([issuer.origin, endpoint.origin])];
+}
+
 /**
- * What the generated modules carry in a mode: the application this file configures, with the development
- * token's policy in development alone.
+ * The headers of a web app's pages and files: the defaults, then the options' own, a `false` one left out.
+ * The Content Security Policy and HSTS apply in production alone.
  */
-export function projectOptions(root: string, options: MaximusOptions, mode = 'production'): ProjectOptions {
+function webAppHeaders(options: MaximusOptions, phase: Phase): Record<string, string> {
+  const production = phase === 'production';
+  const policy = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    `connect-src ${["'self'", ...tokenOrigins(options.tokens)].join(' ')}`,
+    "font-src 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob:",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    'upgrade-insecure-requests',
+  ].join('; ');
+  const headers: Record<string, string | false> = {
+    ...(production
+      ? {
+          'content-security-policy': policy,
+          'strict-transport-security': 'max-age=31536000; includeSubDomains',
+        }
+      : {}),
+    'cross-origin-opener-policy': 'same-origin',
+    'cross-origin-resource-policy': 'same-origin',
+    'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
+  };
+  for (const [name, value] of Object.entries(options.webApp?.headers ?? {})) {
+    const header = name.toLowerCase();
+    if (production || (header !== 'content-security-policy' && header !== 'strict-transport-security')) {
+      headers[header] = value;
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(headers).filter((entry): entry is [string, string] => entry[1] !== false)
+  );
+}
+
+/**
+ * What the generated modules carry in a phase: the application this file configures, with the development
+ * token's policy under `vp dev` alone, and a web app's binding and headers.
+ */
+export function projectOptions(
+  root: string,
+  options: MaximusOptions,
+  phase: Phase = 'production'
+): ProjectOptions {
   const { application } = split(options);
   const { name, version } = identity(root, options);
   const { audience = application.origin, development: _declared, ...tokens } = application.tokens ?? {};
@@ -205,7 +283,7 @@ export function projectOptions(root: string, options: MaximusOptions, mode = 'pr
       title: application.title ?? name,
       version,
       origin: application.origin,
-      tokens: { ...tokens, audience, ...(development && mode === 'development' ? { development } : {}) },
+      tokens: { ...tokens, audience, ...(development && phase === 'development' ? { development } : {}) },
       rpc: application.rpc ?? { callers: [] },
       ...(application.maxBodyBytes === undefined ? {} : { maxBodyBytes: application.maxBodyBytes }),
       ...(application.maxOutputBytes === undefined ? {} : { maxOutputBytes: application.maxOutputBytes }),
@@ -216,7 +294,7 @@ export function projectOptions(root: string, options: MaximusOptions, mode = 'pr
         basePath: application.http?.basePath ?? '/api',
         healthPath: application.http?.healthPath ?? '/health',
       },
-      ...(servesWebApp(root) ? { assets: { binding: ASSETS } } : {}),
+      ...(servesWebApp(root) ? { assets: { binding: ASSETS, headers: webAppHeaders(options, phase) } } : {}),
     },
     env: {
       production: workerEnv(root, options, 'production'),
@@ -226,13 +304,28 @@ export function projectOptions(root: string, options: MaximusOptions, mode = 'pr
 }
 
 /**
+ * Where a deployment serves the Worker unless the options route it themselves: at its `workers.dev`
+ * subdomain when the origin is one, and otherwise at the origin's host, as its custom domain alone.
+ */
+function hosting(options: MaximusOptions, worker: Omit<WorkerConfig, 'name' | 'entrypoint' | 'env'>) {
+  const { hostname } = new URL(options.origin);
+  const onWorkersDev = hostname.endsWith('.workers.dev');
+  const routed = worker.domains !== undefined || worker.triggers?.some(({ type }) => type === 'fetch');
+  return {
+    workersDev: onWorkersDev,
+    ...(onWorkersDev || routed ? {} : { domains: [hostname] }),
+  };
+}
+
+/**
  * The Worker Cloudflare's plugin builds: the options' settings, the generated entry, `nodejs_compat`, which
- * Maximus needs for its diagnostics, the bindings of the mode, a cron trigger for each cron module and, for a
- * web app, its build as assets every request reaches through the Worker, which decides what they answer.
+ * Maximus needs for its diagnostics, the bindings of the phase, where it is served, a cron trigger for each
+ * cron module and, for a web app, its build as assets every request reaches through the Worker, which
+ * decides what they answer.
  */
 export function workerConfig(
   root: string,
-  mode: string,
+  phase: Phase,
   options: MaximusOptions,
   crons: readonly { file: string; cron: string | undefined }[]
 ): WorkerConfig {
@@ -246,7 +339,7 @@ export function workerConfig(
     return triggers.scheduled({ schedule: cron });
   });
   return {
-    workersDev: true,
+    ...hosting(options, worker),
     previewUrls: false,
     observability: OBSERVABILITY,
     ...worker,
@@ -256,7 +349,7 @@ export function workerConfig(
     ...(servesWebApp(root)
       ? { assets: { htmlHandling: 'none', notFoundHandling: 'none', runWorkerFirst: true } }
       : {}),
-    env: workerEnv(root, options, mode) as WorkerConfig['env'],
+    env: workerEnv(root, options, phase) as WorkerConfig['env'],
     triggers: [...(worker.triggers ?? []), ...scheduled],
   };
 }

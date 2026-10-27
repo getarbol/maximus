@@ -18,23 +18,27 @@ const WEB_APP_DIRECTORIES = ['app', 'public'] as const;
 /** The root modules that complete the application, and the web app's HTML entry. */
 const ROOT_MODULE = /^(?:(?:errors|auth|context)\.(?:ts|mts|js|mjs)|index\.html)$/;
 
-/** What the plugin derives from `vite.config.ts` for a project's root and a Vite mode. */
-export type ProjectOptionsSource = (root: string, mode: string) => ProjectOptions;
+/**
+ * What the plugin derives from `vite.config.ts` for a project's root and a mode: `development` under
+ * `vp dev`, `production` for every build and preview, whatever their Vite mode.
+ */
+export type ProjectOptionsSource = (root: string, mode: 'development' | 'production') => ProjectOptions;
 /** What the plugin offers the `maximus prepare` command, which loads `vite.config.ts` to find it. */
 export interface ProjectApi {
-  /** Prepares the project at `root` for a mode, as a build would. */
-  prepare: (root: string, mode: string) => PreparedProject;
+  /** Prepares the project at `root` for a mode, as `vp dev` (`development`) or a build (`production`) would. */
+  prepare: (root: string, mode: 'development' | 'production') => PreparedProject;
 }
 
 /**
  * Prepares the project before every build and before Vite reloads source modules during development, and
  * asks for a restart when the Worker itself changes: a web app appears or goes, or a Durable Object does.
+ * The project is prepared for `development` under `vp dev` alone; every build is `production`.
  */
 export function maximusProject(project: ProjectOptionsSource): Plugin<ProjectApi> & { api: ProjectApi } {
   let root = process.cwd();
-  let mode = 'production';
+  let mode: 'development' | 'production' = 'production';
   let previous: PreparedProject | undefined;
-  const prepare = (directory: string, preparing: string) =>
+  const prepare = (directory: string, preparing: 'development' | 'production') =>
     prepareProject(directory, preparing, project(resolve(directory), preparing));
   const reconcile = () => {
     const current = prepare(root, mode);
@@ -58,7 +62,8 @@ export function maximusProject(project: ProjectOptionsSource): Plugin<ProjectApi
     api: { prepare },
     config(config, environment) {
       root = resolve(config.root ?? root);
-      ({ mode } = environment);
+      // Development is the dev server: a build or a preview is production, whatever its Vite mode.
+      mode = environment.command === 'serve' && !environment.isPreview ? 'development' : 'production';
       reconcile();
     },
     buildStart() {

@@ -1,20 +1,15 @@
 ---
 name: __PROJECT_NAME__-development
-description: Extend the __PROJECT_NAME__ Maximus backend using its optional file conventions.
+description: Extend the __PROJECT_NAME__ Maximus project with routes, MCP tools and tests that follow its conventions.
 ---
 
-Read CLAUDE.md and the installed Maximus skill. Configure the application and its Worker with maximus() in
-vite.config.ts; errors.ts, context.ts and auth.ts complete it in code.
-Add one file per route and method to routes/v1/ (tasks/index.get.ts, tasks/[taskId].delete.ts), each
-default-exporting defineHandler(handler, contract) from @arbol-ai/maximus with strict input/output schemas; declare a scope or
-effect only where the method's default is wrong, and MCP/RPC exposure explicitly. MCP-only tools are
-defineTool modules in mcp/tools/. Use optional src/ for
-named domain functions. Middleware is discovered in filename order: defineMiddleware wraps requests;
-defineOperationMiddleware applies policy after authentication across transports. Keep principal-based
-policy in the operation phase. Read the Maximus project-structure guide before adding another module kind.
-Build reconciliation owns .maximus/; never edit generated entries. Cloud resources and SQL remain explicit.
-Run bun run verify for non-test validation. Tests require a human request.
+Read CLAUDE.md and the Maximus skill (.agents/skills/maximus/SKILL.md) before changing the project.
 
-Vite+ owns the root toolchain: `vite.config.ts` configures lint/format, `vp check` checks them,
-`vp build` bundles the Worker and `vp dev` runs it locally. TypeScript and Cloudflare type generation
-remain part of `bun run verify`. Tests are never part of automatic deployment.
+- Add a route with `bunx maximus gen route <method> <path>`, then fill in its handler and its strict input
+  and output schemas. Declare a scope or effect only where the method's default is wrong, and `mcp` or `rpc`
+  only to expose the route there.
+- Add a tool only agents use with `bunx maximus gen tool <name>`, in mcp/tools/.
+- Put domain logic in named functions under src/, and what every handler needs in context.ts.
+- Answer expected failures with `fail(code)` from the catalog in errors.ts, declared in `failures`.
+- Cover each route in tests/ through `handler` from #maximus/http, including its refusals.
+- Run `bun run verify` before you finish. Never edit .maximus/; cloud resources and SQL stay explicit.

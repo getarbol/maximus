@@ -1,0 +1,2 @@
+__PROJECT_NAME__ greets the people of the organization your token belongs to. Call get_greeting to greet the
+caller. Every call acts for that organization alone.

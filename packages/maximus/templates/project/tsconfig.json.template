@@ -22,7 +22,7 @@
     "queues",
     "email",
     "durable-objects",
-    "db",
+    "tests",
     "errors.ts",
     "auth.ts",
     "context.ts",

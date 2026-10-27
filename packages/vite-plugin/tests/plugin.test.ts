@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { Plugin } from 'vite';
-import { afterEach, expect, test } from 'vite-plus/test';
+import { afterEach, expect, test, vi } from 'vite-plus/test';
 
 import { maximus } from '../src/index.ts';
 
@@ -30,19 +30,29 @@ afterEach(() => {
   }
 });
 
-/** Runs the `config` hook of maximus()'s own plugin, as Vite does before Cloudflare's. */
-async function configure(plugins: Plugin[], config: Record<string, unknown>, mode = 'production') {
+/** Runs the `config` hook of maximus()'s own plugin, as Vite does before Cloudflare's: a build by default. */
+async function configure(
+  plugins: Plugin[],
+  config: Record<string, unknown>,
+  environment: { mode?: string; command?: 'build' | 'serve'; isPreview?: boolean } = {}
+) {
   const plugin = plugins.find(({ name }) => name === 'maximus');
   const hook = plugin?.config;
   if (typeof hook !== 'function') {
     throw new TypeError('maximus() has no config hook');
   }
-  return (await hook.call({} as never, config, { mode, command: 'build' })) as Record<string, unknown>;
+  const { mode = 'production', command = 'build', isPreview = false } = environment;
+  return (await hook.call({} as never, config, { mode, command, isPreview })) as Record<string, unknown>;
 }
 
-test('prepares the project and keeps Cloudflare’s plugin after its own', async () => {
+test('prepares the project and keeps Cloudflare’s plugin after its own, out of Vitest alone', async () => {
   const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});' });
-  const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
+  const options = { origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' };
+  // Under Vitest, a project's tests import the generated application in Node, without workerd.
+  expect(maximus(options).map(({ name }) => name)).toEqual(['maximus', 'maximus-project']);
+  vi.stubEnv('VITEST', '');
+  const plugins = maximus(options);
+  vi.unstubAllEnvs();
   expect(plugins.map(({ name }) => name).slice(0, 2)).toEqual(['maximus', 'maximus-project']);
   expect(plugins.some(({ name }) => name === 'vite-plugin-cloudflare')).toBe(true);
   await configure(plugins, { root });
@@ -96,4 +106,17 @@ test("minifies the Worker's build, and only it, unless the configuration decides
   expect(environment('tasks', { build: { minify: 'terser' } })).toBeUndefined();
   // The browser's build keeps Vite's own default.
   expect(environment('client', {})).toBeUndefined();
+});
+
+test('development is vp dev: a build or a preview is production, whatever its Vite mode', async () => {
+  const root = project({ 'routes/v1/greeting.get.ts': 'export default defineHandler(() => {});' });
+  const plugins = maximus({ origin: 'https://tasks.example.test', compatibilityDate: '2026-10-26' });
+  const declared = async (environment: Parameters<typeof configure>[2]) => {
+    await configure(plugins, { root, lint: {}, fmt: {} }, environment);
+    return readFileSync(join(root, '.maximus/config.ts'), 'utf-8').includes('DEVELOPMENT_TOKEN');
+  };
+  expect(await declared({ command: 'serve', mode: 'development' })).toBe(true);
+  expect(await declared({ command: 'serve', mode: 'staging' })).toBe(true);
+  expect(await declared({ command: 'build', mode: 'development' })).toBe(false);
+  expect(await declared({ command: 'serve', mode: 'development', isPreview: true })).toBe(false);
 });

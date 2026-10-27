@@ -1,26 +1,25 @@
 /**
- * `maximus init`: a new project from the starter template, with every placeholder replaced, a
- * development token only its owner can read, agent guides linked to the project's own, and the names and
- * directories it refuses before writing anything.
+ * `maximus init`: a new project from the starter's layers (the API, the MCP server unless left out, the web
+ * app when asked for), with every placeholder replaced, JSON merged as the formatter writes it, a development
+ * token only its owner can read, the agent guides and the Maximus skill linked, and the names and directories
+ * it refuses before writing anything.
  */
 import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import { scaffold } from '../../src/tooling/internal/scaffold.ts';
+import { removeProjects, temporary } from './fixtures.ts';
 
 /** The release that scaffolds, which a new project depends on. */
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf-8')) as {
@@ -29,26 +28,18 @@ const { version } = JSON.parse(readFileSync(new URL('../../package.json', import
 /** The name refusal, for every name that is not lowercase kebab-case of 2 to 41 characters. */
 const BAD_NAME = 'Use a lowercase kebab-case project name of 2 to 41 characters.';
 
-const parents: string[] = [];
+afterEach(removeProjects);
 
-/** A directory that does not exist yet, in a temporary parent removed after the test. */
+/** A directory that does not exist yet, in a temporary parent. */
 function newDirectory(name = 'tasks'): string {
-  const parent = mkdtempSync(join(tmpdir(), 'maximus-init-'));
-  parents.push(parent);
-  return join(parent, name);
+  return join(temporary(), name);
 }
-
-afterEach(() => {
-  for (const parent of parents.splice(0)) {
-    rmSync(parent, { recursive: true, force: true });
-  }
-});
 
 /** Every file and link below `directory`, relative to `root`; links are listed, never followed. */
 function entries(root: string, directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
-    return entry.isDirectory() ? entries(root, path) : [relative(root, path)];
+    return entry.isDirectory() && !entry.isSymbolicLink() ? entries(root, path) : [relative(root, path)];
   });
 }
 
@@ -62,36 +53,49 @@ function read(root: string, file: string): string {
   return readFileSync(join(root, file), 'utf-8');
 }
 
-/** Today's date as the starter's compatibility date writes it, on either side of the scaffold. */
+/** Today's date as the starter's compatibility date writes it. */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-test('init writes the starter, with the name, release and date in every placeholder', () => {
+/** The files every starter has, whatever its layers. */
+const COMMON = [
+  '.agents/skills/maximus',
+  '.agents/skills/project/SKILL.md',
+  '.claude/skills/maximus',
+  '.claude/skills/project',
+  '.codex/skills/maximus',
+  '.codex/skills/project',
+  '.dev.vars',
+  '.github/workflows/ci.yml',
+  '.gitignore',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'README.md',
+];
+
+test('init writes the API with its MCP server, with the name, release and date in every placeholder', () => {
   const directory = newDirectory('billing-api');
   const before = today();
   const result = scaffold(directory, 'billing-api');
   const after = today();
-  expect(result).toMatchObject({ directory });
-  expect(result.next).toContain('The public home page says Hello World.');
-  expect(listing(directory)).toEqual([
-    '.agents/skills/project/SKILL.md',
-    '.claude/skills/project',
-    '.codex/skills/project',
-    '.dev.vars',
-    '.github/workflows/ci.yml',
-    '.gitignore',
-    'AGENTS.md',
-    'CLAUDE.md',
-    'README.md',
-    'middleware/10-response.ts',
-    'package.json',
-    'pages/index.ts',
-    'routes/v1/greeting.get.ts',
-    'routes/v1/greeting.post.ts',
-    'tsconfig.json',
-    'vite.config.ts',
-  ]);
+  expect(result).toMatchObject({ directory, mcp: true, web: false });
+  expect(result.next).toContain('bun run verify');
+  expect(listing(directory)).toEqual(
+    [
+      ...COMMON,
+      'mcp/instructions.md',
+      'middleware/10-response.ts',
+      'package.json',
+      'pages/index.ts',
+      'routes/v1/greeting.get.ts',
+      'routes/v1/greeting.post.ts',
+      'tests/greeting.test.ts',
+      'tests/mcp.test.ts',
+      'tsconfig.json',
+      'vite.config.ts',
+    ].toSorted()
+  );
   for (const file of listing(directory)) {
     if (!lstatSync(join(directory, file)).isSymbolicLink()) {
       expect(read(directory, file), file).not.toMatch(/__[A-Z_]+__/);
@@ -101,16 +105,47 @@ test('init writes the starter, with the name, release and date in every placehol
     name: string;
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
+    scripts: Record<string, string>;
   };
   expect(manifest.name).toBe('billing-api');
   expect(manifest.dependencies['@arbol-ai/maximus']).toBe(version);
   expect(manifest.devDependencies['@arbol-ai/vite-plugin']).toBe(version);
+  expect(manifest.scripts.verify).toContain('bun run test');
   expect(read(directory, 'vite.config.ts')).toContain("origin: 'https://billing-api.example.com',");
   expect([before, after]).toContain(
     /compatibilityDate: '(\d{4}-\d{2}-\d{2})'/.exec(read(directory, 'vite.config.ts'))?.[1]
   );
-  expect(read(directory, '.gitignore').split('\n')).toContain('.maximus/');
-  expect(read(directory, 'routes/v1/greeting.get.ts')).toContain('the scope is billing-api:greeting:read');
+  // The MCP layer's route replaces the API's own: the greeting is also a tool.
+  expect(read(directory, 'routes/v1/greeting.get.ts')).toContain("mcp: { name: 'get_greeting' }");
+  expect(read(directory, 'routes/v1/greeting.get.ts')).toContain('billing-api:greeting:read');
+});
+
+test('init without MCP writes the API alone, and with a web app replaces the public page with React pages', () => {
+  const api = newDirectory();
+  expect(scaffold(api, 'tasks', { mcp: false })).toMatchObject({ mcp: false, web: false });
+  expect(existsSync(join(api, 'mcp'))).toBe(false);
+  expect(existsSync(join(api, 'tests/mcp.test.ts'))).toBe(false);
+  expect(read(api, 'routes/v1/greeting.get.ts')).not.toContain('mcp');
+
+  const web = newDirectory();
+  expect(scaffold(web, 'tasks', { web: true })).toMatchObject({ mcp: true, web: true });
+  expect(existsSync(join(web, 'pages/index.ts'))).toBe(false);
+  for (const file of ['index.html', 'app/main.tsx', 'app/root.tsx', 'app/routes/index.tsx']) {
+    expect(existsSync(join(web, file)), file).toBe(true);
+  }
+  expect(read(web, 'vite.config.ts')).toContain('react(),');
+  // The web layer's JSON merges into the API's, sorted and laid out as the formatter writes it.
+  const manifest = read(web, 'package.json');
+  expect(JSON.parse(manifest)).toMatchObject({
+    dependencies: { react: '19.3.1', 'react-router': '8.5.0', '@arbol-ai/maximus': version },
+    devDependencies: { '@vitejs/plugin-react': '6.1.2', 'vite-plus': '1.4.0' },
+  });
+  const devDependencies = Object.keys((JSON.parse(manifest) as { devDependencies: object }).devDependencies);
+  expect(devDependencies).toEqual(devDependencies.toSorted());
+  const tsconfig = read(web, 'tsconfig.json');
+  expect(tsconfig).toContain('"lib": ["ES2024", "DOM", "DOM.Iterable"],');
+  expect(tsconfig).toContain('"jsx": "react-jsx"');
+  expect(tsconfig).toContain('    "app"\n');
 });
 
 test('.dev.vars holds a fresh 32-byte development token only its owner can read, and Git ignores it', () => {
@@ -122,13 +157,16 @@ test('.dev.vars holds a fresh 32-byte development token only its owner can read,
   expect(token).toBeDefined();
   expect(statSync(join(first, '.dev.vars')).mode & 0o777).toBe(0o600);
   expect(read(second, '.dev.vars')).not.toContain(token);
-  expect(read(first, '.gitignore').split('\n')).toContain('.dev.vars*');
+  expect(read(first, '.gitignore').split('\n')).toEqual(expect.arrayContaining(['.dev.vars*', '.maximus/']));
 });
 
-test("AGENTS.md and each harness's skill folder link to the project's own guide and skill", () => {
+test("AGENTS.md and each agent's skills link to the project's own guide and the installed Maximus skill", () => {
   const directory = newDirectory();
-  scaffold(directory, 'tasks');
-  expect(lstatSync(join(directory, 'AGENTS.md')).isSymbolicLink()).toBe(true);
+  expect(scaffold(directory, 'tasks').skills).toEqual([
+    '.agents/skills/maximus',
+    '.claude/skills/maximus',
+    '.codex/skills/maximus',
+  ]);
   expect(readlinkSync(join(directory, 'AGENTS.md'))).toBe('CLAUDE.md');
   expect(read(directory, 'AGENTS.md')).toBe(read(directory, 'CLAUDE.md'));
   for (const harness of ['.claude', '.codex']) {
@@ -137,6 +175,11 @@ test("AGENTS.md and each harness's skill folder link to the project's own guide 
     );
     expect(read(directory, `${harness}/skills/project/SKILL.md`), harness).toContain(
       'name: tasks-development'
+    );
+  }
+  for (const harness of ['.agents', '.claude', '.codex']) {
+    expect(readlinkSync(join(directory, harness, 'skills/maximus')), harness).toBe(
+      '../../node_modules/@arbol-ai/maximus/skills/maximus'
     );
   }
 });

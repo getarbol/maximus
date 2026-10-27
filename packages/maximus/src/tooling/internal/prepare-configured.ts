@@ -36,7 +36,10 @@ function projectApi(plugin: unknown): ProjectApi | undefined {
  * `vp` command does, and prepares it through the `maximus()` plugin it configures. Application modules are
  * only parsed.
  */
-export async function prepareConfiguredProject(directory: string, mode = 'production') {
+export async function prepareConfiguredProject(
+  directory: string,
+  mode: 'development' | 'production' = 'production'
+) {
   const root = resolve(directory);
   const viteConfig = VITE_CONFIGS.find((name) => existsSync(join(root, name)));
   if (!viteConfig) {

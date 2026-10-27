@@ -1,0 +1,9 @@
+/** The home page, at /: app/routes/ holds the pages, named as their paths. */
+export default function Home() {
+  return (
+    <p>
+      Hello World. The API answers below <code>/api</code>, and <a href="/api/openapi.json">its OpenAPI</a>{' '}
+      describes it.
+    </p>
+  );
+}

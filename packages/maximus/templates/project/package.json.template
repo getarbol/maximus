@@ -8,13 +8,14 @@
   },
   "scripts": {
     "prepare": "maximus prepare",
-    "prepare:project": "maximus prepare",
     "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "test": "vp test run",
     "typecheck": "maximus prepare && tsc",
     "check": "vp check",
     "fix": "vp check --fix",
-    "build": "vp build",
-    "verify": "bun run typecheck && bun run check && bun run build",
+    "verify": "bun run typecheck && bun run check && bun run test && bun run build",
     "deploy": "bun run verify && cf deploy --prebuilt --mode production"
   },
   "dependencies": {

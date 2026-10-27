@@ -13,9 +13,9 @@ import type { WorkerConfig } from 'cf/config';
 import type { Plugin } from 'vite';
 
 import { checkWebAppBuild, projectOptions, workerConfig } from './options.ts';
-import type { MaximusOptions } from './options.ts';
+import type { MaximusOptions, Phase } from './options.ts';
 
-export type { MaximusOptions, TokenOptions } from './options.ts';
+export type { MaximusOptions, Phase, TokenOptions, WebAppOptions } from './options.ts';
 
 /**
  * The Maximus lint and format presets, for each of `lint` and `fmt` the configuration does not set itself.
@@ -48,20 +48,22 @@ async function presets(config: object): Promise<Record<string, unknown>> {
  * Cloudflare's Vite plugin.
  */
 export function maximus(options: MaximusOptions): Plugin[] {
-  const project = maximusProject((root, mode) => projectOptions(root, options, mode));
+  const project = maximusProject((root, phase) => projectOptions(root, options, phase));
   let worker: WorkerConfig | undefined;
   const configure: Plugin = {
     name: 'maximus',
     enforce: 'pre',
-    async config(config, { mode }) {
+    async config(config, { command, isPreview }) {
       const root = resolve(config.root ?? process.cwd());
+      // Development is `vp dev`: a build or a preview is production, whatever its Vite mode.
+      const phase: Phase = command === 'serve' && !isPreview ? 'development' : 'production';
       if (existsSync(join(root, 'cloudflare.config.ts'))) {
         throw new TypeError(
           "maximus() configures the Worker: move cloudflare.config.ts into maximus()'s options."
         );
       }
       checkWebAppBuild(root, config);
-      worker = workerConfig(root, mode, options, project.api.prepare(root, mode).crons);
+      worker = workerConfig(root, phase, options, project.api.prepare(root, phase).crons);
       return await presets(config);
     },
     // The Worker's build is minified unless the configuration says otherwise: a smaller upload, and less code
@@ -73,6 +75,11 @@ export function maximus(options: MaximusOptions): Plugin[] {
       return undefined;
     },
   };
+  // Under Vitest, a project's tests import the generated application in Node: Cloudflare's plugin, which
+  // would run them in workerd's dev environment, stays out.
+  if (process.env.VITEST) {
+    return [configure, project];
+  }
   // Cloudflare's plugin parses what the customizer returns with its input schema, as it parses
   // cloudflare.config.ts; its type names the parsed form.
   const customize = () => worker as Exclude<PluginConfig['config'], (...args: never[]) => unknown>;

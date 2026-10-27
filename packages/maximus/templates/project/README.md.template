@@ -1,51 +1,46 @@
-# `__PROJECT_NAME__`
+# __PROJECT_NAME__
 
-A Maximus backend on Cloudflare Workers, with Vite+ as its default toolchain. `GET /` returns **Hello World**, `/health` reports liveness,
-and `/api/openapi.json` describes the API. `GET /api/v1/greeting` is authenticated. `vite.config.ts` is
-the only configuration: replace its token issuer with your authorization server before production callers.
+A [Maximus](https://github.com/getarbol/maximus) project: an API on Cloudflare Workers whose routes are also
+MCP tools when they say so, configured in one file, `vite.config.ts`.
 
-## Development
+## Start
 
-Install dependencies with `bun install`, then run `bun run dev`. The local development token is in
-the ignored `.dev.vars` file. It is accepted only on localhost and is excluded from production builds.
-`bun run verify` generates types, checks TypeScript, lint and formatting, and builds. It runs no tests.
+```sh
+bun install
+bun run dev
+```
 
-## Structure
+`GET /api/v1/greeting` answers `{ "message": "Hello World" }` to a signed-in caller. Locally, sign in with the
+development token in `.dev.vars`, which `vp dev` accepts from localhost alone:
 
-The [Maximus project layout](https://github.com/getarbol/maximus/blob/main/docs/guides/project-structure.md)
-uses optional directories. Add only the modules the service needs:
+```sh
+curl -H "authorization: Bearer $(cut -d= -f2 .dev.vars)" http://localhost:5173/api/v1/greeting
+```
 
-| Directory        | Convention                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------- |
-| routes/          | One `defineHandler` per file: `greeting.get.ts` answers `GET /api/v1/greeting`.       |
-| mcp/tools/       | `defineTool` modules only MCP serves, named by their file.                            |
-| pages/           | Fixed-path public response handlers; index.ts serves `/`.                             |
-| middleware/      | Ordered HTTP wrappers or post-admission operation policy.                             |
-| crons/           | A `cron` export and a default native scheduled handler.                               |
-| queues/          | Default queue handlers named after the physical queue.                                |
-| email/           | Default email handlers named after the full recipient; `_default.ts` is the fallback. |
-| durable-objects/ | Default classes re-exported in PascalCase from kebab-case filenames.                  |
-| db/              | Application-owned schemas and SQL migrations, applied explicitly.                     |
-| src/             | Optional shared domain code; application configuration lives at the root.             |
-| public/          | Optional static assets; configure the binding and admitted files before using it.     |
-| .maximus/        | Generated imports; ignored and never edited by hand.                                  |
+`/api/openapi.json` describes the API and `/health` reports liveness.
 
-The Vite plugin reconciles modules on every build and source change. `maximus()` in vite.config.ts
-configures the application and its Worker: origin, tokens, compatibility date and bindings, from which
-`Env` is generated. Optional root modules complete it: `errors.ts` (the error catalog), `context.ts`
-(what every handler receives) and `auth.ts` (tokens the application verifies itself). No src/ directory
-or manual route registration is required. `bun run prepare:project` generates the same imports for
-editors. Files starting with `_` are ignored except `email/_default.ts`; `.dev.ts` and `.prod.ts` select
-their matching mode. A cron module's literal schedule becomes its trigger; queue subscriptions, email
-routing and Durable Object migrations remain explicit. Adding a handler never provisions infrastructure.
+## Build on it
 
-## Deployment
+| Add                      | How                                                                         |
+| ------------------------ | --------------------------------------------------------------------------- |
+| A route                  | `bunx maximus gen route get /v1/tasks/{taskId}` writes its file in routes/  |
+| A tool only agents call  | `bunx maximus gen tool summarize-tasks` writes mcp/tools/summarize-tasks.ts |
+| A binding (KV, D1, …)    | `env: { TASKS: bindings.kv() }` in maximus(), from `cf/config`              |
+| Your own failures        | `errors.ts` default-exports `defineErrors({ … })`                           |
+| What every handler needs | `context.ts` default-exports `defineContext(…)`                             |
 
-Before deploying, replace the origin in vite.config.ts with the deployed HTTPS URL.
-The GitHub workflow checks pull requests and deploys pushes to `main`. Configure repository or
-organization secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The token needs permission to
-deploy this Worker. `bun run deploy` performs the same non-test validation and deployment locally.
+`.maximus/` is generated from these files on every `vp dev` and `vp build`; never edit it.
 
-Vite+ owns the root toolchain: `vite.config.ts` configures lint/format, `vp check` checks them,
-`vp build` bundles the Worker and `vp dev` runs it locally. TypeScript and Cloudflare type generation
-remain part of `bun run verify`. Tests are never part of automatic deployment.
+## Verify and deploy
+
+`bun run verify` runs the types, lint and format, the tests and the build. Before the first deployment, set
+`origin` to the Worker's HTTPS URL (its workers.dev URL or a custom domain you own) and `tokens.issuer` to
+your authorization server. Then:
+
+```sh
+bunx cf auth login
+bun run deploy
+```
+
+The GitHub workflow verifies every pull request and deploys `main` with the repository secrets
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.

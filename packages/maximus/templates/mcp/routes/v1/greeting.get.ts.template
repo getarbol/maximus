@@ -1,0 +1,11 @@
+import { defineHandler, t } from '@arbol-ai/maximus';
+
+/**
+ * GET /api/v1/greeting, and the MCP tool get_greeting: the file's name is its path and method, and its scope
+ * is __PROJECT_NAME__:greeting:read.
+ */
+export default defineHandler(() => ({ message: 'Hello World' }), {
+  description: 'Greet the authenticated caller.',
+  output: { message: t.String() },
+  mcp: { name: 'get_greeting' },
+});

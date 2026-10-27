@@ -115,7 +115,8 @@ test('the Worker gets its entry, nodejs_compat once, the mode’s bindings and a
     compatibilityDate: '2026-10-26',
     compatibilityFlags: ['nodejs_compat', 'streams_enable_constructors'],
     entrypoint: './.maximus/entry.ts',
-    workersDev: true,
+    workersDev: false,
+    domains: ['tasks.example.test'],
     previewUrls: false,
     observability: {
       enabled: true,
@@ -152,7 +153,10 @@ test('a web app, index.html at the root, gets its assets binding in every mode a
   writeFileSync(join(app, 'index.html'), '<!doctype html><div id="root"></div>');
   const options: MaximusOptions = { ...minimal, env: { TASKS: bindings.kv() } };
   expect(projectOptions(app, options)).toMatchObject({
-    worker: { http: { basePath: '/api', healthPath: '/health' }, assets: { binding: 'ASSETS' } },
+    worker: {
+      http: { basePath: '/api', healthPath: '/health' },
+      assets: { binding: 'ASSETS', headers: expect.any(Object) },
+    },
     env: {
       production: { TASKS: { type: 'kv' }, ASSETS: { type: 'assets' } },
       development: {
@@ -167,9 +171,71 @@ test('a web app, index.html at the root, gets its assets binding in every mode a
   expect(worker.env).toEqual({ TASKS: { type: 'kv' }, ASSETS: { type: 'assets' } });
   // Without index.html, the Worker has no assets.
   expect(workerConfig(root(), 'production', options, []).assets).toBeUndefined();
-  expect(projectOptions(root(), options)?.worker).toEqual({
+  expect(projectOptions(root(), options).worker).toEqual({
     http: { basePath: '/api', healthPath: '/health' },
   });
+});
+
+test('a workers.dev origin is served there, and any other is the custom domain unless the options route the Worker', () => {
+  const at = (origin: string, extra: Partial<MaximusOptions> = {}) => {
+    const { workersDev, domains } = workerConfig(root(), 'production', { ...minimal, origin, ...extra }, []);
+    return { workersDev, domains };
+  };
+  expect(at('https://tasks.arbol.workers.dev')).toEqual({ workersDev: true, domains: undefined });
+  expect(at('https://api.arbol.health')).toEqual({ workersDev: false, domains: ['api.arbol.health'] });
+  expect(at('https://api.arbol.health', { domains: ['tasks.arbol.health'] })).toEqual({
+    workersDev: false,
+    domains: ['tasks.arbol.health'],
+  });
+  expect(
+    at('https://api.arbol.health', { triggers: [triggers.fetch({ pattern: 'api.arbol.health/tasks/*' })] })
+  ).toEqual({ workersDev: false, domains: undefined });
+  expect(at('https://api.arbol.health', { workersDev: true })).toEqual({
+    workersDev: true,
+    domains: ['api.arbol.health'],
+  });
+});
+
+test("a web app's pages and files carry secure headers, the policy admitting the token issuer, and the options' own", () => {
+  const app = root();
+  writeFileSync(join(app, 'index.html'), '<!doctype html>');
+  const tokens = { issuer: 'https://auth.arbol.test/', tokenEndpoint: 'https://login.arbol.test/token' };
+  const headers = (phase: 'development' | 'production', webApp?: MaximusOptions['webApp']) =>
+    projectOptions(app, { ...minimal, tokens, webApp }, phase).worker.assets?.headers;
+  expect(headers('production')).toEqual({
+    'content-security-policy':
+      "default-src 'self'; base-uri 'self'; connect-src 'self' https://auth.arbol.test https://login.arbol.test; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests",
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'cross-origin-opener-policy': 'same-origin',
+    'cross-origin-resource-policy': 'same-origin',
+    'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
+  });
+  // vp dev runs Vite's inline client over plain HTTP: no policy and no HSTS, even the options' own.
+  expect(
+    headers('development', {
+      headers: { 'Content-Security-Policy': "default-src 'none'", 'X-Frame-Options': false },
+    })
+  ).toEqual({
+    'cross-origin-opener-policy': 'same-origin',
+    'cross-origin-resource-policy': 'same-origin',
+    'referrer-policy': 'no-referrer',
+  });
+  expect(
+    headers('production', {
+      headers: {
+        'content-security-policy': "default-src 'self' https://cdn.arbol.test",
+        'permissions-policy': 'camera=()',
+      },
+    })
+  ).toMatchObject({
+    'content-security-policy': "default-src 'self' https://cdn.arbol.test",
+    'permissions-policy': 'camera=()',
+  });
+  // Without an issuer, the pages call their own origin alone.
+  expect(projectOptions(app, minimal).worker.assets?.headers?.['content-security-policy']).toContain(
+    "connect-src 'self';"
+  );
 });
 
 test('a web app refuses a binding of its own named ASSETS', () => {

@@ -1,0 +1,15 @@
+/** The layout around every page, and what a page that fails shows instead. */
+import { Outlet } from 'react-router';
+
+export default function Root() {
+  return (
+    <main>
+      <h1>__PROJECT_NAME__</h1>
+      <Outlet />
+    </main>
+  );
+}
+
+export function ErrorBoundary() {
+  return <p role="alert">Something went wrong.</p>;
+}

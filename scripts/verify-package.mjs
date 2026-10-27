@@ -274,8 +274,46 @@ assert.equal(classifyTransactionFailure(new Error(), 'commit').code, 'COMMIT_UNC
     !projectBuild.includes('DEVELOPMENT_TOKEN'),
     'A deployed project build declares the development token'
   );
+  // create-maximus, packed the same way, creates the same starter with the exact release it depends on.
+  const create = resolve('packages/create-maximus');
+  const createManifest = JSON.parse(readFileSync(join(create, 'package.json'), 'utf-8'));
+  assert.equal(createManifest.version, manifest.version, 'The packages share one version');
+  execFileSync('bun', ['pm', 'pack', '--destination', directory], { cwd: create, stdio: 'pipe' });
+  const createArchive = join(directory, `create-maximus-${createManifest.version}.tgz`);
+  const packedCreate = JSON.parse(
+    execFileSync('tar', ['-xOzf', createArchive, 'package/package.json'], { encoding: 'utf-8' })
+  );
+  assert.equal(
+    packedCreate.dependencies['@arbol-ai/maximus'],
+    manifest.version,
+    'create-maximus pins its release'
+  );
+  const createBytes = readFileSync(createArchive);
+  const createLinted = await publint({
+    pack: {
+      tarball: createBytes.buffer.slice(
+        createBytes.byteOffset,
+        createBytes.byteOffset + createBytes.byteLength
+      ),
+    },
+    strict: true,
+  });
+  assert.deepEqual(
+    createLinted.messages.map((message) => formatMessage(message, createLinted.pkg, { color: false })),
+    [],
+    'publint of create-maximus'
+  );
+  install({ '@arbol-ai/maximus': archive, 'create-maximus': createArchive });
+  execFileSync(
+    process.execPath,
+    [join(directory, 'node_modules/create-maximus/dist/index.js'), 'created', '--web', '--yes'],
+    { cwd: directory, stdio: 'pipe' }
+  );
+  for (const file of ['routes/v1/greeting.get.ts', 'mcp/instructions.md', 'index.html', '.dev.vars']) {
+    assert(existsSync(join(directory, 'created', file)), `create-maximus did not write ${file}`);
+  }
   console.info(
-    `Packed packages, their entries and the starter passed (${manifest.name} and ${pluginManifest.name}@${manifest.version}).`
+    `Packed packages, their entries, the starter and create-maximus passed (${manifest.name}, ${pluginManifest.name} and ${createManifest.name}@${manifest.version}).`
   );
 } finally {
   rmSync(directory, { recursive: true, force: true });

@@ -1,0 +1,47 @@
+import { expect, it } from 'vite-plus/test';
+
+import { handler } from '#maximus/http';
+
+/**
+ * `vp test` prepares the project as `vp dev` does, so the API accepts this development token from localhost,
+ * as a developer who holds every scope.
+ */
+const token = 'test-development-token-for-local-tests';
+const env = { DEVELOPMENT_TOKEN: token } as Env;
+
+/** Calls the API as the Worker serves it, with the development token unless `signedIn` is false. */
+function call(path: string, init: RequestInit = {}, signedIn = true) {
+  const headers = new Headers(init.headers);
+  if (signedIn) {
+    headers.set('authorization', `Bearer ${token}`);
+  }
+  return handler(new Request(`http://localhost${path}`, { ...init, headers }), env);
+}
+
+/** Posts a JSON body to the API. */
+function post(path: string, body: unknown) {
+  return call(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+it('greets an authenticated caller', async () => {
+  const response = await call('/api/v1/greeting');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ success: true, data: { message: 'Hello World' } });
+});
+
+it('greets a caller by name, and refuses a name it cannot use', async () => {
+  expect(await (await post('/api/v1/greeting', { name: 'Ana' })).json()).toMatchObject({
+    data: { message: 'Hello, Ana' },
+  });
+  const refused = await post('/api/v1/greeting', { name: '' });
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({ success: false, error: { code: 'INVALID_INPUT' } });
+});
+
+it('refuses a caller without a token', async () => {
+  expect((await call('/api/v1/greeting', {}, false)).status).toBe(401);
+});

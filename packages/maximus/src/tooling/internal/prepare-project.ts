@@ -31,9 +31,12 @@ export interface ProjectOptions {
   };
   /**
    * The API's base path and the health path the Worker serves, and, for a web app (`index.html` at the
-   * project's root), the static assets binding its build is served through.
+   * project's root), the static assets binding its build is served through and the headers of its responses.
    */
-  worker: { http: { basePath: string; healthPath: string }; assets?: { binding: string } };
+  worker: {
+    http: { basePath: string; healthPath: string };
+    assets?: { binding: string; headers?: Readonly<Record<string, string>> };
+  };
   /** The bindings each mode declares, as `cf/config` states them: the generated `Env` is inferred from them. */
   env: { production: Readonly<Record<string, unknown>>; development: Readonly<Record<string, unknown>> };
 }
@@ -295,6 +298,7 @@ function discoverWebApp(
   // Vite's modules through the binding; a production build forwards nothing else.
   const policy = [
     `binding: ${JSON.stringify(web.binding)}`,
+    ...(web.headers && Object.keys(web.headers).length ? [`headers: ${JSON.stringify(web.headers)}`] : []),
     `pages: { paths: ${JSON.stringify(shell.paths)}, patterns: [${shell.patterns.join(', ')}] }`,
     `files: ${JSON.stringify(publicFiles(root))}`,
     "immutablePrefixes: ['/assets']",
@@ -343,9 +347,9 @@ function writeGenerated(
 }
 
 /**
- * Prepares the project at `directory` for a mode: discovers its modules, refuses what would build a Worker
- * other than the one its files describe, and writes `.maximus/`. A refusal never replaces the previous
- * output.
+ * Prepares the project at `directory` for a mode, `development` under `vp dev` and `production` for every
+ * build: discovers its modules, refuses what would build a Worker other than the one its files describe, and
+ * writes `.maximus/`. A refusal never replaces the previous output.
  */
 export function prepareProject(directory: string, mode: string, project: ProjectOptions): PreparedProject {
   const root = resolve(directory);
@@ -524,6 +528,21 @@ export function prepareProject(directory: string, mode: string, project: Project
         'export default worker.handler;',
         'export const Service = worker.entrypoint;',
         ...durableObjects,
+      ]
+    ),
+    // The HTTP handler the Worker serves, without the Workers runtime: what a project's tests call in Node.
+    'http.ts': generatedModule(
+      mode,
+      [
+        "import { createHttpHandler } from '@arbol-ai/maximus';",
+        ...(servesMcp ? ["import { mcp } from '@arbol-ai/maximus/mcp';"] : []),
+        "import { app } from './app.ts';",
+        "import { worker } from './config.ts';",
+        "import { requestMiddleware } from './middleware.ts';",
+      ],
+      [
+        '/** The API as the Worker serves it, below its base path and behind its middleware, for tests in Node. */',
+        `export const handler = createHttpHandler(app, { ...worker.http, middleware: requestMiddleware${servesMcp ? ', transports: [mcp()]' : ''} });`,
       ]
     ),
     // The stable entry Cloudflare's plugin builds, whatever the Worker module exports.

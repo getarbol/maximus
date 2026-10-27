@@ -1,0 +1,48 @@
+{
+  "name": "create-maximus",
+  "version": "7.4.0",
+  "description": "Create a Maximus project: an API on Cloudflare Workers whose routes are MCP tools, with an optional React app.",
+  "keywords": [
+    "cloudflare-workers",
+    "create",
+    "maximus",
+    "mcp",
+    "scaffold",
+    "vite-plus"
+  ],
+  "homepage": "https://github.com/getarbol/maximus#readme",
+  "bugs": {
+    "url": "https://github.com/getarbol/maximus/issues"
+  },
+  "license": "MIT",
+  "author": "Arbol",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getarbol/maximus.git",
+    "directory": "packages/create-maximus"
+  },
+  "bin": {
+    "create-maximus": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@arbol-ai/maximus": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0"
+  }
+}

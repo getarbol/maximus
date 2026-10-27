@@ -64,6 +64,22 @@ test('pages become lazy React Router routes in the root layout, and the paths th
   expect(generated(root, 'worker.ts')).toContain('development: true }');
 });
 
+test("the app's headers join its asset policy as plain data", () => {
+  const root = project({ 'index.html': '<!doctype html>' });
+  const configured = options({ web: true });
+  const headers = { 'content-security-policy': "default-src 'self'", 'x-frame-options': 'DENY' };
+  prepare(root, 'production', {
+    ...configured,
+    worker: { ...configured.worker, assets: { binding: 'ASSETS', headers } },
+  });
+  expect(generated(root, 'worker.ts')).toContain(
+    `assets: { binding: "ASSETS", headers: ${JSON.stringify(headers)}, pages:`
+  );
+  // No headers, no field.
+  prepare(root, 'production', web);
+  expect(generated(root, 'worker.ts')).not.toContain('headers:');
+});
+
 test('without app/routes/, index.html is the one page, at the root, and no routes module is generated', () => {
   const root = project({ 'index.html': '<!doctype html>' });
   expect(prepare(root, 'production', web)).toMatchObject({ webApp: true, modules: { app: 0 } });
