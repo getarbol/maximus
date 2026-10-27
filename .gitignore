@@ -18,3 +18,4 @@ packages/vite-plugin/LICENSE
 packages/create-maximus/LICENSE
 
 .vite-plus/
+.e2e/

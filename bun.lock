@@ -18,6 +18,13 @@
         "vitest": "5.0.5",
       },
     },
+    "e2e": {
+      "name": "@maximus-examples/e2e",
+      "devDependencies": {
+        "@types/node": "26.6.5",
+        "vite-plus": "1.4.0",
+      },
+    },
     "examples/browser-pages": {
       "name": "@maximus-examples/browser-pages",
       "dependencies": {
@@ -318,6 +325,8 @@
     "@maximus-examples/d1-notes": ["@maximus-examples/d1-notes@workspace:examples/d1-notes"],
 
     "@maximus-examples/do-appointments": ["@maximus-examples/do-appointments@workspace:examples/do-appointments"],
+
+    "@maximus-examples/e2e": ["@maximus-examples/e2e@workspace:e2e"],
 
     "@maximus-examples/orders": ["@maximus-examples/orders@workspace:examples/worker-rpc/orders"],
 

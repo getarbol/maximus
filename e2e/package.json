@@ -1,0 +1,12 @@
+{
+  "name": "@maximus-examples/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "vite-plus": "1.4.0"
+  }
+}

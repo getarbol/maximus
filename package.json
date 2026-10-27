@@ -4,13 +4,16 @@
   "workspaces": [
     "packages/*",
     "examples/*",
-    "examples/worker-rpc/*"
+    "examples/worker-rpc/*",
+    "e2e"
   ],
   "type": "module",
   "scripts": {
     "build": "node scripts/prepare-package.mjs && vp run -r build",
     "typecheck": "vp run -r typecheck",
     "test": "vp test run --project unit --project '@maximus-examples/*'",
+    "test:e2e": "node e2e/run.ts",
+    "deploy:examples": "node e2e/deploy.ts",
     "check": "vp run typecheck && vp check",
     "fix": "vp check --fix",
     "verify": "bun run build && bun run check",

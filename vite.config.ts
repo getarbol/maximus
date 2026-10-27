@@ -15,8 +15,9 @@ export default defineConfig({
     ignorePatterns: preset.ignorePatterns,
     overrides: [
       {
-        // The CLIs run in Node: its fetch honors redirect: 'error', and they read their own environment.
-        files: ['packages/maximus/src/tooling/**', 'packages/vite-plugin/src/**'],
+        // The CLIs and the end-to-end harness run in Node: its fetch honors redirect: 'error', and they read
+        // their own environment.
+        files: ['packages/maximus/src/tooling/**', 'packages/vite-plugin/src/**', 'e2e/**'],
         rules: { 'maximus/no-fetch-redirect-error': 'off', 'no-restricted-properties': 'off' },
       },
     ],
@@ -54,6 +55,10 @@ export default defineConfig({
       // Each example runs its tests under its own configuration, whose maximus() prepares it as vp dev does.
       'examples/*/vite.config.ts',
       'examples/*/*/vite.config.ts',
+      {
+        // The examples' Workers running, which `bun run test:e2e` (e2e/run.ts) starts or finds deployed.
+        test: { name: 'e2e', include: ['e2e/**/*.e2e.test.ts'], testTimeout: 60_000 },
+      },
     ],
     coverage: {
       provider: 'v8',
