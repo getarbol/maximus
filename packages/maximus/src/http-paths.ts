@@ -50,7 +50,7 @@ export function decodePathParameter(segment: string): string | null {
   }
 }
 
-/** Item keys are nonempty strings that cannot change URL path ownership when encoded. */
+/** Item keys are nonempty strings, encodable as UTF-8, that cannot change URL path ownership when encoded. */
 export function isPathParameterValue(value: unknown): value is string {
   if (
     typeof value !== 'string' ||
@@ -62,8 +62,9 @@ export function isPathParameterValue(value: unknown): value is string {
     return false;
   }
   for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code < 32 || code === 127) {
+    // A lone surrogate has no UTF-8 form, so no URL can carry it.
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 32 || code === 127 || (code >= 0xd8_00 && code <= 0xdf_ff)) {
       return false;
     }
   }

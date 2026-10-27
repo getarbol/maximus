@@ -63,6 +63,10 @@ dates of the release commits.
 - Project discovery sees the MCP tool of a route declared as a `const` it default-exports, which it
   missed, leaving the Worker without the MCP transport. A route whose fields it cannot read, behind a
   spread, a computed key or another module, is refused instead of silently left unserved.
+- The typed client serializes as an empty object instead of starting a call through `toJSON` that
+  nobody awaits; gives an attachment envelope the request id its response carries only when it is one,
+  as a JSON envelope does; cancels the body of an attachment whose length it refuses; and refuses a path
+  value with a lone surrogate with its `TypeError` instead of a `URIError`.
 
 ## 7.4.0 (2026-10-26)
 

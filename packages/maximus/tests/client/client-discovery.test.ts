@@ -134,6 +134,14 @@ it('is not a thenable and has no symbol members, so awaiting it sends nothing', 
   expect(transport).not.toHaveBeenCalled();
 });
 
+it('serializes as an empty object, so logging a value that holds it sends nothing', () => {
+  const transport = vi.fn<typeof fetch>();
+  const client = createClient<typeof app>(app.origin, 'a.b.c', { fetch: transport });
+  expect(Reflect.get(client, 'toJSON')).toBeUndefined();
+  expect(JSON.stringify({ client })).toBe('{"client":{}}');
+  expect(transport).not.toHaveBeenCalled();
+});
+
 it('refuses an operation that the contract does not publish', async () => {
   const transport = serve();
   const client = createClient<typeof app>(app.origin, 'a.b.c', { fetch: transport });

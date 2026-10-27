@@ -297,6 +297,21 @@ it('gives an attachment envelope an empty request id when its response has none'
   });
 });
 
+it('gives an attachment envelope an empty request id when its response carries no valid one', async () => {
+  const client = createClient<typeof app>(app.origin, 'a.b.c', {
+    fetch: answering(
+      () =>
+        new Response('hello', {
+          headers: { 'content-length': '5', 'x-request-id': 'customer=4711; plan=gold' },
+        })
+    ),
+  });
+  await expect(client.downloadFile({ fileId: 'notes' })).resolves.toMatchObject({
+    success: true,
+    metadata: { requestId: '' },
+  });
+});
+
 it('answers an attachment refusal with its failure envelope, or rejects it in data mode', async () => {
   const envelopes = createClient<typeof app>(app.origin, 'a.b.c', { fetch: serve() });
   await expect(envelopes.downloadFile({ fileId: 'missing' })).resolves.toMatchObject({

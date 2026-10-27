@@ -142,14 +142,22 @@ it('puts each path field in its own encoded segment and the rest of a GET in its
   expect(transport.mock.calls[1]?.[1]?.body).toBeUndefined();
 });
 
-it.each(['', '.', '..', 'a/b', String.raw`a\b`, 'line\nbreak', 'nul\u0000', 'delete\u007F'])(
-  'refuses the path value %j before sending it',
-  async (recordId) => {
-    const { client, transport } = connect();
-    await expect(client.getRecord({ recordId })).rejects.toThrow(new TypeError(PATH_REFUSAL));
-    expect(requestedPaths(transport)).toEqual(['/openapi.json']);
-  }
-);
+it.each([
+  '',
+  '.',
+  '..',
+  'a/b',
+  String.raw`a\b`,
+  'line\nbreak',
+  'nul\u0000',
+  'delete\u007F',
+  'lone\uD800',
+  '\uDC00trail',
+])('refuses the path value %j before sending it', async (recordId) => {
+  const { client, transport } = connect();
+  await expect(client.getRecord({ recordId })).rejects.toThrow(new TypeError(PATH_REFUSAL));
+  expect(requestedPaths(transport)).toEqual(['/openapi.json']);
+});
 
 it('refuses a path field that is not a string', async () => {
   const { client, transport } = connect();

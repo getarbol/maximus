@@ -2,7 +2,7 @@
  * The client's attachment reader: a declared content-length within the client's limit, and a body that
  * streams through held to that exact length.
  */
-import { expect, it } from 'vite-plus/test';
+import { expect, it, vi } from 'vite-plus/test';
 
 import { boundedAttachment } from '../../src/client/attachment-response.ts';
 
@@ -43,6 +43,13 @@ it.each([
   ['a length above the limit', new Headers({ 'content-length': '6' })],
 ])('refuses an attachment with %s', (_name, headers) => {
   expect(() => boundedAttachment(new Response('hello', { headers }), 5)).toThrow(LENGTH_REFUSAL);
+});
+
+it('cancels the body of an attachment whose length it refuses, which it never reads', async () => {
+  const cancel = vi.fn();
+  const body = new ReadableStream<Uint8Array>({ cancel });
+  expect(() => boundedAttachment(new Response(body), 5)).toThrow(LENGTH_REFUSAL);
+  await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
 });
 
 it('accepts an empty attachment that has no body', () => {

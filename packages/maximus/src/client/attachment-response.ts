@@ -13,6 +13,8 @@ export function boundedAttachment(response: Response, maxBytes: number): Respons
     !Number.isSafeInteger(Number(rawLength)) ||
     Number(rawLength) > maxBytes
   ) {
+    // A refused body is never read: cancel it rather than hold its connection.
+    void response.body?.cancel().catch(() => {});
     throw new Error('Invalid attachment length.');
   }
   const length = Number(rawLength);

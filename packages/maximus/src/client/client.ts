@@ -2,6 +2,7 @@
  * `@arbol-ai/maximus/client`: the typed HTTP client. Its methods are inferred from the application's type
  * alone, and its routes come from the service's live OpenAPI document.
  */
+import { isRequestId } from '../errors.ts';
 import { isInputHeaderName, isPathParameterValue, operationPathParameters } from '../http-paths.ts';
 import type { Static, Failure, OperationShape } from '../index.ts';
 import { readJsonResponse } from '../internal/json.ts';
@@ -368,7 +369,9 @@ export function createClient<M extends ClientManifest>(
   }
   return new Proxy(Object.create(null), {
     get(_target, name) {
-      if (typeof name !== 'string' || name === 'then') {
+      // Awaiting and serializing probe `then` and `toJSON`, which name no operation: answering them would
+      // start a call nobody awaits.
+      if (typeof name !== 'string' || name === 'then' || name === 'toJSON') {
         return undefined;
       }
       return async (input: Record<string, unknown>, callOptions?: CallOptions | BinaryCallOptions) => {
@@ -483,13 +486,15 @@ export function createClient<M extends ClientManifest>(
         if (route.response === 'attachment' && response.ok) {
           const attachment = boundedAttachment(response, maxAttachmentBytes);
           notifyUploadTransfer(upload, 1);
+          // The header carries the id a JSON envelope would; anything else is no request id.
+          const requestId = response.headers.get('x-request-id');
           return options.response === 'data'
             ? attachment
             : {
                 success: true,
                 data: attachment,
                 error: null,
-                metadata: { requestId: response.headers.get('x-request-id') ?? '' },
+                metadata: { requestId: isRequestId(requestId) ? requestId : '' },
               };
         }
         const envelope = await readOperationEnvelope(response, {
