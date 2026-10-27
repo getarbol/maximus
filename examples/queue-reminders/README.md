@@ -62,7 +62,7 @@ created when the first message moves to it.
   stays as it is. A real provider call passes the reminder's id as its idempotency key.
 - The consumer checks every message against its schema. One the service never sends cannot succeed, so
   it is acknowledged and reported by its safe description; a delivery that fails is retried with a
-  growing delay, and after five attempts the message moves to the dead letter queue.
+  growing delay, and after five retries, six deliveries in all, the message moves to the dead letter queue.
 - The reminder is stored before its message is sent. Should sending fail, the call fails, and the sweep
   queues the stored reminder once it is a quarter of an hour overdue.
 - The sweep reads each key's metadata, not its value, to find what is overdue.

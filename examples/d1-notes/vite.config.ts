@@ -1,6 +1,6 @@
 /**
  * The only configuration: the notes service, its Worker and its D1 database. A deployment binds the database
- * whose id NOTES_DB_ID holds (`cf d1 create maximus-example-notes` prints it); without one, vp dev and
+ * whose id NOTES_DB_ID holds (`cf d1 create --name maximus-example-notes` prints it); without one, vp dev and
  * vp preview keep a local database under .cloudflare/state, with the fixed id `bun run migrate:local` migrates.
  */
 import { maximus } from '@arbol-ai/vite-plugin';

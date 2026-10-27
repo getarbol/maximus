@@ -25,7 +25,8 @@ export default defineConfig({
         REMINDER_STATE: bindings.kv(),
       },
       // The queue module subscribes the Worker by itself; this trigger states how it consumes: batches of ten,
-      // and five attempts before a message moves to the dead letter queue, which keeps it for inspection.
+      // and five retries, six deliveries in all, before a message moves to the dead letter queue, which keeps
+      // it for inspection.
       triggers: [
         triggers.queue({ name: QUEUE, maxBatchSize: 10, maxRetries: 5, deadLetterQueue: `${QUEUE}-dead` }),
       ],

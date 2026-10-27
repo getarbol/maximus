@@ -46,7 +46,7 @@ Set `tokens.issuer` to your authorization server first: a deployed Worker accept
 
 ```sh
 bunx cf auth login
-bunx cf d1 create maximus-example-notes             # prints the database id
+bunx cf d1 create --name maximus-example-notes      # prints the database id
 export NOTES_DB_ID=<that id> WORKERS_SUBDOMAIN=<your workers.dev subdomain>
 bun run migrate                                     # applies migrations/ to that database
 bun run build && bunx cf deploy --prebuilt --mode production

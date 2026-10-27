@@ -2,8 +2,8 @@ name: Examples on Cloudflare
 # Deploys every example to a Cloudflare account and runs the end-to-end suites against the deployed Workers,
 # then runs them locally with the account's Browser Run: after every push to main, and on demand. It needs the
 # repository variables WORKERS_SUBDOMAIN (the account's workers.dev subdomain) and NOTES_DB_ID (the database
-# `cf d1 create maximus-example-notes` made), and the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID
-# in the `cloudflare` environment. Without the variables it does nothing.
+# `cf d1 create --name maximus-example-notes` made), and the secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID in the `cloudflare` environment. Without the variables it does nothing.
 on:
   push:
     branches: [main]

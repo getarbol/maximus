@@ -3,7 +3,7 @@
  * where `E2E_TARGET=remote bun run test:e2e` then calls them. Pricing deploys before orders, whose binding
  * names it, and the notes database is migrated before the Worker that reads it. WORKERS_SUBDOMAIN names the
  * account's workers.dev subdomain; NOTES_DB_ID names the notes database, which
- * `cf d1 create maximus-example-notes` created once.
+ * `cf d1 create --name maximus-example-notes` created once.
  */
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
