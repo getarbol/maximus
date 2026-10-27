@@ -62,7 +62,7 @@ A field no operation has, such as a misspelled one, is a type error rather than 
 | `maxBodyBytes`      | `number`                          | No       | Request body limit, 1 to 16 MiB. Not on `GET`. Default: the application's.                                                                                                                                                                |
 | `maxOutputBytes`    | `number`                          | No       | Output limit, 1 to 16 MiB. Default: the application's, else 256 KiB.                                                                                                                                                                      |
 | `actorKinds`        | `('user' \| 'service')[]`         | No       | Who may execute it. Non-empty, unique. With `tokens.scheme` `oauth+bearer`, the OpenAPI document needs it on every operation to choose its security scheme.                                                                               |
-| `visibility`        | `'public' \| 'internal'`          | No       | `internal` hides the operation from OpenAPI, `scopes_supported` and the typed client; MCP lists it only to holders of its scope. The origin still serves it, decided by its scopes. Default `public`.                                     |
+| `visibility`        | `'public' \| 'internal'`          | No       | `internal` hides the operation from OpenAPI and `scopes_supported`; MCP lists it only to holders of its scope. The origin still serves it, decided by its scopes. Default `public`.                                                       |
 
 ## http
 

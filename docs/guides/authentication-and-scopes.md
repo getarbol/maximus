@@ -131,7 +131,7 @@ Three more controls narrow who may execute an operation:
   ```
 
 - **`visibility: 'internal'`** keeps a staff operation routed and scope-checked but removes it from
-  OpenAPI, from `scopes_supported` and from the typed client; MCP lists it only to tokens that carry
+  OpenAPI and from `scopes_supported`; MCP lists it only to tokens that carry
   its scope. Give it a scope only a staff role holds. Hiding an operation never authorizes it.
 
 Effects, MCP annotations, descriptions and obscure paths are never access control.

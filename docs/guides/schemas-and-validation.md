@@ -70,8 +70,7 @@ any format.
 An input schema can change a value on its way in, for example by trimming text or turning a query
 string into a number. Two types follow:
 
-- the **encoded** type, `Static<typeof Input>`, is what callers send. OpenAPI and the typed client
-  use it;
+- the **encoded** type, `Static<typeof Input>`, is what callers send. OpenAPI uses it;
 - the **decoded** type, `StaticDecode<typeof Input>`, is what your handler receives.
 
 For a schema without codecs they are the same. A field declared with `transformSchema`,

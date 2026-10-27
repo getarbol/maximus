@@ -116,8 +116,8 @@ try {
     assert(!existsSync(join(directory, 'node_modules', peer)), `The optional peer ${peer} was installed`);
   }
 
-  // The declarations compile for a Node consumer (no DOM library) and, for the Workers entry and the
-  // client a Worker may use, for a Worker consumer. `/postgres` needs @types/pg and the presets their peers.
+  // The declarations compile for a Node consumer (no DOM library) and, for the Workers entry and MCP, for a
+  // Worker consumer. `/postgres` needs @types/pg and the presets their peers.
   typecheck(
     'node',
     [
@@ -132,7 +132,6 @@ try {
       '/diagnostics',
       '/internals',
       '/mcp',
-      '/client',
       '/analytics',
       '/testing',
     ],
@@ -140,7 +139,7 @@ try {
   );
   typecheck(
     'workers',
-    ['', '/workers', '/mcp', '/client'],
+    ['', '/workers', '/mcp'],
     { types: [] },
     `/// <reference path="${resolve('node_modules/@cloudflare/workers-types/index.d.ts')}" />\n`
   );
@@ -151,14 +150,13 @@ try {
     `import assert from 'node:assert/strict';
 import { defineErrors, maximus } from '@arbol-ai/maximus';
 import { analytics } from '@arbol-ai/maximus/analytics';
-import { createClient } from '@arbol-ai/maximus/client';
 import { mcp } from '@arbol-ai/maximus/mcp';
 import { mcpToolName, queryKind } from '@arbol-ai/maximus/projection';
 import { verifyContract } from '@arbol-ai/maximus/testing';
 assert.equal(defineErrors({}).forbidden.create().code, 'FORBIDDEN');
 assert.equal(mcpToolName('agenda', { resource: 'appointments', verb: 'findNearest' }), 'agenda_appointments_find_nearest');
 assert.equal(queryKind({ type: 'integer' }), 'integer');
-for (const value of [maximus, analytics, createClient, mcp, verifyContract]) {
+for (const value of [maximus, analytics, mcp, verifyContract]) {
   assert.equal(typeof value, 'function');
 }`
   );
@@ -170,16 +168,7 @@ for (const value of [maximus, analytics, createClient, mcp, verifyContract]) {
   const runtimeModule = (specifier) =>
     /^(?:node:|cloudflare:|pg$|@modelcontextprotocol\/)/.test(specifier) ||
     builtinModules.includes(specifier);
-  for (const entry of [
-    'schemas',
-    'errors',
-    'failures',
-    'body',
-    'webhooks',
-    'http-paths',
-    'projection',
-    'client',
-  ]) {
+  for (const entry of ['schemas', 'errors', 'failures', 'body', 'webhooks', 'http-paths', 'projection']) {
     const pending = [join(installed, manifest.exports[`./${entry}`].import)];
     const seen = new Set();
     while (pending.length > 0) {

@@ -1,11 +1,10 @@
-import type { AppClientContract, ReadOperationName } from '../../src/client/client.ts';
 /**
  * Compile-only coverage of file declarations: schemas from fields, the registered context and catalog,
  * `fail` held to declared codes and their data, the fields a declaration may name, and the names, effects
  * and exposures binding derives for the client and native RPC.
  */
 import { defineAuth, defineContext, defineHandler, defineTool, t } from '../../src/index.ts';
-import type { Failed, PreparedContext, Principal } from '../../src/index.ts';
+import type { Failed, PreparedContext, Principal, Static } from '../../src/index.ts';
 import { bindRoute, bindTool } from '../../src/project/config.ts';
 import type { RouteName, ToolMcpName, ToolName } from '../../src/project/config.ts';
 import type { RpcMethods } from '../../src/workers/runtime.ts';
@@ -118,16 +117,15 @@ const path: '/v1/tasks/{taskId}/complete' = app.operations.postV1TasksTaskIdComp
 const tool: 'summarize_tasks' = app.operations.summarizeTasks.mcp.name;
 void [effect, read, path, tool];
 
-declare const client: AppClientContract<typeof app>;
-void client.postV1TasksTaskIdComplete({ taskId: 'task-1' });
-// @ts-expect-error The client keeps the route's input.
-void client.postV1TasksTaskIdComplete({ taskId: 1 });
-// @ts-expect-error An MCP-only tool has no HTTP client method.
-void client.summarizeTasks;
-const reads: ReadOperationName<typeof app> = 'getV1Tasks';
-// @ts-expect-error A write is not a read.
-const write: ReadOperationName<typeof app> = 'postV1TasksTaskIdComplete';
-void [reads, write];
+type Completion = Static<typeof app.operations.postV1TasksTaskIdComplete.input>;
+const completion: Completion = { taskId: 'task-1' };
+// @ts-expect-error The operation keeps the route's input.
+const wrongCompletion: Completion = { taskId: 1 };
+// @ts-expect-error An MCP-only tool has no HTTP route.
+void app.operations.summarizeTasks.http;
+// @ts-expect-error A route without mcp is no MCP tool.
+void app.operations.postV1TasksTaskIdComplete.mcp.name;
+void [completion, wrongCompletion];
 
 declare const rpc: RpcMethods<typeof app.operations>;
 declare const principal: Principal;

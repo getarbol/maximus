@@ -1,7 +1,7 @@
 {
   "name": "@arbol-ai/maximus",
   "version": "7.4.0",
-  "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, with its OpenAPI, typed client and CLI.",
+  "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, with its OpenAPI and CLI.",
   "keywords": [
     "api",
     "cloudflare",
@@ -86,10 +86,6 @@
     "./mcp": {
       "types": "./dist/mcp/index.d.ts",
       "import": "./dist/mcp/index.js"
-    },
-    "./client": {
-      "types": "./dist/client/client.d.ts",
-      "import": "./dist/client/client.js"
     },
     "./analytics": {
       "types": "./dist/analytics/analytics.d.ts",

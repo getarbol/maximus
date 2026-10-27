@@ -27,30 +27,30 @@ the result into its own wire format.
 
 ## Glossary
 
-| Term            | Meaning                                                                                                                                                           |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Application     | The object `.build()` returns: configuration plus operations. You pass it to `createWorker`, `createHttpHandler`, `createOpenApi` and `createClient<typeof app>`. |
-| Builder         | The immutable object `maximus()` returns. Every `.operation()`, `.derive()`, `.use()` and `.mount()` returns a new builder.                                       |
-| Base            | The single builder your service creates with `maximus()`. Resource modules extend it and are mounted back on it.                                                  |
-| Resource module | A builder chain that declares the operations of one resource, usually in its own folder.                                                                          |
-| Operation       | One named capability: a definition plus a handler. Its name is its stable identifier everywhere.                                                                  |
-| Definition      | The object that declares an operation: schemas, scope, effect, exposure and limits.                                                                               |
-| Handler         | `async (context, input) => Result`: the function that implements an operation.                                                                                    |
-| Context         | What a handler receives besides its input: the invocation plus everything `.derive()` added.                                                                      |
-| Invocation      | The fields Maximus provides: `env`, `principal`, `authority`, `input`, `operation`, `background` and, for byte uploads, `body`.                                   |
-| Principal       | The verified caller: `actorId`, `actorKind`, `organizationId` and `requestId`.                                                                                    |
-| Organization    | The tenant. Its id always comes from the principal, never from input.                                                                                             |
-| Actor           | Who acts: a `user` (a person) or a `service` (a machine client).                                                                                                  |
-| Scope           | A permission string, `<namespace>:<resource>:<action>`, that an operation requires.                                                                               |
-| Authority       | The verified scopes and client of the token behind a call (`context.authority`). Ordinary RPC has none.                                                           |
-| Effect          | `read`, `write` or `delete`. It describes behavior; it never authorizes.                                                                                          |
-| Transport       | A way to reach operations: HTTP, MCP or native Worker RPC.                                                                                                        |
-| Exposure        | The parts of a definition that opt an operation into transports: `http`, `mcp` and `rpc`.                                                                         |
-| Result          | `{ ok: true, value }` or `{ ok: false, error }`. Handlers return one; they do not throw expected failures.                                                        |
-| Failure         | `{ code, message, retryable, data }`, created from the error catalog.                                                                                             |
-| Error catalog   | The object `defineErrors()` returns: the framework's standard failures plus yours, with their HTTP statuses.                                                      |
-| Envelope        | The JSON body of every HTTP operation response: `{ success, data, error, metadata }`.                                                                             |
-| Plain route     | An HTTP handler outside token admission, for callers that cannot send a bearer token (webhooks).                                                                  |
+| Term            | Meaning                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Application     | The object `.build()` returns: configuration plus operations. You pass it to `createWorker`, `createHttpHandler` and `createOpenApi`. |
+| Builder         | The immutable object `maximus()` returns. Every `.operation()`, `.derive()`, `.use()` and `.mount()` returns a new builder.           |
+| Base            | The single builder your service creates with `maximus()`. Resource modules extend it and are mounted back on it.                      |
+| Resource module | A builder chain that declares the operations of one resource, usually in its own folder.                                              |
+| Operation       | One named capability: a definition plus a handler. Its name is its stable identifier everywhere.                                      |
+| Definition      | The object that declares an operation: schemas, scope, effect, exposure and limits.                                                   |
+| Handler         | `async (context, input) => Result`: the function that implements an operation.                                                        |
+| Context         | What a handler receives besides its input: the invocation plus everything `.derive()` added.                                          |
+| Invocation      | The fields Maximus provides: `env`, `principal`, `authority`, `input`, `operation`, `background` and, for byte uploads, `body`.       |
+| Principal       | The verified caller: `actorId`, `actorKind`, `organizationId` and `requestId`.                                                        |
+| Organization    | The tenant. Its id always comes from the principal, never from input.                                                                 |
+| Actor           | Who acts: a `user` (a person) or a `service` (a machine client).                                                                      |
+| Scope           | A permission string, `<namespace>:<resource>:<action>`, that an operation requires.                                                   |
+| Authority       | The verified scopes and client of the token behind a call (`context.authority`). Ordinary RPC has none.                               |
+| Effect          | `read`, `write` or `delete`. It describes behavior; it never authorizes.                                                              |
+| Transport       | A way to reach operations: HTTP, MCP or native Worker RPC.                                                                            |
+| Exposure        | The parts of a definition that opt an operation into transports: `http`, `mcp` and `rpc`.                                             |
+| Result          | `{ ok: true, value }` or `{ ok: false, error }`. Handlers return one; they do not throw expected failures.                            |
+| Failure         | `{ code, message, retryable, data }`, created from the error catalog.                                                                 |
+| Error catalog   | The object `defineErrors()` returns: the framework's standard failures plus yours, with their HTTP statuses.                          |
+| Envelope        | The JSON body of every HTTP operation response: `{ success, data, error, metadata }`.                                                 |
+| Plain route     | An HTTP handler outside token admission, for callers that cannot send a bearer token (webhooks).                                      |
 
 ## The application and the builder chain
 

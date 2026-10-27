@@ -2,7 +2,7 @@
 
 Maximus is @arbol-ai/maximus and its Vite plugin @arbol-ai/vite-plugin, released together at one
 version, in a Bun/Vite+ workspace with its examples. The core is @arbol-ai/maximus's root; each optional
-capability is an entry (/workers, /mcp, /client, …) whose source is packages/maximus/src/<entry>/. The
+capability is an entry (/workers, /mcp, /analytics, …) whose source is packages/maximus/src/<entry>/. The
 plugin, packages/vite-plugin/, composes the project tooling with Cloudflare's Vite plugin. Read
 docs/README.md (concepts, guides, reference) and the owned .agents/skills/maximus/SKILL.md; examples/
 holds runnable services that the workspace typechecks.

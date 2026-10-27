@@ -1,7 +1,7 @@
 # Getting started
 
-In this guide you build a small notes service, run it locally with `cf dev`, call it over HTTP
-and from a typed client, and then expose the same operations to MCP clients. It takes about fifteen
+In this guide you build a small notes service, run it locally with `cf dev`, call it over HTTP,
+and then expose the same operations to MCP clients. It takes about fifteen
 minutes. The finished code is in [`examples/minimal-http`](../examples/minimal-http).
 
 ## Prerequisites
@@ -323,28 +323,6 @@ curl -s http://localhost:5173/health          # {"status":"ok","service":"exampl
 
 The OpenAPI 3.1 document is generated from the same definitions that run the service: routes,
 schemas, scopes as OAuth security requirements, effects and every failure the catalog can return.
-
-## Call it from TypeScript
-
-`@arbol-ai/maximus/client` builds a typed client from the application's type and the live contract:
-
-```ts
-import { createClient } from '@arbol-ai/maximus/client';
-
-import type { app } from './src/app';
-
-const notes = createClient<typeof app>('http://localhost:5173', process.env.DEVELOPMENT_TOKEN ?? '', {
-  response: 'data',
-});
-
-const note = await notes.createNote({ text: 'Call the bank' });
-console.log(await notes.getNote({ noteId: note.noteId }));
-```
-
-`import type` keeps the Worker out of the client bundle. In `response: 'data'` mode a refusal throws
-an `Error` whose `cause` holds `{ status, failure, requestId }`; without it, every call returns the
-envelope. Plain `http://` is accepted only for loopback hosts. See the
-[typed client guide](guides/typed-client.md).
 
 ## Expose the same operations over MCP
 

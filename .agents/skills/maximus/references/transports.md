@@ -29,9 +29,8 @@ All three share input validation, `derive`, middleware, the handler and output v
 - `createOpenApi(app)` builds that same document at build time.
 - Rate limiting: `rateLimit: { binding, retryAfter }` (a Workers rate limit binding), keyed by
   organization and actor after authentication; 429 `RATE_LIMITED`.
-- Typed callers: `createClient<typeof app>(baseUrl, token, { response: 'data' })` from
-  `@arbol-ai/maximus/client`, importing `app` as a type only. HTTPS (plain `http://` only on
-  loopback), no redirects, no write retries, `fetch` option for tests.
+- HTTP callers send the bearer token and read the envelope; a TypeScript caller types each call with
+  `Static` of `typeof app.operations.<name>.input` and `.output`, importing `app` as a type only.
 
 ## MCP
 

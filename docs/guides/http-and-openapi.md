@@ -72,8 +72,7 @@ Routing is exact and decided before authentication:
   is read**. A missing route never reveals whether a caller is authorized.
 - Paths are never normalized or redirected. `/v1/notes/` does not match `/v1/notes`.
 
-OpenAPI declares path fields as `in: path` parameters and leaves them out of the query and the body,
-and the typed client puts each one in its segment.
+OpenAPI declares path fields as `in: path` parameters and leaves them out of the query and the body.
 
 The service's own paths (`/`, `/health`, `/openapi.json`, `/openapi.yaml`, `/openapi.yml` and the
 OAuth protected-resource paths) are reserved, as are transport paths. Collisions fail when the handler

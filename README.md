@@ -101,7 +101,6 @@ imports, and the browser entries load no Worker or Node runtime.
 | `@arbol-ai/maximus`                  | Definitions, schemas, tokens and scopes, errors, middleware, native HTTP and OpenAPI.                           |
 | `@arbol-ai/maximus/workers`          | The Worker: fetch handler, named RPC entrypoints, entrypoint and Durable Object instrumentation, static assets. |
 | `@arbol-ai/maximus/mcp`              | MCP over Streamable HTTP with the official SDK: tools, resources, prompts and Agent Skills.                     |
-| `@arbol-ai/maximus/client`           | A typed HTTP client inferred from the application's type, for browsers and Workers.                             |
 | `@arbol-ai/maximus/schemas`          | Schemas, codecs and readers without the rest of the core, for browsers.                                         |
 | `@arbol-ai/maximus/analytics`        | An observer that records allowlisted execution metadata to your sink.                                           |
 | `@arbol-ai/maximus/postgres`         | Short tenant-scoped Postgres transactions (needs the optional peer `pg`).                                       |

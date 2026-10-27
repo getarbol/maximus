@@ -118,9 +118,6 @@ query key or a malformed JSON body, carry no issues.
 | MCP        | `structuredContent`                                                  | A tool result with `isError: true` and the failure as JSON text                                            |
 | Native RPC | `{ ok: true, value }`                                                | `{ ok: false, error }`                                                                                     |
 
-The typed client returns the HTTP envelope, or in `response: 'data'` mode returns the data and throws
-an `Error` whose `cause` is `{ status, failure, requestId }`.
-
 ## Retries
 
 `retryable: true` means the same call may succeed later: a rate limit, an upstream outage, a timeout.

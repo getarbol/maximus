@@ -21,14 +21,8 @@ const response = await handle(new Request('http://localhost:5173/v1/notes'), env
   machine: `{ sub: '<client>@clients', client_id: '<client>', org_id, scope }`. Send
   `authorization: Bearer a.b.c` (JWT-shaped). Never pass `verify` in production.
 - Custom `tokens.resolve`: put the test credential in `env` and exercise the real resolver.
-- Typed client against the handler:
-
-  ```ts
-  const client = createClient<typeof app>('http://localhost:5173', token, {
-    response: 'data',
-    fetch: async (input, init) => await handle(new Request(input, init), env),
-  });
-  ```
+- Call the handler directly: `await handle(new Request('http://localhost:5173/v1/notes', init), env)`, and
+  read the envelope.
 
 ## MCP
 
@@ -69,5 +63,5 @@ export type NeverControl = AssertFalse<IsNever<never>>;
 ## CI rules
 
 Synthetic data only; no live providers, paid services or production resources; remote bindings
-off. Scripts call domain functions or the typed client, never a second provider implementation.
+off. Scripts call domain functions or the service over HTTP, never a second provider implementation.
 Keep security, privacy and retry tests where they are.

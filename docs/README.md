@@ -27,7 +27,6 @@ Reach it:
 
 - [MCP](guides/mcp.md): the same operations as MCP tools, with guides and Agent Skills.
 - [Worker RPC](guides/worker-rpc.md): typed calls between Workers over Service Bindings.
-- [Typed client](guides/typed-client.md): call a service from TypeScript.
 - [Worker composition](guides/worker-composition.md): webhooks, mounts, hooks, static assets and
   entrypoints.
 

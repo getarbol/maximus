@@ -2,29 +2,29 @@
 import { Form, Link, redirect, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs } from 'react-router';
 
-import { api, signedIn } from '../../api.ts';
+import { signedIn, tasks } from '../../api.ts';
 
 export async function loader() {
   if (!signedIn()) {
     throw redirect('/');
   }
-  return await api.getV1Tasks({});
+  return await tasks.list();
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const title = (await request.formData()).get('title');
   if (typeof title === 'string' && title.trim()) {
-    await api.postV1Tasks({ title: title.trim() });
+    await tasks.create({ title: title.trim() });
   }
   return null;
 }
 
 export default function Tasks() {
-  const { tasks } = useLoaderData<typeof loader>();
+  const { tasks: list } = useLoaderData<typeof loader>();
   return (
     <>
       <ul>
-        {tasks.map((task) => (
+        {list.map((task) => (
           <li key={task.taskId}>
             <Link to={`/tasks/${task.taskId}`}>{task.done ? <s>{task.title}</s> : task.title}</Link>
           </li>

@@ -39,8 +39,8 @@ export const app = maximus<Env>({
   .build();
 ```
 
-Entries: the root (the core), `/workers` (the Worker), `/mcp` (MCP tools), `/client` (a typed
-client), `/schemas` (browser-safe schemas), `/errors` and `/failures` (runtime-free), `/body`,
+Entries: the root (the core), `/workers` (the Worker), `/mcp` (MCP tools), `/schemas` (browser-safe
+schemas), `/errors` and `/failures` (runtime-free), `/body`,
 `/webhooks`, `/http-paths`, `/projection`, `/diagnostics`, `/internals` (the transport SPI), `/analytics`,
 `/postgres` (with the optional peer `pg`), `/testing`, `/oxlint` and `/oxfmt`. It installs the
 `maximus` CLI and ships the Maximus Agent Skill in `skills/maximus/`.

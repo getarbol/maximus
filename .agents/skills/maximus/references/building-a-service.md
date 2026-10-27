@@ -19,7 +19,7 @@ remain supported. Read `docs/guides/project-structure.md` for configuration, mig
 ## Packages
 
 ```sh
-bun add @arbol-ai/maximus          # everything: /workers, /mcp, /client, the maximus CLI, …
+bun add @arbol-ai/maximus          # everything: /workers, /mcp, the maximus CLI, …
 bun add -d cf vite @cloudflare/vite-plugin@beta typescript @cloudflare/workers-types
 ```
 

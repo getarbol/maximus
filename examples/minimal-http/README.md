@@ -8,7 +8,7 @@ A notes service with three HTTP operations, its runtime OpenAPI document and a t
 | `src/app.ts`           | The application: configuration, schemas, the error catalog and three operations. |
 | `src/tokens.ts`        | OAuth verification plus a development token accepted only on `localhost`.        |
 | `src/index.ts`         | The Worker.                                                                      |
-| `tests/notes.test.ts`  | The service tested in Node through `createHttpHandler` and the typed client.     |
+| `tests/notes.test.ts`  | The service tested in Node through `createHttpHandler`.                          |
 | `cloudflare.config.ts` | The Worker for `cf`, with its KV binding and the development token.              |
 
 ## Run it

@@ -508,20 +508,20 @@ plugins. A page default-exports its component and may export what a React Router
 // app/routes/tasks/index.tsx
 import { Link, redirect, useLoaderData } from 'react-router';
 
-import { api, signedIn } from '../../api.ts';
+import { signedIn, tasks } from '../../api.ts';
 
 export async function loader() {
   if (!signedIn()) {
     throw redirect('/');
   }
-  return await api.getV1Tasks({});
+  return await tasks.list();
 }
 
 export default function Tasks() {
-  const { tasks } = useLoaderData<typeof loader>();
+  const { tasks: list } = useLoaderData<typeof loader>();
   return (
     <ul>
-      {tasks.map((task) => (
+      {list.map((task) => (
         <li key={task.taskId}>
           <Link to={`/tasks/${task.taskId}`}>{task.title}</Link>
         </li>
@@ -544,22 +544,30 @@ path, whatever their parameters are named. The API needs its own base path, `/ap
 `base` and `build.assetsDir` keep their defaults: the Worker serves the build from the root, its hashed
 files below `/assets`.
 
-The browser calls the API with the typed client and the application's type alone:
+The browser calls the API with `fetch` and its token, typed by the routes' own schemas through the
+application's type alone, which keeps the server's code out of the bundle:
 
 ```ts
 // app/api.ts
-import { createClient } from '@arbol-ai/maximus/client';
+import type { Static } from '@arbol-ai/maximus';
 
 import type { app } from '../.maximus/app.ts';
 
-export const api = createClient<typeof app>(new URL('/api', location.origin).href, getToken, {
-  response: 'data',
-});
+type Output<K extends keyof typeof app.operations> = Static<(typeof app.operations)[K]['output']>;
+
+export async function listTasks(): Promise<Output<'getV1Tasks'>> {
+  const response = await fetch('/api/v1/tasks', { headers: { authorization: `Bearer ${getToken()}` } });
+  const envelope = await response.json();
+  if (!envelope.success) {
+    throw new Error(envelope.error.message);
+  }
+  return envelope.data;
+}
 ```
 
-Each route is a method named after its method and path, such as `getV1Tasks` or
-`postV1TasksTaskIdComplete`, typed by the route's input and output. Tokens come from your identity
-provider; never build one into the app. `examples/project-tasks` is a complete web app.
+Each route is named after its method and path, such as `getV1Tasks` or `postV1TasksTaskIdComplete`.
+Tokens come from your identity provider; never build one into the app. `examples/project-tasks` is a
+complete web app.
 
 ## Scheduled work, queues and email
 

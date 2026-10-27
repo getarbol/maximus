@@ -62,8 +62,7 @@ errors.status('NOTE_NOT_FOUND'); // 404
 ## Presentation
 
 HTTP: the catalog status, the envelope, `Retry-After` for `retryAfter`. MCP: a tool result with
-`isError: true` and the failure JSON. RPC: the `Result` itself. The typed client returns the envelope,
-or with `response: 'data'` throws an `Error` whose `cause` is `{ status, failure, requestId }`.
+`isError: true` and the failure JSON. RPC: the `Result` itself.
 
 ## Uncertain outcomes and retries
 

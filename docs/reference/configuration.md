@@ -141,8 +141,3 @@ mounts it at the root of its host. The endpoint requires the scope `<namespace>:
 | --------- | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `record`  | `(env, event: ExecutionEvent) => Promise<unknown>` | Your sink. Answering `{ ok: false }` counts as a delivery failure. |
 | `enabled` | `boolean \| (env) => boolean`                      | Default `true`. Also off when telemetry is off.                    |
-
-## The typed client
-
-`createClient<typeof app>(baseUrl, token, options?)` from `@arbol-ai/maximus/client`. Its options are
-in the [typed client guide](../guides/typed-client.md#options).

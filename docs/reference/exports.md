@@ -72,12 +72,6 @@ configuration lacks, and runs Cloudflare's Vite plugin with the Worker its optio
 
 `mcp`: the Streamable HTTP transport.
 
-## @arbol-ai/maximus/client
-
-`createClient`; types `Envelope`, `ClientOptions`, `ClientFailure`, `CallOptions`, `BinaryCallOptions`,
-`AppClientContract`, `ClientManifest`, `ResponseMode`, `OperationName`, `ReadOperationName`,
-`OperationInput`, `OperationOutput`. Imports the application only as a type.
-
 ## @arbol-ai/maximus/analytics
 
 `analytics`, `ExecutionEventSchema`; types `ExecutionEvent`, `ExecutionSink`.

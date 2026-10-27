@@ -32,12 +32,10 @@ flowchart LR
   Service --> Core["@arbol-ai/maximus"]
   Service --> Workers["/workers"]
   Service --> MCP["/mcp"]
-  Service --> Client["/client"]
   Service --> Analytics["/analytics"]
   Service --> Postgres["/postgres"]
   Workers --> Core
   MCP --> Core
-  Client --> Core
   Analytics --> Core
   Tooling["maximus CLI, /testing"] --> Core
 ```

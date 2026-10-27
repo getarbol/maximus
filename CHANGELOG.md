@@ -8,6 +8,17 @@ dates of the release commits.
 
 ## Unreleased
 
+Breaking, so the next release is 8.0.0:
+
+- The `@arbol-ai/maximus/client` entry is removed: `createClient` and its types (`Envelope`,
+  `ClientOptions`, `ClientFailure`, `CallOptions`, `BinaryCallOptions`, `AppClientContract`,
+  `ClientManifest`, `ResponseMode`, `OperationName`, `ReadOperationName`, `OperationInput`,
+  `OperationOutput`), with its guide. Call a service over HTTP with `fetch` and its bearer token, and type
+  each call with `Static` of `typeof app.operations.<name>.input` and `.output`; Workers of the same
+  account keep native RPC.
+
+Everything else:
+
 - `@arbol-ai/vite-plugin` makes `vite.config.ts` a project's only configuration: `maximus()` states the
   application (origin, token issuer, RPC callers, limits) and its Worker with Cloudflare's names
   (compatibility date, bindings in `env`, triggers and every other setting), with no `maximus.config.ts`
@@ -29,7 +40,7 @@ dates of the release commits.
   name, the hashed `/assets/` for good, and Vite's modules only in development. Pages that claim the API,
   discovery, MCP, the build's assets or `pages/` are refused, as is a Vite `base` or `build.assetsDir`
   that would move the build. `examples/project-tasks` has a React app
-  that calls the API with the typed client.
+  that calls the API with `fetch`, typed by the routes' schemas.
 - `defineContext` (`context.ts`) prepares what every handler receives, once per call after admission, and
   may `fail` the call; `defineAuth` (`auth.ts`) states the token code configuration cannot, and refuses
   the issuer, audience or any other field that would override the configured policy. With
@@ -82,10 +93,6 @@ dates of the release commits.
 - Project discovery sees the MCP tool of a route declared as a `const` it default-exports, which it
   missed, leaving the Worker without the MCP transport. A route whose fields it cannot read, behind a
   spread, a computed key or another module, is refused instead of silently left unserved.
-- The typed client serializes as an empty object instead of starting a call through `toJSON` that
-  nobody awaits; gives an attachment envelope the request id its response carries only when it is one,
-  as a JSON envelope does; cancels the body of an attachment whose length it refuses; and refuses a path
-  value with a lone surrogate with its `TypeError` instead of a `URIError`.
 - `worker.service()` and `worker.durableObject()` keep a class's methods writable, so a class that binds
   a method to itself in its constructor, as socket handlers often do, no longer fails to construct; the
   bound method still runs inside its instance's diagnostics.

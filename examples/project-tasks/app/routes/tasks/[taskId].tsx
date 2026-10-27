@@ -2,22 +2,22 @@
 import { Form, redirect, useLoaderData } from 'react-router';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 
-import { api, signedIn } from '../../api.ts';
+import { signedIn, tasks } from '../../api.ts';
 
 export async function loader({ params }: LoaderFunctionArgs) {
   if (!signedIn()) {
     throw redirect('/');
   }
-  return await api.getV1TasksTaskId({ taskId: params.taskId ?? '' });
+  return await tasks.get(params.taskId ?? '');
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
   const taskId = params.taskId ?? '';
   if ((await request.formData()).get('intent') === 'delete') {
-    await api.deleteV1TasksTaskId({ taskId });
+    await tasks.remove(taskId);
     return redirect('/tasks');
   }
-  await api.postV1TasksTaskIdComplete({ taskId });
+  await tasks.complete(taskId);
   return null;
 }
 

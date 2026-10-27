@@ -3,7 +3,7 @@
 One file per route and method, each a `defineHandler` default export. The filename is the path and
 the method; Maximus derives the operation name, the effect and the scope, and the handler receives one
 object with its input, the verified principal, the task store and `fail`. The same Worker serves a small
-React app whose pages are the files of `app/routes/` and which calls the API with the typed client.
+React app whose pages are the files of `app/routes/` and which calls the API with `fetch`, typed by the routes' schemas.
 
 ```text
 vite.config.ts                            The only configuration: the application and its Worker
@@ -20,7 +20,7 @@ mcp/guides/task-conventions.md            A guide, as an MCP resource and prompt
 mcp/skills/weekly-review.md               An Agent Skill: skill://weekly-review/SKILL.md
 src/tasks.ts                              The organization's tasks in Workers KV
 index.html                                The web app, which loads app/main.tsx
-app/api.ts                                The typed client of the API, and the token in memory
+app/api.ts                                The API's routes as typed fetch calls, and the token in memory
 app/root.tsx                              The layout around every page, and its error boundary
 app/routes/index.tsx                      /               Sign in with a token
 app/routes/tasks/index.tsx                /tasks          The tasks, and a form that adds one

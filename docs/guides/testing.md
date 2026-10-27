@@ -62,20 +62,6 @@ Fake bindings through the narrow interfaces your application declares (a `NoteSt
   `client_id: '<client>'` and no `permissions`. `verify` is a test seam: never pass it in a deployed
   Worker.
 
-### The typed client in tests
-
-Give the client the handler as its `fetch`, and assert on typed data:
-
-```ts
-const notes = createClient<typeof app>('http://localhost:5173', token, {
-  response: 'data',
-  fetch: async (input, init) => await handle(new Request(input, init), env),
-});
-
-const created = await notes.createNote({ text: 'Buy coffee' });
-expect(await notes.getNote({ noteId: created.noteId })).toEqual(created);
-```
-
 ### MCP
 
 Mount the transport on the test handler and post JSON-RPC. Responses are server-sent events:
@@ -175,7 +161,7 @@ export type NeverControl = AssertFalse<IsNever<never>>;
 - Use synthetic data. Never use real customer records, live provider accounts or paid services in
   CI.
 - Keep remote bindings off, and never point tests at production resources.
-- Scripts call your domain functions or the typed client; they never reimplement a provider
+- Scripts call your domain functions or the service over HTTP; they never reimplement a provider
   protocol.
 - Keep tests in the package that owns the behavior, and keep the security, privacy and retry tests
   you have.
