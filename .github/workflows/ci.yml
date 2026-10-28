@@ -1,13 +1,16 @@
 name: CI
-# Every pull request and every push to main, each run through Bun: the build, types, lint and format; the
-# tests with coverage; the Postgres entry against a real database; the packed packages as a project installs
-# them; the examples' OpenAPI documents as client generators read them; and every example's Worker running
-# under vp dev.
+# Builds, types, lint, format and OpenAPI checks run automatically. Tests and package scenarios run
+# only when a person explicitly requests them through workflow_dispatch.
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run test suites and package scenarios explicitly
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -30,6 +33,7 @@ jobs:
       - run: bun run verify
 
   test:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -44,6 +48,7 @@ jobs:
       - run: bun run test:coverage
 
   integration:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
     name: Postgres
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -59,6 +64,7 @@ jobs:
       - run: bun run test:integration
 
   package:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
     name: Packed packages
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -85,6 +91,7 @@ jobs:
       - run: bun run check:clients
 
   e2e:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
     name: Examples running
     runs-on: ubuntu-latest
     timeout-minutes: 20

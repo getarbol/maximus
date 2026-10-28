@@ -1,6 +1,6 @@
 {
   "name": "create-maximus",
-  "version": "8.0.0",
+  "version": "8.0.1",
   "description": "Create a Maximus project: an API on Cloudflare Workers whose routes are MCP tools, with an optional React app.",
   "keywords": [
     "cloudflare-workers",

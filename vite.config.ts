@@ -25,7 +25,7 @@ export default defineConfig({
     options: { typeAware: false },
   },
   // Every suite runs from here: `bun run test` runs the packages' and the examples', `bun run test:e2e` the
-  // examples' running Workers, and CI runs them all on every pull request and push to main.
+  // examples' running Workers. CI runs them only on an explicit manual request.
   test: {
     projects: [
       {

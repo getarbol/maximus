@@ -39,7 +39,7 @@ export interface ProjectOptions {
     ApplicationConfiguration<unknown>,
     'errors' | 'tokens' | 'telemetry' | 'mcp' | 'rateLimit'
   > & {
-    tokens: Omit<TokenPolicy, 'resolve' | 'resources' | 'resourceMetadataUrl'>;
+    tokens: Omit<TokenPolicy, 'resolve' | 'challenge' | 'resources' | 'resourceMetadataUrl'>;
     /** The rate limiting binding's name, which the generated application checks against `Env`. */
     rateLimit?: { binding: string; retryAfter?: number };
   };

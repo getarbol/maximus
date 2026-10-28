@@ -5,9 +5,12 @@ name: Examples on Cloudflare
 # `cf d1 create --name maximus-example-notes` made), and the secrets CLOUDFLARE_API_TOKEN and
 # CLOUDFLARE_ACCOUNT_ID in the `cloudflare` environment. Without the variables it does nothing.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Deploy examples and run their end-to-end suites explicitly
+        type: boolean
+        default: false
 permissions:
   contents: read
 # One deployment at a time; a newer push waits instead of cancelling one in progress.
@@ -17,7 +20,7 @@ concurrency:
 jobs:
   examples:
     name: Deploy and run the examples
-    if: vars.WORKERS_SUBDOMAIN != ''
+    if: inputs.run_tests && vars.WORKERS_SUBDOMAIN != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: cloudflare

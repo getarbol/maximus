@@ -19,7 +19,7 @@ export type Phase = 'development' | 'production';
 /** How tokens are verified, as configuration states it; the code that verifies them itself is `auth.ts`. */
 export type TokenOptions = Omit<
   TokenPolicy,
-  'resolve' | 'resources' | 'resourceMetadataUrl' | 'audience' | 'development'
+  'resolve' | 'challenge' | 'resources' | 'resourceMetadataUrl' | 'audience' | 'development'
 > & {
   /** The audience tokens must carry, or several any one of which they may carry; by default, the origin. */
   audience?: TokenPolicy['audience'];

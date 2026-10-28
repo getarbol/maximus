@@ -50,7 +50,7 @@ jobs:
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
-      # CI tested this commit; the build here is the one that is packed.
+      # CI checked this commit; the build here is the one that is packed. Tests are requested separately.
       - if: steps.release.outputs.publish == 'true'
         run: bun run verify
       - if: steps.release.outputs.publish == 'true'

@@ -1,6 +1,6 @@
 {
   "name": "@arbol-ai/maximus",
-  "version": "8.0.0",
+  "version": "8.0.1",
   "description": "Maximus: define a service once and serve it over HTTP, MCP and Worker RPC on Cloudflare Workers, configured in vite.config.ts, with its OpenAPI and CLI.",
   "keywords": [
     "api",
