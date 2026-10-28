@@ -62,7 +62,7 @@
     },
     "packages/maximus": {
       "name": "@arbol-ai/maximus",
-      "version": "7.2.0",
+      "version": "7.2.1",
       "bin": {
         "maximus": "dist/tooling/cli.js",
       },

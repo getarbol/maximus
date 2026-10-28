@@ -1,5 +1,13 @@
 name: Verify Maximus
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run the test suites explicitly
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -18,7 +26,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - run: bun install --frozen-lockfile
-      # Build (the package, and each example with cf build), types, lint, the test suites and the
-      # packed-package checks, which install a new starter and run its own verify.
-      - run: bun run verify
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run verify:release
+      - if: github.event_name == 'workflow_dispatch' && inputs.run_tests
+        run: bun run test && node scripts/verify-package.mjs

@@ -24,7 +24,8 @@ try {
       '--registry=https://registry.npmjs.org/',
       '--access=public',
       '--provenance',
-      ...(prerelease ? ['--tag', prerelease] : []),
+      '--tag',
+      prerelease ?? 'legacy-7',
     ],
     { stdio: 'inherit' }
   );

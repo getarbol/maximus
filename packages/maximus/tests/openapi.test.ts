@@ -261,7 +261,7 @@ it('documents one failure response per status, naming the codes that answer with
   });
   expect(listing['404']).toMatchObject({
     description:
-      '- `NOT_FOUND`: The requested operation does not exist.\n- `RECORD_MISSING`: The record does not exist.',
+      '- `NOT_FOUND`: The requested resource does not exist.\n- `RECORD_MISSING`: The record does not exist.',
     content: { 'application/json': { schema: narrowed(['NOT_FOUND', 'RECORD_MISSING']) } },
   });
   expect(listing['400']).toMatchObject({

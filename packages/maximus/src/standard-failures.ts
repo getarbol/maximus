@@ -31,7 +31,7 @@ export const STANDARD_FAILURES = {
     message: 'A valid access token is required.',
   },
   forbidden: { code: 'FORBIDDEN', status: 403, message: 'The token does not authorize this operation.' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'The requested operation does not exist.' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'The requested resource does not exist.' },
   methodNotAllowed: {
     code: 'HTTP_METHOD_NOT_ALLOWED',
     status: 405,

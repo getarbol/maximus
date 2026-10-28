@@ -301,6 +301,13 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     headers.set('cache-control', 'private, no-store');
     headers.set('x-content-type-options', 'nosniff');
     headers.set('x-request-id', requestId);
+    const status = manifest.errors.status(error.code);
+    if ((status === 401 || status === 403) && !headers.has('www-authenticate')) {
+      const challenge = manifest.tokens.challenge?.(error, context);
+      if (challenge) {
+        headers.set('www-authenticate', challenge);
+      }
+    }
     if (error.code === 'UNAUTHORIZED' && !headers.has('www-authenticate')) {
       const metadataUrl = challengeMetadataUrl(context);
       headers.set(
