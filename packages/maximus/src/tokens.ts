@@ -219,6 +219,12 @@ export interface TokenPolicy<E = unknown> {
   ) => Promise<TokenPrincipal | Result<TokenPrincipal, Failure>>;
   /** Absolute discovery URL when a mounted API and its OAuth resource have different origins or paths. */
   resourceMetadataUrl?: string | null | ((context: TokenResolutionContext<E>) => string | null);
+  /**
+   * Optional WWW-Authenticate value for a 401 or 403 refusal, including a resolver's missing-scope
+   * failure. Null keeps the default 401 challenge and leaves a 403 without a challenge. This hook
+   * changes response metadata only; it cannot admit a refused request.
+   */
+  challenge?: (failure: Failure, context: TokenResolutionContext<E>) => string | null;
   /** Absolute RFC 9728 paths for distinct resources; replaces inferred discovery when configured. */
   resources?: Readonly<Record<string, OAuthResource<E>>>;
   /**

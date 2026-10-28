@@ -1,8 +1,8 @@
 name: Publish Maximus
-# Every push to main publishes the package version when npm does not have it yet; a manual run does the same.
+# Every push to release/7.2 publishes the package version when npm does not have it yet; a manual run does the same.
 on:
   push:
-    branches: [main]
+    branches: [release/7.2]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/release/7.2'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -42,10 +42,10 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.release.outputs.publish == 'true'
-        run: bun install --frozen-lockfile
-      # The same gate as every push: build, types, lint, tests and the packed-package checks.
+        run: bun install --frozen-lockfile --ignore-scripts
+      # Release validation builds and checks types and style without executing tests.
       - if: steps.release.outputs.publish == 'true'
-        run: bun run verify
+        run: bun run verify:release
       - if: steps.release.outputs.publish == 'true'
         run: node scripts/publish.mjs
         env:

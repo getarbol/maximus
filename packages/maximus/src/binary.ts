@@ -107,7 +107,7 @@ export function attachmentResponse(file: Attachment, status = 200): Response {
   const body: BodyInit =
     file.body instanceof Uint8Array
       ? (file.body as Uint8Array<ArrayBuffer>)
-      : exactLength(file.body, file.byteLength);
+      : attachmentStream(file.body, file.byteLength);
   return new Response(body, {
     status,
     headers: {
@@ -119,4 +119,13 @@ export function attachmentResponse(file: Attachment, status = 200): Response {
       'x-content-type-options': 'nosniff',
     },
   });
+}
+
+/** Workers determines Content-Length from the body, ignoring a header on an ordinary stream. */
+function attachmentStream(body: ReadableStream<Uint8Array>, byteLength: number): ReadableStream<Uint8Array> {
+  const bounded = exactLength(body, byteLength);
+  // Keep the standard-stream fallback for runtimes that honor the explicit response header.
+  return typeof FixedLengthStream === 'function'
+    ? bounded.pipeThrough(new FixedLengthStream(byteLength))
+    : bounded;
 }

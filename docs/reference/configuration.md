@@ -146,3 +146,14 @@ mounts it at the root of its host. The endpoint requires the scope `<namespace>:
 
 `createClient<typeof app>(baseUrl, token, options?)` from `@arbol-ai/maximus/client`. Its options are
 in the [typed client guide](../guides/typed-client.md#options).
+
+### Refusal challenges
+
+`tokens.challenge(failure, context)` may return a `WWW-Authenticate` value for a 401 or 403.
+This lets a custom resolver describe an insufficient scope without changing admission or the
+error envelope. Return `null` to retain the default 401 challenge (or no challenge on a 403).
+The value must be a valid HTTP header and must never include the presented token or claims.
+
+Streamed attachments use Workers' `FixedLengthStream` when available, so the runtime preserves
+`Content-Length` without buffering the file. The standard stream fallback retains exact-length
+validation outside Workers. `NOT_FOUND` describes a missing resource, including an operation or record.

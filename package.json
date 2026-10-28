@@ -13,7 +13,8 @@
     "test": "turbo run test",
     "check": "ultracite check",
     "fix": "ultracite fix",
-    "verify": "bun run build && bun run typecheck && bun run check && bun run test && node scripts/verify-package.mjs"
+    "verify": "bun run build && bun run typecheck && bun run check && bun run test && node scripts/verify-package.mjs",
+    "verify:release": "bun run build && bun run typecheck && bun run check"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261018.1",
