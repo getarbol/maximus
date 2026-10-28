@@ -259,6 +259,12 @@ export interface TokenPolicy<E = unknown> {
    */
   resourceMetadataUrl?: string | null | ((context: TokenResolutionContext<E>) => string | null);
   /**
+   * Optional WWW-Authenticate value for a 401 or 403 refusal, including a resolver's missing-scope
+   * failure. Null keeps the default 401 challenge and leaves a 403 without a challenge. This hook
+   * changes response metadata only; it cannot admit a refused request.
+   */
+  challenge?: (failure: Failure, context: TokenResolutionContext<E>) => string | null;
+  /**
    * Protected-resource metadata documents (RFC 9728) to serve instead of the default one, by absolute path
    * at or below `/.well-known/oauth-protected-resource`, one per resource. When set, the default document
    * answers `NOT_FOUND`. A `bearer` scheme cannot set it.

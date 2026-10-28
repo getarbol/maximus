@@ -202,3 +202,14 @@ rules, with a `TypeError`:
 | `The application body limit is a positive integer up to 16 MiB.`                                                                           | `maxBodyBytes` is out of range. `maxOutputBytes` has its own message.                           |
 | `HTTP basePath must be an absolute path without a trailing slash or dot segments.`                                                         | `http.basePath` is malformed.                                                                   |
 | `HTTP healthPath must be an unreserved absolute path.`                                                                                     | `http.healthPath` is malformed, versioned or one of the API's own paths.                        |
+
+### Refusal challenges
+
+`tokens.challenge(failure, context)` may return a `WWW-Authenticate` value for a 401 or 403.
+This lets a custom resolver describe an insufficient scope without changing admission or the
+error envelope. Return `null` to retain the default 401 challenge (or no challenge on a 403).
+The value must be a valid HTTP header and must never include the presented token or claims.
+
+Streamed attachments use Workers' `FixedLengthStream` when available, so the runtime preserves
+`Content-Length` without buffering the file. The standard stream fallback retains exact-length
+validation outside Workers. `NOT_FOUND` describes a missing resource, including an operation or record.

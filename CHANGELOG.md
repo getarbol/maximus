@@ -7,6 +7,13 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
+## 8.0.1 — 2026-10-27
+
+- Preserve streamed attachment Content-Length in Workers with a bounded FixedLengthStream.
+- Allow token resolvers to provide WWW-Authenticate metadata for 401/403 refusals through `tokens.challenge`.
+- Describe NOT_FOUND as a missing resource, for both records and operations.
+- Keep automated release validation to builds, types and static checks; tests require a manual request.
+
 ## 8.0.0 (2026-10-27)
 
 A Maximus service is a project configured by one file, `vite.config.ts`, whose routes are files: each
