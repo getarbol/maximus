@@ -458,10 +458,15 @@ export function isContextDeclaration(value: unknown): boolean {
 /** The token fields an application states in code, as `auth.ts` declares them; the rest are configuration. */
 export type AuthOptions<E = RegisteredEnv> = Pick<
   TokenPolicy<E>,
-  'resolve' | 'resourceMetadataUrl' | 'resources'
+  'resolve' | 'challenge' | 'resourceMetadataUrl' | 'resources'
 >;
 /** The fields `auth.ts` states: code. The issuer, audience, scheme and every other field are configuration. */
-const AUTH_FIELDS: ReadonlySet<string> = new Set(['resolve', 'resourceMetadataUrl', 'resources']);
+const AUTH_FIELDS: ReadonlySet<string> = new Set([
+  'resolve',
+  'challenge',
+  'resourceMetadataUrl',
+  'resources',
+]);
 /**
  * Declares, as `auth.ts`'s default export, how the application verifies tokens itself: `resolve`, which
  * replaces the default OAuth verification for every token but the development token (for credentials the
