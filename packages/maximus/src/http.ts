@@ -385,7 +385,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         headers.set('www-authenticate', challenge);
       }
     }
-    if (error.code === 'UNAUTHORIZED' && !headers.has('www-authenticate')) {
+    if (status === 401 && !headers.has('www-authenticate')) {
       const metadataUrl = oauth ? challengeMetadataUrl(context) : null;
       headers.set(
         'www-authenticate',
