@@ -7,6 +7,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      pull_request:
+        description: Optional pull request number; checks its merge with the target branch
+        type: string
+        default: ''
       run_tests:
         description: Run test suites and package scenarios explicitly
         type: boolean
@@ -29,6 +33,7 @@ jobs:
         with:
           # Later steps, dependency install scripts among them, never see the job token.
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       - run: bun run verify
 
@@ -41,6 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       # The examples run against the packages' build, as a project installs them.
       - run: bun run build
@@ -56,6 +62,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       # The workspace's Vite+ configuration loads every example, which imports the built package.
       - run: bun run build
@@ -72,6 +79,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       - run: bun run build
       # Packs each package, installs it into a new project and creates starters that pass their own verify.
@@ -85,6 +93,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       # Each committed document passes Redocly's strictest rules, and the TypeScript types openapi-typescript
       # writes from it compile; the tools are pinned, installed without their install scripts.
@@ -99,6 +108,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
       - uses: ./.github/actions/setup
       - run: bun run build
       - run: bun run test:e2e
