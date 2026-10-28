@@ -6,6 +6,10 @@ Notable changes to Maximus, newest first. Maximus is one package, `@arbol-ai/max
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the
 dates of the release commits.
 
+## 7.2.2
+
+Preserve the default OAuth challenge for custom catalog failures with HTTP 401 when the application callback returns no replacement.
+
 ## 7.1.0 (2026-10-18)
 
 - `@arbol-ai/maximus/projection` is back, for a gateway that builds MCP tools, CLI commands and
