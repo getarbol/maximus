@@ -4,7 +4,42 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+    - '**/*.md'
+    - '**/*.mdx'
+    - '**/*.rst'
+    - '**/*.txt'
+    - '**/LICENSE'
+    - '**/LICENSE.*'
+    - '**/NOTICE'
+    - '**/NOTICE.*'
+    - .github/ISSUE_TEMPLATE/**
+    - .github/PULL_REQUEST_TEMPLATE/**
+    - .github/PULL_REQUEST_TEMPLATE
+    - .github/CODEOWNERS
   pull_request:
+    paths-ignore:
+    - '**/*.md'
+    - '**/*.mdx'
+    - '**/*.rst'
+    - '**/*.txt'
+    - '**/LICENSE'
+    - '**/LICENSE.*'
+    - '**/NOTICE'
+    - '**/NOTICE.*'
+    - .github/ISSUE_TEMPLATE/**
+    - .github/PULL_REQUEST_TEMPLATE/**
+    - .github/PULL_REQUEST_TEMPLATE
+    - .github/CODEOWNERS
+    types:
+    - opened
+    - synchronize
+    - reopened
+    - ready_for_review
+    - converted_to_draft
+    - edited
+    - labeled
+    - unlabeled
   workflow_dispatch:
     inputs:
       pull_request:
@@ -20,7 +55,8 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   # A newer push to a pull request replaces its run; every push to main keeps its own.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' ||
+    (github.event_name == 'pull_request') }}
 env:
   CF_SEND_TELEMETRY: 'false'
 jobs:
@@ -29,93 +65,129 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
           # Later steps, dependency install scripts among them, never see the job token.
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
-      - run: bun run verify
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
+    - run: bun run verify
 
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) }}
   test:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) && (github.event_name
+      == 'workflow_dispatch' && inputs.run_tests) }}
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
       # The examples run against the packages' build, as a project installs them.
-      - run: bun run build
+    - run: bun run build
       # Every package and example suite; under 90% lines, branches, functions or statements fails.
-      - run: bun run test:coverage
+    - run: bun run test:coverage
 
   integration:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) && (github.event_name
+      == 'workflow_dispatch' && inputs.run_tests) }}
     name: Postgres
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
       # The workspace's Vite+ configuration loads every example, which imports the built package.
-      - run: bun run build
+    - run: bun run build
       # The suite starts its own container from this image, which it never pulls itself.
-      - run: docker pull postgres:18.6-trixie
-      - run: bun run test:integration
+    - run: docker pull postgres:18.6-trixie
+    - run: bun run test:integration
 
   package:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) && (github.event_name
+      == 'workflow_dispatch' && inputs.run_tests) }}
     name: Packed packages
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
-      - run: bun run build
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
+    - run: bun run build
       # Packs each package, installs it into a new project and creates starters that pass their own verify.
-      - run: bun run verify:package
+    - run: bun run verify:package
 
   clients:
     name: OpenAPI clients
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
       # Each committed document passes Redocly's strictest rules, and the TypeScript types openapi-typescript
       # writes from it compile; the tools are pinned, installed without their install scripts.
-      - run: bun run check:clients
+    - run: bun run check:clients
 
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) }}
   e2e:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_tests
+    if: >-
+      ${{ ((github.event_name != 'pull_request' && github.event_name != 'pull_request_target') || (!github.event.pull_request.draft
+      && !startsWith(github.event.pull_request.title, 'WIP') && !startsWith(github.event.pull_request.title, '[WIP]')
+      && !contains(github.event.pull_request.labels.*.name, 'wip') && !contains(github.event.pull_request.labels.*.name,
+      'work-in-progress') && !contains(github.event.pull_request.labels.*.name, 'status: wip'))) && (github.event_name
+      == 'workflow_dispatch' && inputs.run_tests) }}
     name: Examples running
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
-      - uses: ./.github/actions/setup
-      - run: bun run build
-      - run: bun run test:e2e
-      - name: Keep the servers' output of a failed run
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: e2e-logs
-          path: .e2e/
-          retention-days: 7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+      with:
+        persist-credentials: false
+        ref: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request &&
+          format('refs/pull/{0}/merge', inputs.pull_request) || github.ref }}
+    - uses: ./.github/actions/setup
+    - run: bun run build
+    - run: bun run test:e2e
+    - name: Keep the servers' output of a failed run
+      if: failure()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
+      with:
+        name: e2e-logs
+        path: .e2e/
+        retention-days: 7
