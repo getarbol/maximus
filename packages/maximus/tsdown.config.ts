@@ -20,6 +20,7 @@ const entries = {
   'mcp/index': 'src/mcp/index.ts',
   'client/client': 'src/client/client.ts',
   'analytics/analytics': 'src/analytics/analytics.ts',
+  'capture/index': 'src/capture/index.ts',
   'postgres/index': 'src/postgres/index.ts',
   'tooling/testing': 'src/tooling/testing.ts',
 };

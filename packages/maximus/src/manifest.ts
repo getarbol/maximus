@@ -5,6 +5,7 @@
 import type { Static, TSchema } from '@sinclair/typebox';
 
 import type { BinaryBody } from './binary.ts';
+import type { CaptureConfig } from './capture.ts';
 import type { Failure, ErrorCatalog } from './errors.ts';
 import type { Result } from './result.ts';
 import type { StaticDecode } from './schema-types.ts';
@@ -324,6 +325,11 @@ export interface AppManifest<Env, C, Ops extends Record<string, OperationShape>>
    * where the trace id comes from.
    */
   telemetry?: TelemetryConfig<Env>;
+  /**
+   * One complete record of every operation call and refusal for a store the application declares, apart from
+   * telemetry: `defineCapture` from `@arbol-ai/maximus/capture`.
+   */
+  capture?: CaptureConfig<Env>;
   /**
    * A Workers rate limiting binding each HTTP and MCP call must pass, per organization and actor;
    * `retryAfter` sets a refusal's `Retry-After` seconds, 60 by default.

@@ -95,6 +95,10 @@
       "types": "./dist/analytics/analytics.d.ts",
       "import": "./dist/analytics/analytics.js"
     },
+    "./capture": {
+      "types": "./dist/capture/index.d.ts",
+      "import": "./dist/capture/index.js"
+    },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres/index.js"

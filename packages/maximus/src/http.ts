@@ -8,9 +8,12 @@ import { stringify } from 'yaml';
 
 import type { Attachment } from './attachment-schema.ts';
 import { attachmentResponse, binaryBody } from './binary.ts';
+import { recordCapture } from './capture.ts';
+import type { VerifiedCaller } from './capture.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
 import { executeOperation } from './execution.ts';
+import type { ExecutionCall } from './execution.ts';
 import { createHttpRouteResolver } from './http-paths.ts';
 import type { HttpRouteMatch } from './http-paths.ts';
 import { readBodyText } from './internal/body.ts';
@@ -96,6 +99,11 @@ export interface TransportContext {
    * first, and `invoke` counts each of its calls itself.
    */
   admitRequest: () => Promise<boolean>;
+  /**
+   * Captures a refusal the transport answers itself, such as a call to a tool the caller cannot see: its code,
+   * and the operation when it names one.
+   */
+  refused: (failure: Failure, operation?: string) => void;
   /** Bytes of the request body the transport received. */
   bodyBytes: number;
   /** The body limit HTTP applies to an operation; a transport holds each invocation to it. */
@@ -398,6 +406,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     let surface: 'http' | 'mcp' = 'http';
     let plain = false;
     let requestEnv = env;
+    // What capture states of the caller: nothing of a token until that token is verified.
+    let verified: VerifiedCaller | undefined;
+    const userAgent = incoming.headers.get('user-agent')?.slice(0, 200) || undefined;
     const context: RouteContext = {
       requestId,
       fail: (error, headers) => failure(error, requestId, resolutionContext(), headers),
@@ -423,6 +434,19 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
       applicationScopes,
       background,
     });
+    /** Captures a refusal before execution, of this request's operation or the one a transport names. */
+    function captureRefusal(error: Failure, refused: string | null, scopedEnv: E): void {
+      recordCapture(manifest, scopedEnv, background, {
+        operation: refused,
+        surface,
+        requestId,
+        principal,
+        ...(verified ? { verified } : {}),
+        requestStarted: started,
+        result: err(error),
+        call: userAgent ? { userAgent } : {},
+      });
+    }
     /** A refusal before execution, observed as a rejected admission. */
     function reject(error: Failure): Response {
       recordAdmission(manifest, requestEnv, background, {
@@ -433,6 +457,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         started,
         errorCode: error.code,
       });
+      captureRefusal(error, operation, requestEnv);
       return failure(error, requestId, resolutionContext());
     }
     /**
@@ -515,10 +540,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           return reject(result.error);
         }
         const authenticated = result.value;
+        const bearer = /^Bearer (\S+)$/i.exec(incoming.headers.get('authorization') ?? '')?.[1];
         // The verified OAuth access token, for an operation that calls another service as the same caller.
-        const accessToken = ownBearer
-          ? undefined
-          : /^Bearer (\S+)$/i.exec(incoming.headers.get('authorization') ?? '')?.[1];
+        const accessToken = ownBearer ? undefined : bearer;
         const actor: Principal = {
           actorId: authenticated.actorId,
           actorKind: authenticated.actorKind,
@@ -526,6 +550,13 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           requestId,
         };
         principal = actor;
+        if (manifest.capture) {
+          verified = {
+            scopes: authenticated.scopes,
+            ...(authenticated.client ? { client: authenticated.client } : {}),
+            ...(bearer ? { token: bearer } : {}),
+          };
+        }
         if (!(await withinRateLimit(scopedEnv, authenticated))) {
           return reject(standardErrors.rateLimited.create());
         }
@@ -570,7 +601,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             transport &&
             !operations.some(([selectedName, selected]) => selectedName === name && selected === op)
           ) {
-            return { ok: false as const, error: standardErrors.notFound.create() };
+            const error = standardErrors.notFound.create();
+            captureRefusal(error, null, scopedEnv);
+            return { ok: false as const, error };
           }
           const admissionStarted = performance.now();
           if (!(await admitRequest())) {
@@ -583,11 +616,13 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
               started: admissionStarted,
               errorCode: error.code,
             });
+            captureRefusal(error, name, scopedEnv);
             return { ok: false as const, error };
           }
           if (telemetryEnabled(manifest.telemetry, scopedEnv)) {
             hooks.annotate?.(name, requestId);
           }
+          const call: ExecutionCall = userAgent ? { userAgent } : {};
           const invocationStarted = performance.now();
           const output = await executeOperation(
             manifest,
@@ -604,7 +639,8 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
                 }
               : undefined,
             background,
-            byteOperation ? binaryBody(incoming, op.maxBodyBytes ?? fallbackBodyBytes) : undefined
+            byteOperation ? binaryBody(incoming, op.maxBodyBytes ?? fallbackBodyBytes) : undefined,
+            call
           );
           recordExecution(manifest, scopedEnv, background, {
             principal: actor,
@@ -612,6 +648,17 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             surface: transport ? 'mcp' : 'http',
             started: invocationStarted,
             result: output,
+          });
+          recordCapture(manifest, scopedEnv, background, {
+            operation: name,
+            surface: transport ? 'mcp' : 'http',
+            requestId,
+            principal: actor,
+            ...(verified ? { verified } : {}),
+            requestStarted: started,
+            executionStarted: invocationStarted,
+            result: output,
+            call,
           });
           return output;
         }
@@ -627,6 +674,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             url: (path) => `${manifest.origin}${paths.mount(path)}`,
             invoke,
             admitRequest,
+            refused: (error, name) => {
+              captureRefusal(error, name ?? null, scopedEnv);
+            },
             bodyBytes: new TextEncoder().encode(bodyText).byteLength,
             bodyLimit: (op) => op.maxBodyBytes ?? fallbackBodyBytes,
           });

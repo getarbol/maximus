@@ -3,6 +3,9 @@
  * use the fluent builder instead.
  */
 export { executeOperation } from './execution.ts';
+export type { ExecutionCall } from './execution.ts';
+export { recordCapture } from './capture.ts';
+export type { CapturedCall, CaptureConfig, VerifiedCaller } from './capture.ts';
 export { defineApp } from './define-app.ts';
 export { composeOperations, operation, operationScopes } from './manifest.ts';
 export type {

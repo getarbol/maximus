@@ -146,6 +146,7 @@ export function mcp(options: { path?: string } = {}): HttpTransport {
       url,
       invoke,
       admitRequest,
+      refused,
       bodyBytes,
       bodyLimit,
     }) {
@@ -158,6 +159,7 @@ export function mcp(options: { path?: string } = {}): HttpTransport {
       const count = async () => {
         if (!(await admitRequest())) {
           const failure = standardErrors.rateLimited.create();
+          refused(failure);
           throw new ProtocolError(RATE_LIMITED, failure.message, failure);
         }
       };
@@ -215,15 +217,21 @@ export function mcp(options: { path?: string } = {}): HttpTransport {
               }
               const selected = visible.find(([, op]) => op.mcp.name === call.params.name);
               if (!selected) {
+                // The caller learns only that it has no such tool; the record names a tool it may not call.
+                const hidden = operations.find(([, op]) => op.mcp?.name === call.params.name);
+                refused(
+                  hidden ? standardErrors.forbidden.create() : standardErrors.notFound.create(),
+                  hidden?.[0]
+                );
                 throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Tool not found');
               }
               const [name, op] = selected;
               if (bodyBytes > bodyLimit(op)) {
+                const failure = standardErrors.tooLarge.create();
+                refused(failure, name);
                 return {
                   isError: true,
-                  content: [
-                    { type: 'text' as const, text: JSON.stringify(standardErrors.tooLarge.create()) },
-                  ],
+                  content: [{ type: 'text' as const, text: JSON.stringify(failure) }],
                 };
               }
               const result = await invoke(name, op, call.params.arguments ?? {});

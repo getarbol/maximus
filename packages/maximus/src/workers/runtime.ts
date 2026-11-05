@@ -5,7 +5,9 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { DurableObject } from 'cloudflare:workers';
 
+import { recordCapture } from '../capture.ts';
 import { executeOperation } from '../execution.ts';
+import type { ExecutionCall } from '../execution.ts';
 import { standardErrors, createHttpHandler, err, PrincipalSchema, parseInput } from '../index.ts';
 import type { Static, Failure, Result, Principal, HttpRoute } from '../index.ts';
 import type { HttpOptions, AppManifest, OperationShape } from '../internals.ts';
@@ -103,25 +105,44 @@ export function createWorker<E, C, O extends Record<string, OperationShape>>(
     Object.defineProperty(Entrypoint.prototype, name, {
       configurable: true,
       async value(this: Entrypoint, principal: Principal, input: unknown) {
+        const requestStarted = performance.now();
         const props = this.ctx.props as { caller?: unknown };
+        const parsed = parseInput(PrincipalSchema, principal);
+        /**
+         * Refuses the call, and captures the refusal: the principal it names is unverified, so the record keeps
+         * its request id, for correlation, and never its organization or actor.
+         */
+        const refuse = () => {
+          const refusal = err(standardErrors.unauthorized.create());
+          recordCapture(manifest, this.env, this.ctx, {
+            operation: name,
+            surface: 'rpc',
+            requestId: parsed.ok ? parsed.value.requestId : crypto.randomUUID(),
+            principal: null,
+            requestStarted,
+            result: refusal,
+            call: typeof props?.caller === 'string' ? { rpcCaller: props.caller.slice(0, 64) } : {},
+          });
+          return refusal;
+        };
         if (
           !props ||
           Object.keys(props).length !== 1 ||
           typeof props.caller !== 'string' ||
           !callers.includes(props.caller)
         ) {
-          return err(standardErrors.unauthorized.create());
+          return refuse();
         }
-        const parsed = parseInput(PrincipalSchema, principal);
         if (!parsed.ok) {
-          return err(standardErrors.unauthorized.create());
+          return refuse();
         }
         if (telemetryEnabled(manifest.telemetry, this.env)) {
           annotateInvocation(manifest.name, name, parsed.value.requestId);
         }
+        const call: ExecutionCall = { rpcCaller: props.caller };
         const started = performance.now();
         const result = await withTelemetry(manifest.telemetry, this.env, () =>
-          executeOperation(manifest, op, this.env, parsed.value, input, undefined, this.ctx)
+          executeOperation(manifest, op, this.env, parsed.value, input, undefined, this.ctx, undefined, call)
         );
         recordExecution(manifest, this.env, this.ctx, {
           principal: parsed.value,
@@ -129,6 +150,16 @@ export function createWorker<E, C, O extends Record<string, OperationShape>>(
           surface: 'rpc',
           started,
           result,
+        });
+        recordCapture(manifest, this.env, this.ctx, {
+          operation: name,
+          surface: 'rpc',
+          requestId: parsed.value.requestId,
+          principal: parsed.value,
+          requestStarted,
+          executionStarted: started,
+          result,
+          call,
         });
         return result;
       },

@@ -118,9 +118,9 @@ export interface TelemetryConfig<E> {
   /** Read an actual active exporter trace, never a client-supplied header or generated correlation ID. */
   traceId?: () => string | null;
 }
-/** Microseconds since `started`, a `performance.now()` reading. */
-function elapsedMicros(started: number): number {
-  return Math.max(0, Math.round((performance.now() - started) * 1000));
+/** Microseconds from `started` to `until` or now, each a `performance.now()` reading. */
+export function elapsedMicros(started: number, until = performance.now()): number {
+  return Math.max(0, Math.round((until - started) * 1000));
 }
 
 /**
@@ -141,7 +141,7 @@ function deliver(background: BackgroundContext, requestId: string, send: () => u
  * The active trace id the configuration reads, when it is a valid non-zero W3C trace id; never a generated
  * one.
  */
-function activeTraceId<E>(config?: TelemetryConfig<E>): string | null {
+export function activeTraceId<E>(config?: TelemetryConfig<E>): string | null {
   try {
     const id = config?.traceId?.();
     return id && /^[0-9a-f]{32}$/.test(id) && !/^0+$/.test(id) ? id : null;
