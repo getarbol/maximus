@@ -27,6 +27,7 @@
     "auth.ts",
     "context.ts",
     "telemetry.ts",
+    "capture.ts",
     "vite.config.ts",
     ".maximus/*.ts"
   ]

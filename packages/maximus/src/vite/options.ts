@@ -54,7 +54,7 @@ export interface WebAppOptions {
  * What `vite.config.ts` states: the application's configuration, and the Worker's settings as Cloudflare
  * names them. Maximus owns the Worker's entry and, for a web app, its assets; it adds `nodejs_compat` and,
  * under `vp dev`, the development token. The code that completes the application is `errors.ts`, `auth.ts`,
- * `context.ts` and `telemetry.ts`.
+ * `context.ts`, `telemetry.ts` and `capture.ts`.
  */
 export interface MaximusOptions extends Omit<WorkerConfig, 'name' | 'entrypoint' | 'env' | 'assets'> {
   /**

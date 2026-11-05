@@ -31,13 +31,14 @@ import { serviceModule, serviceTypeName } from './service-types.ts';
 /**
  * What `vite.config.ts` configures, as the Vite plugin derives it: the application besides its code, the
  * Worker's HTTP paths and the bindings of each mode. Every value is plain data, which the generated modules
- * carry; the code that completes the application is `errors.ts`, `auth.ts`, `context.ts` and `telemetry.ts`.
+ * carry; the code that completes the application is `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts` and
+ * `capture.ts`.
  */
 export interface ProjectOptions {
   /** Identity, origin, token policy, RPC callers and limits. */
   application: Omit<
     ApplicationConfiguration<unknown>,
-    'errors' | 'tokens' | 'telemetry' | 'mcp' | 'rateLimit'
+    'errors' | 'tokens' | 'telemetry' | 'capture' | 'mcp' | 'rateLimit'
   > & {
     tokens: Omit<TokenPolicy, 'resolve' | 'challenge' | 'resources' | 'resourceMetadataUrl'>;
     /** The rate limiting binding's name, which the generated application checks against `Env`. */
@@ -502,7 +503,8 @@ export function prepareProject(directory: string, mode: string, project: Project
   const auth = rootModule(root, 'auth');
   const context = rootModule(root, 'context');
   const telemetry = rootModule(root, 'telemetry');
-  for (const module of [catalog, auth, context, telemetry]) {
+  const capture = rootModule(root, 'capture');
+  for (const module of [catalog, auth, context, telemetry, capture]) {
     if (module) {
       readProjectModule(root, join(root, module), 'config');
     }
@@ -602,8 +604,9 @@ export function prepareProject(directory: string, mode: string, project: Project
         `export const { middleware, requestMiddleware } = collectMiddleware([${middlewareModules.join(', ')}] as const);`,
       ]
     ),
-    // The application vite.config.ts configures, completed by the optional errors, auth, context and telemetry
-    // modules. defineAuth and defineTelemetry again: whatever those modules export, only their code joins.
+    // The application vite.config.ts configures, completed by the optional errors, auth, context, telemetry and
+    // capture modules. defineAuth, defineTelemetry and defineCapture again: whatever those modules export, only
+    // their code joins. Only a project with a capture module loads the capture entry.
     'base.ts': generatedModule(
       mode,
       [
@@ -613,6 +616,7 @@ export function prepareProject(directory: string, mode: string, project: Project
           'maximus',
           ...(catalog ? [] : ['standardErrors']),
         ].join(', ')} } from '@arbol-ai/maximus';`,
+        ...(capture ? ["import { defineCapture } from '@arbol-ai/maximus/capture';"] : []),
         `import { ${context ? 'bindContext, ' : ''}useProjectMiddleware } from '@arbol-ai/maximus/config';`,
         "import { application } from './config.ts';",
         "import { middleware } from './middleware.ts';",
@@ -621,6 +625,7 @@ export function prepareProject(directory: string, mode: string, project: Project
         ...(auth ? [`import auth from ${relativeModule(auth)};`] : []),
         ...(context ? [`import context from ${relativeModule(context)};`] : []),
         ...(telemetry ? [`import telemetry from ${relativeModule(telemetry)};`] : []),
+        ...(capture ? [`import capture from ${relativeModule(capture)};`] : []),
       ],
       [
         `const configured = maximus<Env>({ ${[
@@ -629,6 +634,7 @@ export function prepareProject(directory: string, mode: string, project: Project
           catalog ? 'errors' : 'errors: standardErrors',
           ...(described ? ['mcp'] : []),
           ...(telemetry ? ['telemetry: defineTelemetry(telemetry)'] : []),
+          ...(capture ? ['capture: defineCapture(capture)'] : []),
         ].join(', ')} });`,
         `export const base = useProjectMiddleware(${context ? 'bindContext(configured, context)' : 'configured'}, middleware);`,
       ]
