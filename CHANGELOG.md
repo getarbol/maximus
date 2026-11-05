@@ -7,6 +7,31 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
+## 8.1.0 (2026-11-04)
+
+- **Capture**: `@arbol-ai/maximus/capture` gives a service one complete record of every operation call and every
+  refusal, over HTTP, MCP and RPC, in a store it declares: `capture.ts` default-exports
+  `defineCapture({ enabled, sink, payloads, dimensions })`, and a Worker composed by hand passes the same object
+  as `maximus()`'s `capture`. The record is written beside `recordExecution` and `recordAdmission`, so it states
+  what the caller received, including the refusals a middleware never sees. Its metadata keeps the names of
+  `ExecutionEventSchema`; `CaptureRecordSchema` documents the rest. It runs after the response, inside
+  `waitUntil`, apart from the response and the observers, which still receive metadata alone. See
+  [Capture](docs/guides/capture.md).
+- `pipeline({ binding, map?, blobs? })` sends records to a Cloudflare Pipelines stream: one retry with the same
+  id, then the dead letter when `blobs` names an R2 bucket; a payload over 900 KB goes to that bucket by
+  reference; a missing binding captures nothing and logs nothing. A failed delivery logs
+  `maximus.capture.delivery_failed` with the request id alone.
+- `secret: true` on a schema marks a value capture never records, and `withoutSecrets(schema, value)`, from
+  `/schemas` and `/capture`, answers a copy of a value without what its schema marks, at any depth. The keyword
+  stays out of OpenAPI documents and tool listings, so marking a field changes no contract. `pipeSchema` and
+  `inputSchema(schema, wire)` throw a `TypeError` for a canonical schema that marks a field when its wire schema
+  marks none.
+- `Invocation` gains `rpcCaller`, the Service Binding's caller admission checked, and `userAgent`, the request's
+  `user-agent` cut to 200 characters. `executeOperation` takes an optional last argument, `ExecutionCall`, which
+  hands its admitted input and prepared context to the recording points.
+- TypeScript: code that passes one application's manifest on under another `Env` type, as it already sets
+  `telemetry: undefined`, also sets `capture: undefined`.
+
 ## 8.0.1 — 2026-10-27
 
 - Preserve streamed attachment Content-Length in Workers with a bounded FixedLengthStream.
