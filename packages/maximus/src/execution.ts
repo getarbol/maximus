@@ -21,7 +21,22 @@ import type { Result } from './result.ts';
 import { telemetryEnabled, reportUnexpected } from './telemetry.ts';
 import type { BackgroundContext } from './telemetry.ts';
 import type { Principal } from './tokens.ts';
-import { decodeInput } from './validation.ts';
+import { admitInput } from './validation.ts';
+
+/**
+ * What a transport knows of one call beyond its principal and token, and where execution leaves what the
+ * recording points read once the call has answered.
+ */
+export interface ExecutionCall {
+  /** Over native RPC, the caller admission checked: `Invocation.rpcCaller`. */
+  readonly rpcCaller?: string;
+  /** On HTTP and MCP, the request's user agent: `Invocation.userAgent`. */
+  readonly userAgent?: string;
+  /** Set once the input is admitted: what its schema checked, and the decoded value the handler receives. */
+  admitted?: { readonly checked: unknown; readonly decoded: unknown };
+  /** Set once preparation answers: the context the handler receives. */
+  context?: unknown;
+}
 
 /**
  * The execution path every transport shares: checks that the caller may run the operation (its scopes when
@@ -29,7 +44,8 @@ import { decodeInput } from './validation.ts';
  * decodes the input, prepares the context, runs the middleware and the handler, then checks the result
  * against the catalog, the declared failures, the output schema and the output limit. A refused caller
  * answers `FORBIDDEN` and a refused input `INVALID_INPUT`. An unexpected error becomes `INTERNAL_ERROR`,
- * reported while telemetry is on, and is never thrown.
+ * reported while telemetry is on, and is never thrown. `call` hands the admitted input and the prepared context
+ * to the recording points, which only the Result would otherwise reach.
  */
 export async function executeOperation<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
@@ -39,7 +55,8 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
   input: unknown,
   authority?: InvocationAuthority,
   background?: BackgroundContext,
-  body?: BinaryBody
+  body?: BinaryBody,
+  call?: ExecutionCall
 ): Promise<Result<unknown, Failure>> {
   if (
     (operation.conditionalScopes?.length && !authority) ||
@@ -50,9 +67,12 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
   }
   try {
     // A refused input answers INVALID_INPUT; an owner codec that fails is the server's error, caught below.
-    const admitted = decodeInput(operation.input, input);
+    const admitted = admitInput(operation.input, input);
     if (!admitted.ok) {
       return err(standardErrors.invalidInput.create(admitted.error.data));
+    }
+    if (call) {
+      call.admitted = { checked: admitted.checked, decoded: admitted.value };
     }
     const trustedAuthority = authority
       ? Object.freeze({
@@ -69,6 +89,8 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       ...(body ? { body } : {}),
       ...(background ? { background } : {}),
       ...(trustedAuthority ? { authority: trustedAuthority } : {}),
+      ...(call?.rpcCaller ? { rpcCaller: call.rpcCaller } : {}),
+      ...(call?.userAgent ? { userAgent: call.userAgent } : {}),
     };
     /**
      * A failure the call answers, from its context, middleware or handler: one of the catalog and, when the
@@ -98,6 +120,9 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       : await manifest.context(invocation);
     if (!context.ok) {
       return err(declared(context.error));
+    }
+    if (call) {
+      call.context = context.value;
     }
     const chain = operation.pipeline?.middleware ?? manifest.middleware ?? [];
     let latest = -1;

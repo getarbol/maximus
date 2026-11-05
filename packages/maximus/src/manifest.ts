@@ -54,6 +54,16 @@ export interface Invocation<Env> {
    * absent over RPC and for a token that names no client.
    */
   readonly authority?: InvocationAuthority;
+  /**
+   * Over native RPC, the `caller` of the Service Binding, which admission checked against the operation's
+   * callers; absent on HTTP and MCP.
+   */
+  readonly rpcCaller?: string;
+  /**
+   * On HTTP and MCP, the request's `user-agent`, cut to 200 characters; absent over RPC. It is what the caller
+   * claims, for an audit to read: never authorization.
+   */
+  readonly userAgent?: string;
   /** The operation's input, decoded and checked once; preparation must neither check it again nor log it. */
   readonly input?: unknown;
   /** The name of the operation being called, which the builder sets; never taken from caller input. */

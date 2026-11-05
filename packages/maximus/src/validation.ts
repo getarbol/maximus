@@ -95,14 +95,27 @@ function boundedInput(value: unknown, depth = 0, parents = new Set<object>()): b
  * handler returns must already be canonical.
  */
 export function decodeSchema<Schema extends TSchema>(schema: Schema, input: unknown): StaticDecode<Schema> {
+  return admitSchema(schema, input).value;
+}
+
+/** Decodes input as `decodeSchema` does, and also answers what the schema checked, before any codec ran. */
+function admitSchema<Schema extends TSchema>(
+  schema: Schema,
+  input: unknown
+): { value: StaticDecode<Schema>; checked: unknown } {
   if (!boundedInput(input)) {
     throw new SchemaValidationError([
       { code: 'invalid_input', message: 'Input must be a bounded plain JSON tree.', path: [] },
     ]);
   }
-  const value = Value.Default(schema, Value.Clone(input));
-  Value.Assert(schema, value);
-  return (HasTransform(schema, []) ? TransformDecode(schema, [], value) : value) as StaticDecode<Schema>;
+  const checked: unknown = Value.Default(schema, Value.Clone(input));
+  Value.Assert(schema, checked);
+  return {
+    value: (HasTransform(schema, [])
+      ? TransformDecode(schema, [], checked)
+      : checked) as StaticDecode<Schema>,
+    checked,
+  };
 }
 
 /** Field issues a refusal carries: enough to correct the input, never an input value. */
@@ -123,9 +136,18 @@ const MAX_ISSUE_TEXT = 256;
  * error that refuses nothing, is thrown for the caller to report: it is the server's failure, not the input's.
  */
 export function decodeInput<Schema extends TSchema>(schema: Schema, input: unknown) {
-  let value: StaticDecode<Schema>;
+  const admitted = admitInput(schema, input);
+  return admitted.ok ? { ok: true as const, value: admitted.value } : admitted;
+}
+
+/**
+ * `decodeInput`, also answering, for an admitted input, `checked`: the plain JSON its schema checked before any
+ * codec ran, the one shape the schema's own keywords describe.
+ */
+export function admitInput<Schema extends TSchema>(schema: Schema, input: unknown) {
+  let admitted: { value: StaticDecode<Schema>; checked: unknown };
   try {
-    value = decodeSchema(schema, input);
+    admitted = admitSchema(schema, input);
   } catch (error) {
     const refused = decodeIssues(error, MAX_ISSUES);
     if (!refused) {
@@ -145,5 +167,5 @@ export function decodeInput<Schema extends TSchema>(schema: Schema, input: unkno
       },
     };
   }
-  return { ok: true as const, value };
+  return { ok: true as const, value: admitted.value, checked: admitted.checked };
 }
