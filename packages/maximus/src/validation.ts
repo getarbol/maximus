@@ -82,12 +82,25 @@ function boundedInput(value: unknown, depth = 0, parents = new Set<object>()): b
 /** Admit a real wire schema once, materialize declared defaults, and decode native TypeBox transforms.
  * Output validation deliberately remains check-only: response data must already be canonical. */
 export function decodeSchema<Schema extends TSchema>(schema: Schema, input: unknown): StaticDecode<Schema> {
+  return admitSchema(schema, input).value;
+}
+
+/** Decodes input as `decodeSchema` does, and also answers what the schema checked, before any codec ran. */
+function admitSchema<Schema extends TSchema>(
+  schema: Schema,
+  input: unknown
+): { value: StaticDecode<Schema>; checked: unknown } {
   if (!boundedInput(input)) {
     throw new TypeError('Input must be a bounded plain JSON tree.');
   }
-  const value = Value.Default(schema, Value.Clone(input));
-  Value.Assert(schema, value);
-  return (HasTransform(schema, []) ? TransformDecode(schema, [], value) : value) as StaticDecode<Schema>;
+  const checked: unknown = Value.Default(schema, Value.Clone(input));
+  Value.Assert(schema, checked);
+  return {
+    value: (HasTransform(schema, [])
+      ? TransformDecode(schema, [], checked)
+      : checked) as StaticDecode<Schema>,
+    checked,
+  };
 }
 
 /** Field issues a refusal carries: enough to correct the input, never an input value. */
@@ -107,8 +120,18 @@ const MAX_ISSUE_TEXT = 256;
  * field issues. Schema messages name the expectation, not the value; owner refinements must too.
  */
 export function decodeInput<Schema extends TSchema>(schema: Schema, input: unknown) {
+  const admitted = admitInput(schema, input);
+  return admitted.ok ? { ok: true as const, value: admitted.value } : admitted;
+}
+
+/**
+ * `decodeInput`, also answering, for an admitted input, `checked`: the plain JSON its schema checked before any
+ * codec ran, the one shape the schema's own keywords describe.
+ */
+export function admitInput<Schema extends TSchema>(schema: Schema, input: unknown) {
   try {
-    return { ok: true as const, value: decodeSchema(schema, input) };
+    const { value, checked } = admitSchema(schema, input);
+    return { ok: true as const, value, checked };
   } catch (error) {
     const issues: InputIssue[] = (decodeIssues(error, MAX_ISSUES) ?? []).map((issue) => ({
       path: jsonPointer(issue.path).slice(0, MAX_ISSUE_TEXT),

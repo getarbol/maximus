@@ -15,12 +15,29 @@ import type { Result } from './result.ts';
 import { telemetryEnabled, reportUnexpected } from './telemetry.ts';
 import type { BackgroundContext } from './telemetry.ts';
 import type { Principal } from './tokens.ts';
-import { decodeInput } from './validation.ts';
+import { admitInput } from './validation.ts';
+
+/**
+ * What a transport knows of one call beyond its principal and token, and where execution leaves what the
+ * recording points read once the call has answered.
+ */
+export interface ExecutionCall {
+  /** Over native RPC, the caller admission checked: `Invocation.rpcCaller`. */
+  readonly rpcCaller?: string;
+  /** On HTTP and MCP, the request's user agent: `Invocation.userAgent`. */
+  readonly userAgent?: string;
+  /** Set once the input is admitted: what its schema checked, and the decoded value the handler receives. */
+  admitted?: { readonly checked: unknown; readonly decoded: unknown };
+  /** Set once preparation answers: the context the handler receives. */
+  context?: unknown;
+}
 
 /**
  * The execution path every transport shares: checks that the caller may run the operation, decodes the input,
  * prepares the context, runs the middleware and the handler, then checks the result against the declared
- * output and failures. An unexpected error becomes `INTERNAL_ERROR` and is reported, never thrown.
+ * output and failures. An unexpected error becomes `INTERNAL_ERROR` and is reported, never thrown. `call` hands
+ * the admitted input and the prepared context to the recording points, which only the Result would otherwise
+ * reach.
  */
 export async function executeOperation<E, C, O extends Record<string, OperationShape>>(
   manifest: AppManifest<E, C, O>,
@@ -30,7 +47,8 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
   input: unknown,
   authority?: InvocationAuthority,
   background?: BackgroundContext,
-  body?: BinaryBody
+  body?: BinaryBody,
+  call?: ExecutionCall
 ): Promise<Result<unknown, Failure>> {
   if (
     (operation.conditionalScopes?.length && !authority) ||
@@ -39,9 +57,12 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
   ) {
     return err(standardErrors.forbidden.create());
   }
-  const admitted = decodeInput(operation.input, input);
+  const admitted = admitInput(operation.input, input);
   if (!admitted.ok) {
     return err(standardErrors.invalidInput.create(admitted.error.data));
+  }
+  if (call) {
+    call.admitted = { checked: admitted.checked, decoded: admitted.value };
   }
   try {
     const trustedAuthority = authority
@@ -59,12 +80,17 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       ...(body ? { body } : {}),
       ...(background ? { background } : {}),
       ...(trustedAuthority ? { authority: trustedAuthority } : {}),
+      ...(call?.rpcCaller ? { rpcCaller: call.rpcCaller } : {}),
+      ...(call?.userAgent ? { userAgent: call.userAgent } : {}),
     };
     const context = operation.pipeline
       ? await operation.pipeline.context(invocation as never)
       : await manifest.context(invocation);
     if (!context.ok) {
       return err(manifest.errors.validate(context.error));
+    }
+    if (call) {
+      call.context = context.value;
     }
     const chain = operation.pipeline?.middleware ?? manifest.middleware ?? [];
     let latest = -1;
