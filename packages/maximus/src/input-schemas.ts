@@ -19,7 +19,9 @@ import type {
 } from '@sinclair/typebox';
 import { Value, TransformDecode } from '@sinclair/typebox/value';
 
+import { SOURCE, STRIP } from './internal/schema-markers.ts';
 import type { StaticDecode } from './schema-types.ts';
+import { holdsSecrets } from './secrets.ts';
 
 /** Type-only: the key under which a codec's schema type carries its wire type. No schema object has it. */
 declare const WIRE: unique symbol;
@@ -89,10 +91,6 @@ const TRANSFORMERS = Symbol('maximus.schema.transformers');
 const NORMALIZERS = Symbol('maximus.schema.normalizers');
 /** The inspections and refinements a schema runs on a valid value. */
 const INSPECTORS = Symbol('maximus.schema.inspectors');
-/** The source schema of a `pipeSchema`, which the wire value is first read as. */
-const SOURCE = Symbol('maximus.schema.source');
-/** Whether an object drops unknown keys when read with `stripUnknown`. */
-const STRIP = Symbol('maximus.schema.strip');
 /** An inspection: it reads a valid value and adds an issue for each problem it finds. */
 type Inspector = (input: unknown, context: { addIssue: (issue: SchemaIssue) => void }) => void;
 /** One codec step, in the order the schema declared it. */
@@ -181,16 +179,28 @@ export const transformSchema = <S extends TSchema, O>(schema: S, transform: (val
     (S extends { default: infer D } ? { default: D } : Record<never, never>);
 
 /**
+ * Refuses a canonical schema that marks a field `secret: true` when the wire schema it is read from marks
+ * nothing: capture reads the value the wire schema checked, where that mark would protect nothing.
+ */
+function requireSecretsOnWire(wire: TSchema, canonical: TSchema): void {
+  if (holdsSecrets(canonical) && !holdsSecrets(wire)) {
+    throw new TypeError(
+      'A canonical schema marks a field secret: true and the wire schema it is read from does not; mark the field where the wire carries it.'
+    );
+  }
+}
+/**
  * Admits a value as `source`, then checks and decodes the result as `target`: a wire shape read into its
- * canonical one. Runs inside `inputSchema()`.
+ * canonical one. Runs inside `inputSchema()`. A `target` that marks a field `secret: true` needs `source` to
+ * mark it too, or it throws a TypeError.
  */
 export const pipeSchema = <S extends TSchema, O extends TSchema>(
   source: S,
   target: O
-): O & WireType<SchemaInput<S>> => ({
-  ...target,
-  [SOURCE]: source,
-});
+): O & WireType<SchemaInput<S>> => {
+  requireSecretsOnWire(source, target);
+  return { ...target, [SOURCE]: source };
+};
 /**
  * Runs `inspect` on a value the schema admits; every `addIssue` refuses the value with that issue. Runs
  * inside `inputSchema()`.
@@ -408,6 +418,9 @@ export function inputSchema<S extends TSchema, W extends TSchema>(
   source?: W | { stripUnknown?: boolean }
 ) {
   const wire = source && Kind in source ? (source as W) : undefined;
+  if (wire) {
+    requireSecretsOnWire(wire, schema);
+  }
   const stripUnknown = !wire && source && 'stripUnknown' in source && source.stripUnknown === true;
   const projected = projectOwnerInput(schema, Boolean(stripUnknown));
   return t

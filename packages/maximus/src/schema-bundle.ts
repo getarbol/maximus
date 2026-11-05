@@ -2,6 +2,7 @@
  * Schema bundling: named schemas (`$id`) become shared components for an OpenAPI document, or are written
  * in place for a reader without components, such as an MCP tool listing.
  */
+import { withoutSecretKeyword } from './secrets.ts';
 
 /** Plain identifiers TypeBox uses for Recursive/Ref schemas; URLs and pointers are left untouched. */
 const SCHEMA_ID = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
@@ -89,13 +90,15 @@ function replaceReferences(value: unknown, replace: (reference: string) => strin
  * against its enclosing `$id`, as in JSON Schema; structurally different definitions that share an
  * `$id` (for example a normalized input projection and its output) become distinct components. A
  * reference outside any definition must name exactly one variant. Use-site annotations stay beside
- * the reference. The owner's runtime schemas are not changed.
+ * the reference, and `secret`, which only capture reads, is left out. The owner's runtime schemas are not
+ * changed.
  */
 export function bundleSchemas(
   sources: readonly unknown[],
   existing: Readonly<Record<string, unknown>>
 ): { values: unknown[]; components: Record<string, unknown> } {
-  const ids = schemaIds(sources);
+  const published = sources.map((source) => withoutSecretKeyword(source));
+  const ids = schemaIds(published);
   const components: Record<string, unknown> = {};
   const variants = new Map<string, Map<string, string>>();
   const taken = new Set(Object.keys(existing));
@@ -147,7 +150,7 @@ export function bundleSchemas(
     );
   }
 
-  const rewritten = sources.map((source) => rewrite(source, new Map()));
+  const rewritten = published.map((source) => rewrite(source, new Map()));
   /**
    * A pending reference as the one component its name has once every variant is known; refused when the name
    * has several shapes or none.
