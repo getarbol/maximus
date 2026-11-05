@@ -19,8 +19,9 @@ import { activeTraceId, elapsedMicros } from './telemetry.ts';
 import type { BackgroundContext, TelemetryConfig } from './telemetry.ts';
 import type { Principal, TokenClient } from './tokens.ts';
 
-/** The most entries a `dimensions` callback's answer keeps, and the longest value of each. */
+/** The most entries a `dimensions` callback's answer keeps. */
 const MAX_DIMENSIONS = 32;
+/** The longest value of one entry a `dimensions` callback's answer keeps. */
 const MAX_DIMENSION_LENGTH = 256;
 
 /** What a context is read as unless `defineCapture` names its type. */
@@ -163,7 +164,9 @@ function timeOrderedId(instant: number): string {
  * The input a record carries. An input whose schema marks nothing is the decoded one, as plain JSON. One whose
  * schema marks a field is what the schema checked, without that field: a codec may move a value to where no
  * mark reaches, so only the checked value is known to have the shape the marks describe. Decoded values a
- * record cannot carry, such as a `BigInt`, fall back to the checked one, which is plain JSON by admission.
+ * record cannot carry, such as a `BigInt`, fall back to the checked one, which is plain JSON by admission. Read
+ * after the call: a handler that changes its input in place changes the record, and in a strict object nothing
+ * it adds to a marked schema's input can reach it.
  */
 function recordedInput(schema: OperationShape['input'], admitted: ExecutionCall['admitted']): unknown {
   if (!admitted) {

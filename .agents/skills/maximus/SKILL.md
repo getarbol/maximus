@@ -38,6 +38,7 @@ pipeline, never around it.
 | Verifying a provider webhook | `@arbol-ai/maximus/webhooks` on the raw body, in a plain route |
 | Callers without bearer tokens (webhooks, signed links) | A plain route that verifies its own signature |
 | Tokens that are not organization-bound OAuth access tokens | `tokens.resolve`, verifying cryptographically |
+| A record of every call, for audit or a lake | `capture` in `maximus<Env>({ … })`, with `defineCapture` and `pipeline` from `@arbol-ai/maximus/capture`; mark credential fields `secret: true`; see `docs/guides/capture.md` |
 | SDKs or a catalog generated from the contract | The origin's `/openapi.json`, or `createOpenApi(app)` at build time; see `references/transports.md` |
 | A new service from scratch | `references/building-a-service.md` |
 | Upgrading from 4.x | `references/migration-to-v5.md` |
@@ -64,6 +65,10 @@ pipeline, never around it.
   (only `follow` and `manual` exist). Send credentials with `redirect: 'manual'` and refuse a `3xx`.
 - **Privacy:** never log or return request bodies, credentials or submitted values in failure
   `data`, refinement messages, MCP skills or examples. Skills and guides hold no tenant data.
+- **Content leaves only through capture:** observers still receive metadata alone, never input, output or
+  credentials. Capture (the `capture` option) is a separate, declared destination, which the owner authorized on
+  3 November 2026: content reaches a store through it, never through a log line, an observer or a failure. Mark
+  every credential field `secret: true`, where the wire carries it, before turning capture on.
 - **Collections are pages:** an operation that returns many items answers `Page(Item, { $id })` with
   `PageQueryFields`; one that reads, creates or updates an item answers the named entity (the list's
   item); a delete answers `DeletedObjectSchema`. Use the shared schemas (`UuidSchema`,

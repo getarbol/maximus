@@ -23,6 +23,8 @@ async (context, input) => {
 | `input` | Always | The decoded input, the same value as the handler's second argument. |
 | `operation` | Always | The operation's name, from the definition, never from the request. |
 | `background` | When the runtime provides one | `waitUntil(promise)` for bounded work after the response. |
+| `rpcCaller` | Over RPC | The `caller` of the Service Binding, as admission checked it. |
+| `userAgent` | On HTTP and MCP, when the request sends one | The request's `user-agent`, cut to 200 characters. What the caller claims, for an audit to read: never authorization. |
 | `body` | Byte uploads only | `read()` for the request bytes; see [Files](http-and-openapi.md#files). |
 
 The default OAuth verification always sets a client, so `authority` is present on HTTP and MCP. A

@@ -130,6 +130,19 @@ Callbacks run in declaration order. A refinement's message travels to the caller
 Outputs are checked, never decoded: a response must already be canonical. Keep the canonical schema
 for outputs and compile inputs from it, so output validation never repairs malformed data.
 
+## Secret fields
+
+`secret: true` on a schema marks a value that [capture](capture.md) never records, whatever holds it:
+
+```ts
+password: t.String({ secret: true }),
+```
+
+It changes neither what the operation receives or answers nor any published document: the keyword only
+tells capture what to leave out. Mark a field where the wire carries it: `pipeSchema` and
+`inputSchema(schema, wire)` refuse a canonical schema that marks one when the wire schema marks none.
+`withoutSecrets(schema, value)` answers a copy of a value without what its schema marks.
+
 ## Query strings
 
 A GET input arrives in the query string. A field declared as an integer, number, boolean or list of

@@ -93,6 +93,8 @@ compile.
   `SignedUrlSchema`, `NamedReferenceSchema`, `PostalAddressSchema`; `EmptyInputSchema` (unnamed). Ids
   are strings; use `organizationId` and `requestId`, never aliases. Name your own entities with a
   PascalCase `$id`, one shape per name: it becomes a public SDK type.
+- `secret: true` on a schema marks a value capture never records, such as `t.String({ secret: true })`. It
+  changes nothing a caller or a handler sees.
 - Lists: `input: inputSchema(t.Object({ ...PageQueryFields, ...filters }, { additionalProperties: false }))`
   (`cursor`, `direction`, `limit`; `limit: pageLimit({ maximum })` to lower it) and
   `output: Page(Item, { $id: 'ItemPage' })`, answering `{ object: 'list', data, pageInfo }`.

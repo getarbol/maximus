@@ -113,7 +113,8 @@ It also installs the `maximus` CLI and ships the Maximus Agent Skill. Every entr
 - **Native and small.** Web `fetch` routing, TypeBox and TypeScript inference. No code generation,
   no runtime code compilation, no web framework underneath.
 - **Private by default.** Diagnostics carry codes, ids and durations, never bodies, credentials or
-  error text.
+  error text. Content leaves only through capture, a destination a service declares, without what its schemas
+  mark `secret: true`.
 
 The trade-offs are deliberate:
 

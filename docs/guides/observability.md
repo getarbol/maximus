@@ -10,7 +10,8 @@ configuration that collects them.
 No request or response body, header, URL query, credential, cookie, error message or stack text
 enters anything Maximus records or sends. Diagnostics carry developer constants (service and
 operation names, error codes, error class names) and technical correlation (request ids, durations,
-source locations). Your own `console.log` calls are yours to keep equally clean.
+source locations). Your own `console.log` calls are yours to keep equally clean. A store of what each call
+carried is what [Capture](capture.md) is for, as a destination of its own.
 
 ## Correlation
 
@@ -31,6 +32,9 @@ Maximus writes one-line JSON to the Workers console, which Cloudflare's logs col
 | `maximus.admission.rejected` | warn | A request was refused before execution: unknown route, bad token, missing scope, rate limit, oversized or malformed body. | `service`, `operation` (or `null`), `requestId`, `traceId`, `surface`, `occurredAt`, `durationMicros`, `errorCode` |
 | `maximus.unexpected` | error | A handler threw, returned an invalid output, or a framework step failed unexpectedly. | `surface`, `requestId`, `name`, `causes`, `issueCount`, `locations` |
 | `maximus.observer.delivery_failed` | error | An observer's promise rejected. | `requestId` |
+| `maximus.capture.delivery_failed` | error | A [capture](capture.md) record could not be delivered. | `requestId` |
+| `maximus.capture.dimensions_failed` | error | A capture `dimensions` callback threw. | `requestId` |
+| `maximus.capture.switch_failed` | error | A capture `enabled` function threw. | None |
 
 `maximus.admission.rejected` never names the actor or the organization, even when the token was
 valid; the `admission` observer below receives the verified principal instead. `maximus.unexpected`

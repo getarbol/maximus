@@ -44,7 +44,7 @@ export const base = maximus<Env>({
   tokens: { issuer: 'https://auth.example.com/', audience: 'https://notes.example.com' },
   errors,
   rpc: { callers: [] },                  // deployments allowed over native RPC
-  // optional: mcp, telemetry, rateLimit, maxBodyBytes, maxOutputBytes
+  // optional: mcp, telemetry, capture, rateLimit, maxBodyBytes, maxOutputBytes
 });
 ```
 

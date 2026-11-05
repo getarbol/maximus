@@ -27,7 +27,7 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 
 | Entry | Exports | Runtime-free |
 | --- | --- | --- |
-| `@arbol-ai/maximus/schemas` | `t`, `Type`, types `Static`, `StaticDecode`, `TSchema`; `parseInput`, `parseSchema`, `decodeInput`, `decodeSchema`, `checkSchema`, `readSchema`, `SchemaValidationError`, types `SchemaInput`, `SchemaIssue`, `Checked`, `InputIssue`; codecs `inputSchema`, `defaultSchema`, `normalizeSchema`, `transformSchema`, `pipeSchema`, `inspectSchema`, `refineSchema`, `urlSchema`, `literalUnion`, `stripObject`, `strictObject`, `looseObject`, `extendObject`; `EmptyInputSchema`, `OrganizationIdSchema`, `UuidSchema`, `AttachmentOutputSchema`; lists `Page`, `PageInfoSchema`, `PageQueryFields`, `pageLimit`, types `PageInfo`, `PageQuery`, `TPage`; the shared schemas `EmailAddressSchema`, `PhoneNumberSchema`, `HttpsUrlSchema`, `HexColorSchema`, `DeletedObjectSchema`, `SignedUrlSchema`, `NamedReferenceSchema`, `PostalAddressSchema`, types `DeletedObject`, `SignedUrl`, `NamedReference`, `PostalAddress` | No Worker runtime |
+| `@arbol-ai/maximus/schemas` | `t`, `Type`, types `Static`, `StaticDecode`, `TSchema`; `parseInput`, `parseSchema`, `decodeInput`, `decodeSchema`, `checkSchema`, `readSchema`, `withoutSecrets`, `SchemaValidationError`, types `SchemaInput`, `SchemaIssue`, `Checked`, `InputIssue`; codecs `inputSchema`, `defaultSchema`, `normalizeSchema`, `transformSchema`, `pipeSchema`, `inspectSchema`, `refineSchema`, `urlSchema`, `literalUnion`, `stripObject`, `strictObject`, `looseObject`, `extendObject`; `EmptyInputSchema`, `OrganizationIdSchema`, `UuidSchema`, `AttachmentOutputSchema`; lists `Page`, `PageInfoSchema`, `PageQueryFields`, `pageLimit`, types `PageInfo`, `PageQuery`, `TPage`; the shared schemas `EmailAddressSchema`, `PhoneNumberSchema`, `HttpsUrlSchema`, `HexColorSchema`, `DeletedObjectSchema`, `SignedUrlSchema`, `NamedReferenceSchema`, `PostalAddressSchema`, types `DeletedObject`, `SignedUrl`, `NamedReference`, `PostalAddress` | No Worker runtime |
 | `@arbol-ai/maximus/errors` | `defineErrors`, `standardErrors`, `resultSchema`, `FailureSchema`, `isRequestId`; types `Failure`, `FailureData`, `ErrorDefinition`, `ErrorCatalog`, `ErrorFactory`, `DefinedErrors` | No Worker runtime |
 | `@arbol-ai/maximus/failures` | `STANDARD_FAILURES`, type `StandardFailure` | Yes: no schema library |
 | `@arbol-ai/maximus/body` | `readBodyText`, `readBodyBytes`, `readJsonBody`, `readJsonResponse`, `retryAfterSeconds`, `isJsonMediaType`; types `BodyReadOptions`, `HttpBodyFailure`, `HttpBodyFailureReason` | Yes |
@@ -35,7 +35,7 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 | `@arbol-ai/maximus/http-paths` | `createHttpRouteResolver`, `operationPathParameters`, `decodePathParameter`, `isPathParameterValue`; types `HttpRouteDefinition`, `HttpRouteMatch` | Yes |
 | `@arbol-ai/maximus/projection` | For a gateway that builds MCP tools, CLI commands and clients from services' OpenAPI documents: `mcpToolName`, `kebab`, `snake`, `permissionDescription`, `queryKind`; types `QueryKind`, `SchemaResolver`, `ProjectedName` | Yes |
 | `@arbol-ai/maximus/diagnostics` | `withDiagnostics`, `diagnosticsEnabled`, `telemetryEnabled`, `reportUnexpected`, `recordExecution`, `createDiagnostics`, `isRequestId`, `createRequestId`, `parseTraceParent`, `durableCorrelation`; types `TelemetryConfig`, `Observer`, `ExecutionObservation`, `BackgroundContext`, `TraceParent`, `DurableCorrelation`, `ErrorDescription` | No |
-| `@arbol-ai/maximus/internals` | Adapter SPI: `executeOperation`, `defineApp`, `composeOperations`, `operation`, `operationScopes`, `createHttpRouteResolver`, `telemetryEnabled`, `recordExecution`, `withDiagnostics`; types `AppManifest`, `OperationShape`, `Invocation`, `InvocationAuthority`, `OperationMiddleware`, `HttpTransport`, `TransportContext`, `HttpOptions`, `TelemetryConfig`, `BackgroundContext`, `HttpRouteDefinition`, `HttpRouteMatch` | No |
+| `@arbol-ai/maximus/internals` | Adapter SPI: `executeOperation`, `recordCapture`, types `ExecutionCall`, `CapturedCall`, `CaptureConfig`, `VerifiedCaller`, `defineApp`, `composeOperations`, `operation`, `operationScopes`, `createHttpRouteResolver`, `telemetryEnabled`, `recordExecution`, `withDiagnostics`; types `AppManifest`, `OperationShape`, `Invocation`, `InvocationAuthority`, `OperationMiddleware`, `HttpTransport`, `TransportContext`, `HttpOptions`, `TelemetryConfig`, `BackgroundContext`, `HttpRouteDefinition`, `HttpRouteMatch` | No |
 
 `/internals` serves transport adapters and tests. Applications use the builder.
 
@@ -57,6 +57,12 @@ The root: the core. Safe to import in a browser, but brings the whole core; pref
 ## @arbol-ai/maximus/analytics
 
 `analytics`, `ExecutionEventSchema`; types `ExecutionEvent`, `ExecutionSink`.
+
+## @arbol-ai/maximus/capture
+
+`defineCapture`, `pipeline`, `CaptureRecordSchema`, `withoutSecrets`; types `CaptureRecord`, `CaptureConfig`,
+`CaptureSink`, `CaptureInvocation`, `CaptureDimensions`, `PipelineOptions`. One complete record of every call and
+refusal, for a store you declare. See [Capture](../guides/capture.md).
 
 ## @arbol-ai/maximus/testing
 
