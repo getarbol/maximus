@@ -137,7 +137,7 @@
     },
     "packages/create-maximus": {
       "name": "create-maximus",
-      "version": "8.0.1",
+      "version": "8.1.0",
       "bin": {
         "create-maximus": "dist/index.js",
       },
@@ -151,7 +151,7 @@
     },
     "packages/maximus": {
       "name": "@arbol-ai/maximus",
-      "version": "8.0.1",
+      "version": "8.1.0",
       "bin": {
         "maximus": "bin/maximus.js",
       },
