@@ -54,6 +54,8 @@ Ship it:
   suites against a running Worker.
 - [Observability](guides/observability.md): request ids, log events, observers, analytics and Cloudflare's
   logs and traces.
+- [Capture](guides/capture.md): one complete record of every call and refusal for a store you declare, and
+  `secret: true` for what never reaches it.
 - [Deploying](guides/deploying.md): the origin, the token issuer, secrets, `cf deploy` and the CI workflow.
 - [Lint and format](guides/lint-and-format.md): the presets every project uses and what they enforce.
 

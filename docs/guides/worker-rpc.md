@@ -93,8 +93,8 @@ Before any of its code runs, the owner checks each call:
 
 A call over RPC carries no token, so no scope is checked and no rate limit applies: the owner trusts the
 calling deployment, which its props identify and only your account's configuration can set, and the
-principal it forwards. Handlers receive no `authority`, so a route with
-[conditional scopes](authentication-and-scopes.md#scopes-the-handler-checks) refuses every RPC call with
+principal it forwards. A handler reads which deployment called as `rpcCaller`. Handlers receive no
+`authority`, so a route with [conditional scopes](authentication-and-scopes.md#scopes-the-handler-checks) refuses every RPC call with
 `FORBIDDEN`. Anyone who can deploy a Worker with a binding that names an admitted caller can call the
 owner as any principal: name callers narrowly, and give each route the shortest `callers` list it needs.
 

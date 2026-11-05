@@ -53,6 +53,7 @@ the configuration evaluates. Two names are Maximus's own, and declaring either i
 | A D1 database                                  | `bindings.d1({ name, id })`                                    | `D1Database`                                              |
 | An R2 bucket                                   | `bindings.r2({ name })`                                        | `R2Bucket`                                                |
 | A queue the Worker sends to                    | `bindings.queue({ name })`                                     | `Queue`, whose messages are `unknown`                     |
+| A Pipelines stream                             | `bindings.pipeline({ name })`                                  | `Pipeline`                                                |
 | One of the Worker's own Durable Object classes | `bindings.durableObject({ worker, exportName })`               | `DurableObjectNamespace` of that class                    |
 | An entrypoint of another Worker                | `bindings.worker({ worker, exportName, props })`               | `Fetcher`                                                 |
 | Another Maximus Worker's RPC methods           | `services: { PRICING: { worker, openapi } }` in `maximus()`    | `Service<PricingService>`, from the document it publishes |

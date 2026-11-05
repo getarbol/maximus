@@ -41,6 +41,9 @@ names its `event`:
 | `maximus.observer.delivery_failed` | `error` | `requestId`                                                                                            |
 | `maximus.telemetry.switch_failed`  | `error` | None                                                                                                   |
 
+[Capture](capture.md) writes three more, under the same rule: `maximus.capture.delivery_failed` and
+`maximus.capture.dimensions_failed` with the request id alone, and `maximus.capture.switch_failed` with nothing.
+
 **`maximus.admission.rejected`** is written for each request refused before its operation runs: an unknown
 path (`NOT_FOUND`), a missing or invalid token (`UNAUTHORIZED`), a missing scope (`FORBIDDEN`), the rate
 limit (`RATE_LIMITED`), a body over its limit (`REQUEST_TOO_LARGE`) or one the API cannot read. The MCP
@@ -154,6 +157,9 @@ export default defineTelemetry({
 `defineTelemetry` refuses any field but `enabled`, `observers` and `traceId`, and `telemetry.ts`, like the
 other root modules, imports nothing that loads only in workerd. A Worker composed by hand passes the same
 object as `maximus()`'s `telemetry` option.
+
+An observer never receives input or output. A store of what each call carried is what [Capture](capture.md)
+is for, as a destination of its own.
 
 An observer has up to three callbacks:
 

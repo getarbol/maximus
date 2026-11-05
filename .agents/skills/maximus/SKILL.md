@@ -23,6 +23,7 @@ context.ts                         export default defineContext(({ env, principa
 errors.ts                          export default defineErrors({ … }): the service's own failure codes
 auth.ts                            export default defineAuth({ resolve }): tokens the service verifies itself
 telemetry.ts                       export default defineTelemetry({ observers }): observers such as analytics()
+capture.ts                         export default defineCapture({ sink, payloads, dimensions }): a record of every call
 middleware/                        defineMiddleware (before admission) or defineOperationMiddleware (after it)
 pages/ crons/ queues/ email/       Public pages and webhooks (pages/webhooks/x.post.ts), event handlers
 durable-objects/                   Durable Object classes, one per file
@@ -95,6 +96,7 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 | Many items in one answer                        | `output: Page(Item, { $id: 'ItemPage' })` with `input: PageQueryFields`.                                                                                                                                 |
 | A file upload or download                       | `http: { body: 'bytes' }` with `body.read()`; `output: AttachmentOutputSchema` with `http: { response: 'attachment' }`.                                                                                  |
 | Data in Postgres                                | `withTenantTransaction` from `@arbol-ai/maximus/postgres`.                                                                                                                                               |
+| A record of every call, for audit or a lake     | `capture.ts` with `defineCapture` from `@arbol-ai/maximus/capture`; mark credential fields `secret: true`. See [Capture](https://github.com/getarbol/maximus/blob/main/docs/guides/capture.md).          |
 | Guidance agents read over MCP                   | `mcp/instructions.md`, `mcp/guides/<name>.md`, `mcp/skills/<name>.md`: static text for every caller, never tenant data.                                                                                  |
 | A 7.x service                                   | [Upgrading to 8.0](https://github.com/getarbol/maximus/blob/main/docs/upgrading-to-8.md).                                                                                                                |
 
@@ -118,6 +120,10 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
   clinical data never go in a log line, a failure's `data` or message, a refinement message, an MCP guide or
   skill, or an example. Report a caught error with `reportUnexpected(error, surface)`, which keeps its name
   and drops its message.
+- **Content leaves only through capture.** Observers still receive metadata alone, never input, output or
+  credentials. Capture (`capture.ts`) is a separate, declared destination, which the owner authorized on 3
+  November 2026: content reaches a store through it, never through a log line, an observer or a failure. Mark
+  every credential field `secret: true`, where the wire carries it, before turning capture on.
 - **Worker code reads `env`, never `process.env`.** A secret is `bindings.secret()`. The development token is
   never declared in `env` and never set on a deployed Worker.
 - **Outbound calls:** a Worker's `fetch(…, { redirect: 'error' })` throws before it sends anything. Send with
@@ -171,6 +177,7 @@ The documentation is in the Maximus repository, indexed by
   [Postgres transactions](https://github.com/getarbol/maximus/blob/main/docs/guides/postgres.md).
 - Ship it: [Testing](https://github.com/getarbol/maximus/blob/main/docs/guides/testing.md),
   [Observability](https://github.com/getarbol/maximus/blob/main/docs/guides/observability.md),
+  [Capture](https://github.com/getarbol/maximus/blob/main/docs/guides/capture.md),
   [Deploying](https://github.com/getarbol/maximus/blob/main/docs/guides/deploying.md),
   [Lint and format](https://github.com/getarbol/maximus/blob/main/docs/guides/lint-and-format.md).
 - Reference: [Configuration](https://github.com/getarbol/maximus/blob/main/docs/reference/configuration.md),
