@@ -36,7 +36,7 @@ declare global {
  */
 type Registered<K extends string, Fallback> = K extends keyof MaximusRegister ? MaximusRegister[K] : Fallback;
 /** The registered Worker's bindings. */
-type RegisteredEnv = Registered<'env', unknown>;
+export type RegisteredEnv = Registered<'env', unknown>;
 /** The context every handler receives: what the registered base prepares. */
 type RegisteredContext =
   Registered<'base', never> extends ApplicationBuilder<infer _E, infer C, infer _O> ? C : Invocation<unknown>;

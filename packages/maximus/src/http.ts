@@ -7,10 +7,13 @@
 
 import type { Attachment } from './attachment-schema.ts';
 import { attachmentResponse, binaryBody } from './binary.ts';
+import { recordCapture } from './capture.ts';
+import type { VerifiedCaller } from './capture.ts';
 import { isCrossSiteWrite } from './cloudflare-access.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
 import { executeOperation } from './execution.ts';
+import type { ExecutionCall } from './execution.ts';
 import { createHttpRouteResolver } from './http-paths.ts';
 import type { HttpRouteMatch } from './http-paths.ts';
 import { readBodyText } from './internal/body.ts';
@@ -47,7 +50,7 @@ import {
   reportUnexpected,
 } from './telemetry.ts';
 import type { BackgroundContext } from './telemetry.ts';
-import { createTokenAuthorization, tokenAudiences, tokenIssuer } from './tokens.ts';
+import { createTokenAuthorization, presentedToken, tokenAudiences, tokenIssuer } from './tokens.ts';
 import type { TokenPrincipal, Principal, TokenResolutionContext } from './tokens.ts';
 
 /**
@@ -475,6 +478,9 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
     let surface: 'http' | 'mcp' = 'http';
     let plain = false;
     let requestEnv = env;
+    // What capture states of the caller: nothing of a token until that token is verified.
+    let verified: VerifiedCaller | undefined;
+    const userAgent = incoming.headers.get('user-agent')?.slice(0, 200) || undefined;
     const context: RouteContext = {
       requestId,
       fail: (error, headers) => failure(error, requestId, resolutionContext(), headers),
@@ -500,6 +506,19 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
       applicationScopes,
       background,
     });
+    /** Captures a refusal before execution, of this request's operation or the one a transport names. */
+    function captureRefusal(error: Failure, refused: string | null, scopedEnv: E): void {
+      recordCapture(manifest, scopedEnv, background, {
+        operation: refused,
+        surface,
+        requestId,
+        principal,
+        ...(verified ? { verified } : {}),
+        requestStarted: started,
+        result: err(error),
+        call: userAgent ? { userAgent } : {},
+      });
+    }
     /** A refusal before execution, observed as a rejected admission. */
     function reject(error: Failure): Response {
       recordAdmission(manifest, requestEnv, background, {
@@ -510,6 +529,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         started,
         errorCode: error.code,
       });
+      captureRefusal(error, operation, requestEnv);
       return failure(error, requestId, resolutionContext());
     }
     /**
@@ -606,6 +626,14 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           requestId,
         };
         principal = actor;
+        if (manifest.capture) {
+          const token = presentedToken(incoming, manifest.tokens);
+          verified = {
+            scopes: authenticated.scopes,
+            ...(authenticated.client ? { client: authenticated.client } : {}),
+            ...(token ? { token } : {}),
+          };
+        }
         if (!(await withinRateLimit(scopedEnv, authenticated))) {
           return reject(standardErrors.rateLimited.create());
         }
@@ -665,16 +693,21 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             transport &&
             !operations.some(([selectedName, selected]) => selectedName === name && selected === op)
           ) {
-            return { ok: false as const, error: standardErrors.notFound.create() };
+            const error = standardErrors.notFound.create();
+            captureRefusal(error, null, scopedEnv);
+            return { ok: false as const, error };
           }
           // A transport names the operation itself: the caller must hold that operation's scope, even when the
           // token names no client and so carries no authority for execution to check.
           if (transport && !operationMatchesScopes(op, authenticated.scopes)) {
-            return { ok: false as const, error: standardErrors.forbidden.create() };
+            const error = standardErrors.forbidden.create();
+            captureRefusal(error, name, scopedEnv);
+            return { ok: false as const, error };
           }
           if (telemetryEnabled(manifest.telemetry, scopedEnv)) {
             hooks.annotate?.(name, requestId);
           }
+          const call: ExecutionCall = userAgent ? { userAgent } : {};
           const invocationStarted = performance.now();
           const output = await executeOperation(
             manifest,
@@ -691,7 +724,8 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
                 }
               : undefined,
             background,
-            byteOperation ? binaryBody(incoming, op.maxBodyBytes ?? fallbackBodyBytes) : undefined
+            byteOperation ? binaryBody(incoming, op.maxBodyBytes ?? fallbackBodyBytes) : undefined,
+            call
           );
           recordExecution(manifest, scopedEnv, background, {
             principal: actor,
@@ -699,6 +733,17 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             surface: transport ? 'mcp' : 'http',
             started: invocationStarted,
             result: output,
+          });
+          recordCapture(manifest, scopedEnv, background, {
+            operation: name,
+            surface: transport ? 'mcp' : 'http',
+            requestId,
+            principal: actor,
+            ...(verified ? { verified } : {}),
+            requestStarted: started,
+            executionStarted: invocationStarted,
+            result: output,
+            call,
           });
           return output;
         }
@@ -724,6 +769,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
                 started,
                 errorCode: error.code,
               });
+              captureRefusal(error, name ?? null, scopedEnv);
             },
             body: bodyText,
             bodyLimit: (op) => op.maxBodyBytes ?? fallbackBodyBytes,

@@ -172,6 +172,7 @@ try {
       '/internals',
       '/mcp',
       '/analytics',
+      '/capture',
       '/testing',
     ],
     { types: ['node'], typeRoots: [resolve('node_modules/@types')] }
@@ -189,13 +190,14 @@ try {
     `import assert from 'node:assert/strict';
 import { defineErrors, maximus } from '@arbol-ai/maximus';
 import { analytics } from '@arbol-ai/maximus/analytics';
+import { defineCapture, pipeline } from '@arbol-ai/maximus/capture';
 import { mcp } from '@arbol-ai/maximus/mcp';
 import { mcpToolName, queryKind } from '@arbol-ai/maximus/projection';
 import { verifyContract } from '@arbol-ai/maximus/testing';
 assert.equal(defineErrors({}).forbidden.create().code, 'FORBIDDEN');
 assert.equal(mcpToolName('agenda', { resource: 'appointments', verb: 'findNearest' }), 'agenda_appointments_find_nearest');
 assert.equal(queryKind({ type: 'integer' }), 'integer');
-for (const value of [maximus, analytics, mcp, verifyContract]) {
+for (const value of [maximus, analytics, defineCapture, pipeline, mcp, verifyContract]) {
   assert.equal(typeof value, 'function');
 }`
   );

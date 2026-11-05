@@ -160,6 +160,7 @@ it('returns shared 429 with Retry-After before loading tenant credentials', asyn
     tokens: { issuer: 'https://issuer.example.test/', audience: manifest.tokens.audience },
     context,
     telemetry: undefined,
+    capture: undefined,
     rateLimit: { binding: 'LIMIT' as const, retryAfter: 12 },
   };
   const handle = createHttpHandler<
