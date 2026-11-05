@@ -6,6 +6,7 @@
 import type { TSchema } from '@sinclair/typebox';
 
 import { isAttachmentSchema } from './binary.ts';
+import type { CaptureConfig } from './capture.ts';
 import type { ErrorCatalog } from './errors.ts';
 import { createHttpRouteResolver, isInputHeaderName, operationPathParameters } from './http-paths.ts';
 import { hasUncompiledCodecs } from './input-schemas.ts';
@@ -105,6 +106,7 @@ function checkApplication<Env, C, Ops extends Record<string, OperationShape>>(
     throw new TypeError('Application origin must use HTTPS.');
   }
   checkTelemetry(manifest.telemetry);
+  checkCapture(manifest.capture);
   checkTokenAuthority(manifest.tokens, manifest.namespace);
   tokenAudiences(manifest.tokens);
   if (
@@ -156,6 +158,33 @@ function checkTelemetry<Env>(telemetry: TelemetryConfig<Env> | undefined): void 
   ) {
     throw new TypeError(
       'Telemetry takes enabled as true, false or a function of env, observers as a list of objects whose execution, admission and error are functions, and traceId as a function.'
+    );
+  }
+}
+
+/**
+ * The capture option, as code untyped by TypeScript may give it: a switch that is a boolean or a function, a
+ * sink that can send, `payloads` of `all` or `none`, and a `dimensions` callback that is a function. A sink
+ * that cannot send would lose every record it is handed, and a `payloads` such as `'al'` would silently send
+ * metadata alone.
+ */
+function checkCapture<Env>(capture: CaptureConfig<Env> | undefined): void {
+  if (capture === undefined) {
+    return;
+  }
+  if (
+    typeof capture !== 'object' ||
+    capture === null ||
+    (capture.enabled !== undefined &&
+      typeof capture.enabled !== 'boolean' &&
+      typeof capture.enabled !== 'function') ||
+    typeof capture.sink?.send !== 'function' ||
+    (capture.sink.available !== undefined && typeof capture.sink.available !== 'function') ||
+    (capture.payloads !== undefined && capture.payloads !== 'all' && capture.payloads !== 'none') ||
+    (capture.dimensions !== undefined && typeof capture.dimensions !== 'function')
+  ) {
+    throw new TypeError(
+      'Capture takes enabled as true, false or a function of env, sink as an object whose send and available are functions, payloads as all or none, and dimensions as a function.'
     );
   }
 }

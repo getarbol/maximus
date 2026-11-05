@@ -604,7 +604,7 @@ function bearerToken(request: Request): string | undefined {
  * the token may be the development token. Undefined when the request presents none, or one longer than 16384
  * characters.
  */
-function presentedToken<E>(
+export function presentedToken<E>(
   request: Request,
   policy: Pick<TokenPolicy<E>, 'source' | 'resolve' | 'development'>
 ): string | undefined {

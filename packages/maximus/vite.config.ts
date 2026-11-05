@@ -19,6 +19,7 @@ const entries = {
   'workers/runtime': 'src/workers/runtime.ts',
   'mcp/index': 'src/mcp/index.ts',
   'analytics/analytics': 'src/analytics/analytics.ts',
+  'capture/index': 'src/capture/index.ts',
   'postgres/index': 'src/postgres/index.ts',
   'tooling/testing': 'src/tooling/testing.ts',
   'project/index': 'src/project/index.ts',
