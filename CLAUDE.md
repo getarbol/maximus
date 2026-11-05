@@ -1,7 +1,7 @@
 # Maximus agent guide
 
 Maximus is one package, @arbol-ai/maximus, in a Bun/Turborepo workspace with its examples. The core
-is its root; each optional capability is an entry (/workers, /mcp, /client, …) whose source is
+is its root; each optional capability is an entry (/workers, /mcp, /client, /capture, …) whose source is
 packages/maximus/src/<entry>/. Read docs/README.md (concepts, guides, reference) and the owned
 .agents/skills/maximus/SKILL.md; examples/ holds runnable services that the workspace typechecks.
 All code and documentation is English. Use CLI/scripts and preserve unrelated changes.
@@ -30,6 +30,8 @@ database or permission lists. No public provider-login/password tool. Failures n
 Observers are optional and independently isolated. Only safe execution metadata reaches analytics.
 No raw input/output, credentials, cookies or clinical data. Providers sanitize error events; disabling
 framework telemetry and disabling native platform collection are separate controls. Never invent trace IDs.
+Capture is a separate, declared destination, which the owner authorized on 3 November 2026: content reaches
+a store only through it, never through a log line or an observer, and never what a schema marks secret: true.
 
 Tests live beside their entry, in packages/maximus/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
 Run bun run verify plus the consuming services' tests and production dry bundles before

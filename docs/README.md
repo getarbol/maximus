@@ -32,6 +32,8 @@ Run it:
 
 - [Observability](guides/observability.md): request ids, log events, observers, analytics, and
   Cloudflare's logs and traces.
+- [Capture](guides/capture.md): one complete record of every call and refusal for a store you declare, and
+  `secret: true` for what never reaches it.
 - [Postgres transactions](guides/postgres.md): short tenant-scoped transactions with `pg`.
 - [Testing](guides/testing.md): fast handler tests, MCP, RPC types and contract smoke tests.
 - [Lint and format](guides/lint-and-format.md): the presets and the guardrails they enforce.

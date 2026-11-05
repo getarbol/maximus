@@ -116,7 +116,8 @@ For every RPC call, before any of your code runs:
 
 **Scopes are not checked over ordinary RPC.** There is no token: the owner trusts the calling
 deployment, identified by props that only your account's configuration can set, and the principal it
-forwards. `context.authority` is absent, so an operation with `conditionalScopes` fails closed with
+forwards. A handler reads which deployment called as `context.rpcCaller`. `context.authority` is absent,
+so an operation with `conditionalScopes` fails closed with
 `FORBIDDEN`. When the owner must verify the original caller's authority itself, call its HTTP route
 with the caller's own access token instead (`context.authority.token` on the calling side).
 

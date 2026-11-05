@@ -142,6 +142,11 @@ are wall-clock microseconds. Trace ids are never invented: the native span API e
 so correlation uses the request id. Disabling framework telemetry and disabling Cloudflare's own
 collection are separate controls.
 
+Capture is a separate, declared destination for content: the core holds its hook beside the recording points,
+and the `capture` entry its helper and sinks, which the core never imports. Its record is built after the
+response, apart from the observers, and never holds what a schema marks `secret: true`, a token, raw request
+bytes or an attachment's bytes. [Capture](guides/capture.md) describes it.
+
 ## Protocol scope
 
 MCP uses the official SDK over Streamable HTTP, one stateless server per request. It serves tools

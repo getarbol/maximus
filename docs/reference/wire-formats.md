@@ -177,6 +177,9 @@ A served `SKILL.md` is YAML frontmatter with `name` and `description`, then the 
 `null`), `requestId`, `traceId`, `surface` (`http` or `mcp`), `occurredAt`, `durationMicros`,
 `errorCode`.
 
+`CaptureRecord` (`@arbol-ai/maximus/capture`): [Capture](../guides/capture.md#what-a-record-holds) lists its
+fields.
+
 `ExecutionEvent` (`@arbol-ai/maximus/analytics`): `id` (UUID), `service`, `operation`,
 `organizationId`, `actorId`, `actorKind`, `requestId`, `traceId`, `surface`, `occurredAt`,
 `durationMicros`, `outcome`, `errorCode`.

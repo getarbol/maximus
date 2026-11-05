@@ -20,6 +20,7 @@ the configuration's type is `ApplicationConfiguration<Env>`.
 | `rpc` | `{ callers: string[] }` | Yes | Deployments allowed to call native RPC methods, by their binding props' `caller`. `[]` for none. |
 | `mcp` | `McpConfiguration` | No | The MCP server's instructions, guides and skills; requires the MCP transport. Tools need only the transport. See [mcp](#mcp). |
 | `telemetry` | `TelemetryConfig<Env>` | No | See [telemetry](#telemetry). |
+| `capture` | `CaptureConfig<Env>` | No | One complete record of every call and refusal for a store you declare. See [Capture](../guides/capture.md). |
 | `rateLimit` | `{ binding: keyof Env; retryAfter?: number }` | No | A Workers rate limiting binding applied after authentication, per organization and actor. `retryAfter` defaults to 60 seconds. |
 | `maxBodyBytes` | `number` | No | Default request body limit for operations. Default 32 768; at most 16 MiB. |
 | `maxOutputBytes` | `number` | No | Default output limit, a positive integer up to 16 MiB (checked by `.build()`). Default 262 144 (256 KiB). |
