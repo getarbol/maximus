@@ -30,6 +30,7 @@ curl -H "authorization: Bearer $(cut -d= -f2 .dev.vars)" http://localhost:5173/a
 | Your own failures           | `errors.ts` default-exports `defineErrors({ … })`                                |
 | A provider's webhook        | `pages/webhooks/<provider>.post.ts`, which verifies the delivery's signature     |
 | Observers or analytics      | `telemetry.ts` default-exports `defineTelemetry({ observers })`                  |
+| A record of every call      | `capture.ts` default-exports `defineCapture({ sink, payloads })`                 |
 | What every handler receives | `context.ts` default-exports `defineContext(…)`                                  |
 | Domain logic and stores     | A module of `src/` named after its domain, imported as `#src/tasks.ts`           |
 
