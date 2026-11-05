@@ -50,6 +50,7 @@ export {
 export type { SchemaInput, SchemaIssue } from './input-schemas.ts';
 export { checkSchema, readSchema } from './schema-reader.ts';
 export type { Checked } from './schema-reader.ts';
+export { withoutSecrets } from './secrets.ts';
 
 export { AttachmentOutputSchema } from './attachment-schema.ts';
 export type { Attachment } from './attachment-schema.ts';
