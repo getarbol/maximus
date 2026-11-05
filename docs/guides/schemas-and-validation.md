@@ -237,6 +237,19 @@ are `Static<typeof schema>`.
 Outputs are checked, never decoded: a handler returns the canonical value, defaults included. Keep the
 canonical schema for outputs and build inputs from it, so an output check never repairs malformed data.
 
+## Secret fields
+
+`secret: true` on a schema marks a value that [capture](capture.md) never records, whatever holds it:
+
+```ts
+password: t.String({ secret: true }),
+```
+
+It changes neither what the operation receives or answers nor any published document: the keyword only
+tells capture what to leave out. Mark a field where the wire carries it: `pipeSchema` and
+`inputSchema(schema, wire)` refuse a canonical schema that marks one when the wire schema marks none.
+`withoutSecrets(schema, value)` answers a copy of a value without what its schema marks.
+
 ## Query strings
 
 A GET reads its input from the query string, each field the input declares once, as its kind:

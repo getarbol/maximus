@@ -128,6 +128,8 @@ browsers can import):
   `HttpsUrlSchema`, `HexColorSchema`, `PostalAddressSchema`, `NamedReferenceSchema`, `SignedUrlSchema`,
   `DeletedObjectSchema`, `EmptyInputSchema`.
 - Absent values in an output are `t.Union([X, t.Null()])`: answer every field.
+- `secret: true` on a schema marks a value capture never records, such as `t.String({ secret: true })`. It
+  changes nothing a caller or a handler sees.
 - Codecs from `@arbol-ai/maximus/schemas` (`normalizeSchema`, `transformSchema`, `refineSchema`,
   `inspectSchema`, `pipeSchema`, `stripObject`) run only inside `inputSchema(…)`; `.build()` refuses an input
   that uses them outside it. `defaultSchema` gives a field its default. A refinement's message reaches the

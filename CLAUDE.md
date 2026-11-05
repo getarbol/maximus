@@ -26,7 +26,7 @@ This owner policy takes precedence over older CI and testing guidance in this re
 
 Maximus is one package, @arbol-ai/maximus, released with create-maximus at one version, in a Bun/Vite+
 workspace with its examples. The core is @arbol-ai/maximus's root; each optional capability is an entry
-(/workers, /mcp, /analytics, …) whose source is packages/maximus/src/<entry>/. The /vite entry,
+(/workers, /mcp, /analytics, /capture, …) whose source is packages/maximus/src/<entry>/. The /vite entry,
 packages/maximus/src/vite/, composes the project tooling with Cloudflare's Vite plugin. Read
 docs/README.md (concepts, guides, reference) and the owned .agents/skills/maximus/SKILL.md; examples/
 holds runnable services that the workspace typechecks.
@@ -56,6 +56,8 @@ database or permission lists. No public provider-login/password tool. Failures n
 Observers are optional and independently isolated. Only safe execution metadata reaches analytics.
 No raw input/output, credentials, cookies or clinical data. Providers sanitize error events; disabling
 framework telemetry and disabling native platform collection are separate controls. Never invent trace IDs.
+Capture is a separate, declared destination, which the owner authorized on 3 November 2026: content reaches
+a store only through it, never through a log line or an observer, and never what a schema marks secret: true.
 
 Tests live beside their entry, in packages/<package>/tests/<entry>/. Preserve security/privacy/retry tests; add negative type controls.
 Run bun run verify (Vite+ builds, workspace TypeScript, lint and format) and bun run test before you

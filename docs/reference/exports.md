@@ -19,6 +19,7 @@ free, so a bundle carries only the entries it imports: import from the narrowest
 | `@arbol-ai/maximus/workers`     | The Worker: fetch handler, RPC entrypoint, instrumented classes        | A Worker                                           |
 | `@arbol-ai/maximus/mcp`         | The MCP transport                                                      | A Worker, or Node                                  |
 | `@arbol-ai/maximus/analytics`   | An observer that records analytics events                              | A Worker, or Node                                  |
+| `@arbol-ai/maximus/capture`     | One record of every call and refusal, for a store you declare          | A Worker, or Node                                  |
 | `@arbol-ai/maximus/postgres`    | Tenant-scoped Postgres transactions                                    | Where `pg` runs; `pg` is an optional peer          |
 | `@arbol-ai/maximus/testing`     | A contract check of a running service                                  | Node                                               |
 | `@arbol-ai/maximus/oxfmt`       | The format preset                                                      | Node, with the optional peers oxfmt and Ultracite  |
@@ -39,24 +40,24 @@ declare their routes, tools, context, failures and tokens with.
 
 ### The application builder
 
-| Export                     | Kind     | What it is                                                                                                                           |
-| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `maximus`                  | function | Starts an application in code: `maximus<Env>(configuration)`, then `.derive()`, `.use()`, `.operation()`, `.mount()` and `.build()`. |
-| `ApplicationBuilder`       | type     | An application under construction, as `maximus()` returns it.                                                                        |
-| `ApplicationConfiguration` | type     | What `maximus()` takes: identity, origin, `tokens`, `errors`, `rpc`, and the optional limits, rate limit, telemetry and `mcp`.       |
-| `AppManifest`              | type     | A built application: its configuration and its operations.                                                                           |
-| `Exposure`                 | type     | Where an operation is reachable: `http`, `mcp`, `rpc`, `visibility` and `actorKinds`.                                                |
-| `OperationShape`           | type     | An operation as an application holds it.                                                                                             |
-| `OperationScope`           | type     | One scope, or a non-empty list of scopes.                                                                                            |
-| `OperationMiddleware`      | type     | `(context, next) => Promise<Result>`: what `.use()` and `defineOperationMiddleware` take.                                            |
-| `Invocation`               | type     | What preparation and middleware start from: `env`, `principal`, `authority`, `input`, `operation`, `background`, `body`.             |
-| `InvocationAuthority`      | type     | What admission verified about a call's token: `surface`, `scopes`, `client` and `token`.                                             |
-| `McpConfiguration`         | type     | The MCP server's description: `instructions`, `guides`, `skills` and `skillTool`.                                                    |
-| `McpGuide`                 | type     | A guide: `name`, `title` and `text`.                                                                                                 |
-| `McpSkill`                 | type     | An Agent Skill: `name`, `description` and `text`.                                                                                    |
-| `isPublicOperation`        | function | Whether an operation belongs in the public OpenAPI document and discovery: not `internal`.                                           |
-| `operationScopes`          | function | An operation's scopes, as a list.                                                                                                    |
-| `operationMatchesScopes`   | function | Whether granted scopes admit an operation, by its `scopeMatch`.                                                                      |
+| Export                     | Kind     | What it is                                                                                                                                         |
+| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maximus`                  | function | Starts an application in code: `maximus<Env>(configuration)`, then `.derive()`, `.use()`, `.operation()`, `.mount()` and `.build()`.               |
+| `ApplicationBuilder`       | type     | An application under construction, as `maximus()` returns it.                                                                                      |
+| `ApplicationConfiguration` | type     | What `maximus()` takes: identity, origin, `tokens`, `errors`, `rpc`, and the optional limits, rate limit, telemetry and `mcp`.                     |
+| `AppManifest`              | type     | A built application: its configuration and its operations.                                                                                         |
+| `Exposure`                 | type     | Where an operation is reachable: `http`, `mcp`, `rpc`, `visibility` and `actorKinds`.                                                              |
+| `OperationShape`           | type     | An operation as an application holds it.                                                                                                           |
+| `OperationScope`           | type     | One scope, or a non-empty list of scopes.                                                                                                          |
+| `OperationMiddleware`      | type     | `(context, next) => Promise<Result>`: what `.use()` and `defineOperationMiddleware` take.                                                          |
+| `Invocation`               | type     | What preparation and middleware start from: `env`, `principal`, `authority`, `rpcCaller`, `userAgent`, `input`, `operation`, `background`, `body`. |
+| `InvocationAuthority`      | type     | What admission verified about a call's token: `surface`, `scopes`, `client` and `token`.                                                           |
+| `McpConfiguration`         | type     | The MCP server's description: `instructions`, `guides`, `skills` and `skillTool`.                                                                  |
+| `McpGuide`                 | type     | A guide: `name`, `title` and `text`.                                                                                                               |
+| `McpSkill`                 | type     | An Agent Skill: `name`, `description` and `text`.                                                                                                  |
+| `isPublicOperation`        | function | Whether an operation belongs in the public OpenAPI document and discovery: not `internal`.                                                         |
+| `operationScopes`          | function | An operation's scopes, as a list.                                                                                                                  |
+| `operationMatchesScopes`   | function | Whether granted scopes admit an operation, by its `scopeMatch`.                                                                                    |
 
 See [Worker composition](../guides/worker-composition.md).
 
@@ -258,6 +259,7 @@ The schema vocabulary without the rest of the core: what a contract module that 
 | `checkSchema`            | function       | Reads untrusted data, such as a stored record, through its schema: `{ success, data }` or `{ success, error }`. |
 | `readSchema`             | function       | `checkSchema`, throwing its `SchemaValidationError` on refusal.                                                 |
 | `Checked`                | type           | What `checkSchema` answers.                                                                                     |
+| `withoutSecrets`         | function       | A copy of a value without what its schema marks `secret: true`, at any depth.                                   |
 | `AttachmentOutputSchema` | schema         | The output of a route that answers a file.                                                                      |
 | `Attachment`             | type           | A file a route answers with.                                                                                    |
 | `Page`                   | function, type | The output of a list of an item, and one page as a handler returns it.                                          |
@@ -405,6 +407,11 @@ builder instead.
 | Export                    | Kind     | What it is                                                                                  |
 | ------------------------- | -------- | ------------------------------------------------------------------------------------------- |
 | `executeOperation`        | function | Runs one operation through the shared execution path, as every transport does.              |
+| `ExecutionCall`           | type     | What a transport knows of a call beyond its token, and what execution leaves for recording. |
+| `recordCapture`           | function | Captures one call or refusal as background work, beside `recordExecution`.                  |
+| `CapturedCall`            | type     | One call or refusal, as a transport hands it to `recordCapture`.                            |
+| `CaptureConfig`           | type     | What `capture` declares.                                                                    |
+| `VerifiedCaller`          | type     | What admission verified about a token, for `recordCapture`.                                 |
 | `defineApp`               | function | Checks an application assembled without the builder against every rule `.build()` enforces. |
 | `composeOperations`       | function | Joins groups of operations, refusing a name declared twice.                                 |
 | `operation`               | function | Declares one operation on its own, keeping its literal types.                               |
@@ -457,6 +464,24 @@ An observer that records one allowlisted event per operation call in a store you
 | `ExecutionEvent`       | type     | A value of `ExecutionEventSchema`.                                                                     |
 | `AnalyticsOptions`     | type     | What `analytics()` takes: `record`, which keeps an event in your store, `enabled` and `actor`.         |
 | `analytics`            | function | The observer.                                                                                          |
+
+## @arbol-ai/maximus/capture
+
+One complete record of every operation call and refusal, on every transport, for a store you declare. See
+[Capture](../guides/capture.md).
+
+| Export                | Kind     | What it is                                                                                               |
+| --------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `defineCapture`       | function | `capture.ts`'s default export: `enabled`, `sink`, `payloads` and `dimensions`. Refuses any other field.  |
+| `pipeline`            | function | The sink that sends each record to a Cloudflare Pipelines stream, retrying once.                         |
+| `PipelineOptions`     | type     | What `pipeline()` takes: `binding`, `map` and `blobs`.                                                   |
+| `CaptureRecordSchema` | schema   | One record: who called which operation over which transport, when, what it answered and what it carried. |
+| `CaptureRecord`       | type     | A value of `CaptureRecordSchema`.                                                                        |
+| `CaptureConfig`       | type     | What `defineCapture` takes.                                                                              |
+| `CaptureSink`         | type     | Where records go: `send` and `available`.                                                                |
+| `CaptureInvocation`   | type     | What a `dimensions` callback learns of a call.                                                           |
+| `CaptureDimensions`   | type     | What a `dimensions` callback answers.                                                                    |
+| `withoutSecrets`      | function | A copy of a value without what its schema marks `secret: true`, at any depth.                            |
 
 ## @arbol-ai/maximus/postgres
 

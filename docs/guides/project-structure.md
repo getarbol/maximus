@@ -13,6 +13,7 @@ notes/
 ├── context.ts                        What every handler receives besides its input
 ├── auth.ts                           Tokens the application verifies itself
 ├── telemetry.ts                      Observers of every call, such as analytics
+├── capture.ts                        One record of every call, for a store you declare
 ├── routes/v1/notes/[noteId].get.ts   A route: GET /api/v1/notes/{noteId}
 ├── mcp/tools/summarize-notes.ts      A tool only MCP serves: summarize_notes
 ├── mcp/instructions.md               What MCP clients read when they connect; guides and skills beside it
@@ -54,6 +55,7 @@ declaration:
 | `context.ts`   | `defineContext(…)`       | What every handler receives. See [Context and middleware](middleware-and-context.md).                                                      |
 | `auth.ts`      | `defineAuth({ … })`      | `resolve` for tokens the application verifies itself. See [Authentication and scopes](authentication-and-scopes.md).                       |
 | `telemetry.ts` | `defineTelemetry({ … })` | Whether Maximus's diagnostics run, their observers, such as `analytics()`, and the active trace id. See [Observability](observability.md). |
+| `capture.ts`   | `defineCapture({ … })`   | One complete record of every call and refusal, and where it goes. See [Capture](capture.md).                                               |
 
 A root module may end in `.ts`, `.mts`, `.js` or `.mjs`, and a project holds at most one of each name. A
 root module imports no generated module at runtime, and nothing that loads only in workerd
@@ -259,7 +261,7 @@ Prepare writes these modules to `.maximus/`. Each starts with
 | `env.d.ts`              | The global `Env`, inferred from the bindings of both modes by `cf/config`'s `InferEnv`. A binding to one of the Worker's own Durable Object classes is typed by that class, and a service's by its module of `services/`.                                 |
 | `register.d.ts`         | The global `MaximusRegister`: the base, the error catalog of `errors.ts` and `Env`, which type every `defineHandler`, `defineTool` and `defineContext`.                                                                                                   |
 | `config.ts`             | `application` and `worker`: what `vite.config.ts` states, as data the Worker carries.                                                                                                                                                                     |
-| `base.ts`               | `base`: the application, completed by `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`, the MCP Markdown and the operation middleware.                                                                                                                |
+| `base.ts`               | `base`: the application, completed by `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`, `capture.ts`, the MCP Markdown and the operation middleware.                                                                                                  |
 | `middleware.ts`         | `middleware` and `requestMiddleware`: the modules of `middleware/` in their order, split by phase.                                                                                                                                                        |
 | `mcp.ts`                | `mcp`: the instructions, guides and skills of `mcp/`, when any exists.                                                                                                                                                                                    |
 | `app-routes.ts`         | `routes`: React Router's routes for the pages of `app/routes/`, in the layout of `app/root.tsx` when there is one; for a web app with pages.                                                                                                              |
@@ -313,7 +315,7 @@ through one.
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `Project directory cannot be a symlink: <folder>`       | A convention folder, `app/`, `app/routes/`, `public/`, `mcp/guides/` or `mcp/skills/` that is a link. |
 | `Project modules cannot be symlinks: <file>`            | A link inside a convention folder.                                                                    |
-| `The <name> module cannot be a symlink.`                | `errors`, `auth`, `context`, `telemetry` or `app/root` as a link.                                     |
+| `The <name> module cannot be a symlink.`                | `errors`, `auth`, `context`, `telemetry`, `capture` or `app/root` as a link.                          |
 | `MCP Markdown must be an ordinary file: <path>`         | `mcp/instructions.md`, a guide or a skill that is a link or a folder.                                 |
 | `Public files cannot be symlinks: <path>`               | A link in `public/`.                                                                                  |
 | `The generated .maximus directory cannot be a symlink.` | `.maximus/` itself as a link.                                                                         |
@@ -369,12 +371,12 @@ A generated module imports your modules, so importing it back at runtime would f
 `import type` or `export type` is always allowed; `import { type app }` is not, since under
 `verbatimModuleSyntax` it still loads its module:
 
-| Module                                                      | Never imports at runtime from `.maximus/` or `#maximus/` |
-| ----------------------------------------------------------- | -------------------------------------------------------- |
-| `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`        | Any generated module                                     |
-| `middleware/`                                               | `base`, `middleware`, `app`, `http`, `worker`, `entry`   |
-| `routes/`, `mcp/tools/`                                     | `app`, `http`, `worker`, `entry`                         |
-| `pages/`, `crons/`, `queues/`, `email/`, `durable-objects/` | `worker`, `entry`                                        |
+| Module                                                             | Never imports at runtime from `.maximus/` or `#maximus/` |
+| ------------------------------------------------------------------ | -------------------------------------------------------- |
+| `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`, `capture.ts` | Any generated module                                     |
+| `middleware/`                                                      | `base`, `middleware`, `app`, `http`, `worker`, `entry`   |
+| `routes/`, `mcp/tools/`                                            | `app`, `http`, `worker`, `entry`                         |
+| `pages/`, `crons/`, `queues/`, `email/`, `durable-objects/`        | `worker`, `entry`                                        |
 
 ### When the Worker is configured
 

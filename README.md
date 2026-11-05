@@ -108,7 +108,8 @@ build.
 - **Failures are data.** A route answers `fail(code)` from a declared catalog that fixes each code's status
   and retry semantics, so HTTP, MCP and RPC callers see the same failure.
 - **Private by default.** Diagnostics carry codes, ids and durations, never bodies, credentials or error
-  text, and analytics name each actor by a pseudonym unless you choose otherwise.
+  text, and analytics name each actor by a pseudonym unless you choose otherwise. Content leaves only through
+  capture, a destination a service declares, without what its schemas mark `secret: true`.
 - **Small Workers.** A Worker without MCP builds to under 200 kB. With MCP, the SDK is a separate chunk that
   loads with the first MCP request.
 

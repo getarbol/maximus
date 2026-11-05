@@ -48,8 +48,8 @@ generated application in Node, where `cloudflare:workers` resolves to a stand-in
 | `env`            | `Record<string, Binding \| false \| null \| undefined>` | `{}`                                          | The Worker's bindings, made with `bindings` from `cf/config`; `Env` is inferred from them. An entry that is `false`, `null` or `undefined` is left out. See [Bindings](../guides/bindings.md).                                                                                                                                                                                                                                                                                                  |
 | `webApp`         | `{ headers?: Record<string, string \| false> }`         | The default headers                           | What a web app's pages and files answer with. See [webApp](#webapp).                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-The code that completes the application is not configuration: `errors.ts`, `context.ts`, `auth.ts` and
-`telemetry.ts` declare it, as [Project structure](../guides/project-structure.md#configuration-and-root-modules)
+The code that completes the application is not configuration: `errors.ts`, `context.ts`, `auth.ts`,
+`telemetry.ts` and `capture.ts` declare it, as [Project structure](../guides/project-structure.md#configuration-and-root-modules)
 describes.
 
 ## tokens

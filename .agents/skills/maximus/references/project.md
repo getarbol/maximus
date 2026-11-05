@@ -109,6 +109,10 @@ Each is optional and default-exports one declaration:
   the observers of every call, such as `analytics({ record })` from `@arbol-ai/maximus/analytics`. Observers
   receive safe metadata alone, never input, output or credentials. See
   [Observability](https://github.com/getarbol/maximus/blob/main/docs/guides/observability.md).
+- `capture.ts`: `defineCapture({ enabled, sink, payloads, dimensions })`, from `@arbol-ai/maximus/capture`: one
+  complete record of every call and refusal for a store the service declares, such as `pipeline({ binding })`.
+  It is apart from telemetry, and it never carries what a schema marks `secret: true`, a token or raw bytes. See
+  [Capture](https://github.com/getarbol/maximus/blob/main/docs/guides/capture.md).
 
 Root modules never import a route or a generated module.
 

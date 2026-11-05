@@ -77,7 +77,7 @@ every Node entry loads, and that a new project passes its own `bun run verify`.
   static assets.
 - **Project**: `/config` binds a project's files to the application, `/project` composes the generated
   Worker with its pages and event handlers, and `/vite` prepares a project from its files.
-- **Optional entries**: protocols and drivers that only some services use: MCP, Postgres, analytics,
+- **Optional entries**: protocols and drivers that only some services use: MCP, Postgres, analytics, capture,
   webhook verification.
 - **Services**: databases, credentials and sessions, customer policy, grants and provider parsing. A
   platform's control plane may be built with Maximus; it is never part of it.
@@ -88,7 +88,7 @@ every Node entry loads, and that a new project passes its own `bun run verify`.
 
 A service is a directory whose files declare it, configured by one file, `vite.config.ts`. Each convention
 has one meaning: a file of `routes/` is one route, named by its path and method; a file of `mcp/tools/` is
-a tool; `context.ts`, `errors.ts`, `auth.ts` and `telemetry.ts` complete the application in code;
+a tool; `context.ts`, `errors.ts`, `auth.ts`, `telemetry.ts` and `capture.ts` complete the application in code;
 `pages/`, `middleware/`, `crons/`, `queues/`, `email/` and `durable-objects/` are the Worker's other
 parts; and `index.html` with `app/routes/` makes it a web app. [Project structure](guides/project-structure.md)
 describes each one.
@@ -101,19 +101,19 @@ written and then forgotten, and two files cannot claim one path without the buil
 From `vite.config.ts` and the project's files, `maximus prepare` writes `.maximus/`, the modules that make
 the project an application and a Worker:
 
-| Module          | Holds                                                                                                                                                     |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.ts`     | What `vite.config.ts` states about the application, as data.                                                                                              |
-| `middleware.ts` | The modules of `middleware/`, in filename order, apart by phase.                                                                                          |
-| `env.d.ts`      | `Env`, inferred from the declared bindings by Cloudflare's own types; a binding to one of the Worker's own Durable Object classes is typed by that class. |
-| `base.ts`       | The application builder: the configuration, `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`, the MCP Markdown and the operation middleware.          |
-| `register.d.ts` | The registration that types every handler's context, failures and bindings without importing the application.                                             |
-| `app.ts`        | Every route and tool bound to that base, and the built application.                                                                                       |
-| `worker.ts`     | The Worker: the application with its pages, cron, queue and email handlers, Durable Object classes, MCP and a web app's assets.                           |
-| `http.ts`       | The API as the Worker serves it, without the Workers runtime, for tests in Node.                                                                          |
-| `entry.ts`      | The stable entry Cloudflare's plugin builds.                                                                                                              |
-| `mcp.ts`        | The MCP server's instructions, guides and skills, from the Markdown of `mcp/`, when there is any.                                                         |
-| `app-routes.ts` | A web app's pages, from `app/routes/`, as React Router's routes.                                                                                          |
+| Module          | Holds                                                                                                                                                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.ts`     | What `vite.config.ts` states about the application, as data.                                                                                                   |
+| `middleware.ts` | The modules of `middleware/`, in filename order, apart by phase.                                                                                               |
+| `env.d.ts`      | `Env`, inferred from the declared bindings by Cloudflare's own types; a binding to one of the Worker's own Durable Object classes is typed by that class.      |
+| `base.ts`       | The application builder: the configuration, `errors.ts`, `auth.ts`, `context.ts`, `telemetry.ts`, `capture.ts`, the MCP Markdown and the operation middleware. |
+| `register.d.ts` | The registration that types every handler's context, failures and bindings without importing the application.                                                  |
+| `app.ts`        | Every route and tool bound to that base, and the built application.                                                                                            |
+| `worker.ts`     | The Worker: the application with its pages, cron, queue and email handlers, Durable Object classes, MCP and a web app's assets.                                |
+| `http.ts`       | The API as the Worker serves it, without the Workers runtime, for tests in Node.                                                                               |
+| `entry.ts`      | The stable entry Cloudflare's plugin builds.                                                                                                                   |
+| `mcp.ts`        | The MCP server's instructions, guides and skills, from the Markdown of `mcp/`, when there is any.                                                              |
+| `app-routes.ts` | A web app's pages, from `app/routes/`, as React Router's routes.                                                                                               |
 
 Preparation reads the project's modules and never runs them: it parses each file to find its declaration,
 so preparing a project executes none of its code, and the file-system code that discovery needs stays out of
@@ -245,6 +245,11 @@ request, and no organization is ever read from a token that was not verified. Du
 microseconds. Trace ids are never invented: without a real trace's id, the request id correlates. Turning off
 Maximus's telemetry and turning off Cloudflare's own collection are separate controls.
 [Observability](guides/observability.md) describes each record.
+
+Capture is a separate, declared destination for content: the core holds its hook beside the recording points,
+and the `capture` entry its helper and sinks, which the core never imports. Its record is built after the
+response, apart from the observers, and never holds what a schema marks `secret: true`, a token, raw request
+bytes or an attachment's bytes. [Capture](guides/capture.md) describes it.
 
 ## Protocol scope
 
