@@ -22,6 +22,20 @@ This owner policy takes precedence over older CI and testing guidance in this re
   explicit human request. A request to edit CI configuration is not a test run request.
 <!-- END:owner-ci-policy -->
 
+## Standards first
+
+Before writing infrastructure, take the first option that fits, in this order:
+
+1. An open standard: MCP and its extensions (Tasks, Skills), OpenAPI 3.1, OAuth 2.1, the
+   `Idempotency-Key` header, Standard Webhooks, HL7 FHIR for clinical data.
+2. A managed service Arbol already uses: Cloudflare, Auth0, Neon, Kapso, ElevenLabs, Braintrust.
+3. A maintained, tested package that runs on Cloudflare Workers.
+4. Own code, only with the reason written in the pull request.
+
+Maximus and this repository's existing conventions are the house standard: extend them instead of adding
+a parallel mechanism. Others maintain and test what they publish; every line we write is ours to
+maintain. A new vendor that touches patient data or credentials needs a data-processing agreement first.
+
 # Maximus agent guide
 
 Maximus is one package, @arbol-ai/maximus, released with create-maximus at one version, in a Bun/Vite+
