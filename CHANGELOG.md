@@ -7,6 +7,16 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
+## Unreleased
+
+- The MCP Skills extension is served by the MCP SDK's `SkillCatalog`
+  (`@modelcontextprotocol/server/ext/skills`) instead of Maximus's own implementation, with the same
+  `skill://<name>/SKILL.md` URIs, digests, five-minute public cache hint and skill tool. What the SDK
+  changes: `skills/list` sorts skills by URI; the cache hint and `resultType` are sent on the 2026-07-28
+  revision only, which defines them; the skills are listed through the resource template
+  `skill://{+path}`; and the extension also answers `resources/directory/read` for a skill's directory,
+  declaring `{ directoryRead: true }`.
+
 ## 8.1.0 (2026-11-04)
 
 - **Capture**: `@arbol-ai/maximus/capture` gives a service one complete record of every operation call and every

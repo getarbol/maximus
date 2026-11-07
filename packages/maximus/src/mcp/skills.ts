@@ -1,48 +1,19 @@
 /**
- * The MCP Skills extension (SEP-2640): `skills/list` and `skills/get` describe each skill by its
- * frontmatter and the manifest of its one file, whose size and SHA-256 digest hosts verify, and
- * `resources/read` serves that `SKILL.md`. An optional tool serves the same skills to clients that import
- * only tools.
+ * The MCP Skills extension (SEP-2640), served by the SDK's `SkillCatalog`: `skills/list`, `skills/get` and
+ * `resources/read` of each skill's one file, `skill://<name>/SKILL.md`, whose size and SHA-256 digest hosts
+ * verify. An optional tool serves the same skills to clients that import only tools.
  */
-import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
-import type { CallToolResult, McpServer, StandardSchemaV1, Tool } from '@modelcontextprotocol/server';
-import { Type } from '@sinclair/typebox';
-import type { Static, TSchema } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import type { CallToolResult, Tool } from '@modelcontextprotocol/server';
+import { memorySkillFiles, SkillCatalog } from '@modelcontextprotocol/server/ext/skills';
 
 import type { McpSkill } from '../index.ts';
-import { sha256Hex } from '../internal/digest.ts';
 import { toYaml } from '../internal/yaml.ts';
-
-/** The official Skills extension (SEP-2640) a server declares in its capabilities. */
-export const SKILLS_EXTENSION = 'io.modelcontextprotocol/skills';
 
 /** Skills change only with a deployment and are the same for every caller, so hosts may share them. */
 const SKILL_CACHE = { ttlMs: 300_000, cacheScope: 'public' } as const;
 
-/** Adapts a TypeBox schema to the Standard Schema the SDK validates custom method params with. */
-function standardSchema<T extends TSchema>(schema: T): StandardSchemaV1<unknown, Static<T>> {
-  return {
-    '~standard': {
-      version: 1,
-      vendor: 'maximus',
-      validate: (value) =>
-        Value.Check(schema, value) ? { value } : { issues: [{ message: 'Invalid params' }] },
-    },
-  };
-}
-/** `skills/list` params: an optional page cursor, which one page of every skill never issues. */
-const ListSkillsParams = standardSchema(Type.Object({ cursor: Type.Optional(Type.String()) }));
-/** `skills/get` params: the URI of the skill's `SKILL.md`. */
-const GetSkillParams = standardSchema(Type.Object({ uri: Type.String() }));
-
-/**
- * A skill's `SKILL.md` URI, `skill://<name>/SKILL.md`: the file's directory carries the skill's name, as
- * SEP-2640 requires.
- */
-function skillUri(skill: McpSkill): string {
-  return `skill://${skill.name}/SKILL.md`;
-}
+/** Each application's catalog, built on first use: an application's skills never change. */
+const catalogs = new WeakMap<readonly McpSkill[], SkillCatalog>();
 
 /** The served `SKILL.md`: frontmatter generated from the name and description, then the instructions. */
 function skillDocument(skill: McpSkill): string {
@@ -50,58 +21,23 @@ function skillDocument(skill: McpSkill): string {
   return `---\n${frontmatter}---\n\n${skill.text.trim()}\n`;
 }
 
-/** A catalog entry. Hosts verify every file they read against its manifest's size and SHA-256 digest. */
-async function skillEntry(skill: McpSkill) {
-  const uri = skillUri(skill);
-  const bytes = new TextEncoder().encode(skillDocument(skill));
-  return {
-    uri,
-    frontmatter: { name: skill.name, description: skill.description },
-    resources: [{ uri, digest: `sha256:${await sha256Hex(bytes)}`, size: bytes.byteLength }],
-  };
-}
-
 /**
- * Serves skills through the Skills extension: `skills/list`, `skills/get`, and `resources/read` of each
- * `SKILL.md`, each request answered through `answer`, which reports an unexpected failure without its text.
- * Clients without the extension still find the files among the server's resources.
+ * The catalog that serves the skills through the Skills extension, each as `skill://<name>/SKILL.md`, every
+ * one on a single `skills/list` page, with the public cache hint. Building it checks each skill as hosts do,
+ * and throws for one they would refuse.
  */
-export function registerSkills(
-  server: McpServer,
-  skills: readonly McpSkill[],
-  answer: <R>(work: () => R | Promise<R>) => Promise<R>
-): void {
-  for (const skill of skills) {
-    const uri = skillUri(skill);
-    server.registerResource(
-      skill.name,
-      uri,
-      { description: skill.description, mimeType: 'text/markdown', cacheHint: SKILL_CACHE },
-      () => answer(() => ({ contents: [{ uri, mimeType: 'text/markdown', text: skillDocument(skill) }] }))
-    );
+export async function skillCatalog(skills: readonly McpSkill[]): Promise<SkillCatalog> {
+  let catalog = catalogs.get(skills);
+  if (!catalog) {
+    const files = Object.fromEntries(skills.map((skill) => [`${skill.name}/SKILL.md`, skillDocument(skill)]));
+    catalog = await SkillCatalog.load(memorySkillFiles(files), {
+      cacheHint: SKILL_CACHE,
+      pageSize: Number.POSITIVE_INFINITY,
+      strict: true,
+    });
+    catalogs.set(skills, catalog);
   }
-  server.server.setRequestHandler('skills/list', { params: ListSkillsParams }, (params) =>
-    answer(async () => {
-      // One page holds every skill, so the server never issues a cursor to come back with.
-      if (params.cursor !== undefined) {
-        throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Invalid skills cursor');
-      }
-      return {
-        resultType: 'complete' as const,
-        skills: await Promise.all(skills.map(skillEntry)),
-        ...SKILL_CACHE,
-      };
-    })
-  );
-  server.server.setRequestHandler('skills/get', { params: GetSkillParams }, (params) =>
-    answer(async () => {
-      const skill = skills.find((candidate) => skillUri(candidate) === params.uri);
-      if (!skill) {
-        throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown skill');
-      }
-      return { resultType: 'complete' as const, skill: await skillEntry(skill), ...SKILL_CACHE };
-    })
-  );
+  return catalog;
 }
 
 /**

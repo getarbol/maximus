@@ -157,11 +157,11 @@ description: Review the organization's notes once a week and summarize what chan
 
 The frontmatter states `description` alone, and `name` only when it repeats the file's name; anything
 else is refused, and so is a skill without frontmatter or without a description. The server declares the
-MCP Skills extension (`io.modelcontextprotocol/skills`), answers `skills/list` and `skills/get`, and
-serves each skill as the resource `skill://<name>/SKILL.md`, whose frontmatter it writes from the name and
-the description. Each listing carries the file's size and SHA-256 digest, which hosts check before
-loading it, and a cache hint that lets hosts keep it, and share it between callers, for five minutes. A
-skill grants no tool and no scope.
+MCP Skills extension (`io.modelcontextprotocol/skills`) through the MCP SDK's skill catalog, answers
+`skills/list` and `skills/get`, and serves each skill as the resource `skill://<name>/SKILL.md`, whose
+frontmatter it writes from the name and the description. Each listing carries the file's size and SHA-256
+digest, which hosts check before loading it, and, on the 2026-07-28 revision, a cache hint that lets hosts
+keep it, and share it between callers, for five minutes. A skill grants no tool and no scope.
 
 A client that reads only tools does not see skills. A Worker composed by hand can also serve them as one
 read-only tool, `mcp.skillTool` (see [In a Worker composed by hand](#in-a-worker-composed-by-hand)).
