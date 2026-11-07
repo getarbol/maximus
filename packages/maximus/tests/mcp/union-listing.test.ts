@@ -15,13 +15,14 @@ import { mcp } from '../../src/mcp/index.ts';
 
 const strict = { additionalProperties: false } as const;
 /** A folder holds folders: a recursive member, named so its listing refers to it. */
-const Folder = t.Recursive(
-  (Self) =>
-    t.Object(
-      { kind: t.Literal('folder'), name: t.String(), entries: t.Array(Self, { maxItems: 8 }) },
+const Folder = t.Cyclic(
+  {
+    Folder: t.Object(
+      { kind: t.Literal('folder'), name: t.String(), entries: t.Array(t.Ref('Folder'), { maxItems: 8 }) },
       strict
     ),
-  { $id: 'Folder' }
+  },
+  'Folder'
 );
 const File = t.Object({ kind: t.Literal('file'), name: t.String(), size: t.Integer({ minimum: 0 }) }, strict);
 /** A reminder after a delay or at a time: the label is text for one and a number for the other. */

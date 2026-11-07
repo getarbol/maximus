@@ -4,8 +4,8 @@
  * client reads `createNote(body: CreateNoteBody): NoteResponse`. The `x-*` extensions carry what OpenAPI
  * cannot say: scopes, effects, limits, MCP tools and native RPC.
  */
-import { Type } from '@sinclair/typebox';
-import type { TSchema } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { TSchema } from 'typebox';
 
 import { usesCloudflareAccess } from './cloudflare-access.ts';
 import type { ErrorDefinition } from './errors.ts';
@@ -40,6 +40,7 @@ import {
 } from './manifest.ts';
 import type { AppManifest, OperationShape } from './manifest.ts';
 import { bundleSchemas, schemaIds } from './schema-bundle.ts';
+import type { SchemaKeywords } from './schema-types.ts';
 import { tokenEndpoints } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
 
@@ -58,7 +59,7 @@ function headerReference(name: keyof typeof HEADERS): { $ref: string } {
 }
 
 /** Whether an object schema holds no field at all, so that `{}` is its one value. */
-function isEmptyObject(schema: TSchema): boolean {
+function isEmptyObject(schema: SchemaKeywords): boolean {
   return (
     schema.type === 'object' &&
     Object.keys(schema.properties ?? {}).length === 0 &&
@@ -72,12 +73,12 @@ function isEmptyObject(schema: TSchema): boolean {
  * fields is no longer the schema its `$id` names, so it loses the name, and its property counts lose the
  * path's fields.
  */
-function bodyWithoutPathParameters(input: TSchema, names: ReadonlySet<string>): TSchema {
+function bodyWithoutPathParameters(input: SchemaKeywords, names: ReadonlySet<string>): SchemaKeywords {
   if (input.type !== 'object') {
     const { $id: _id, ...union } = input;
     return {
       ...union,
-      anyOf: input.anyOf.map((schema: TSchema) => bodyWithoutPathParameters(schema, names)),
+      anyOf: (input.anyOf ?? []).map((schema) => bodyWithoutPathParameters(schema, names)),
     };
   }
   const carried = Object.keys(input.properties ?? {}).filter((name) => names.has(name)).length;
@@ -87,8 +88,10 @@ function bodyWithoutPathParameters(input: TSchema, names: ReadonlySet<string>): 
   const { $id: _id, minProperties, maxProperties, ...object } = input;
   return {
     ...object,
-    properties: Object.fromEntries(Object.entries(input.properties).filter(([name]) => !names.has(name))),
-    required: (input.required ?? []).filter((name: string) => !names.has(name)),
+    properties: Object.fromEntries(
+      Object.entries(input.properties ?? {}).filter(([name]) => !names.has(name))
+    ),
+    required: (input.required ?? []).filter((name) => !names.has(name)),
     ...(typeof minProperties === 'number' && minProperties > carried
       ? { minProperties: minProperties - carried }
       : {}),
@@ -116,7 +119,7 @@ export interface OpenApiDocument {
  * effect, limits in force, MCP tool hints and native RPC as `x-*` extensions.
  *
  * Every schema reference in it is a local `#/components/schemas/<name>` pointer: the `$id`-named
- * schemas of its paths and components (TypeBox Recursive/Ref) become components, as `bundleSchemas`
+ * schemas of its paths and components (TypeBox Cyclic/Ref) become components, as `bundleSchemas`
  * describes. A schema `$id` that takes the name of a component the document writes itself, and a component
  * named as a generator names an operation's own types, such as `CreateNoteResponse`, throw a TypeError.
  */
@@ -444,7 +447,7 @@ function parameter(
   name: string,
   location: 'path' | 'query' | 'header',
   required: boolean,
-  schema: TSchema,
+  schema: SchemaKeywords,
   style: object = {}
 ): object {
   const words = name
@@ -467,7 +470,7 @@ function requestContract(
   components: ComponentSchemas
 ): object {
   // As callers send it: a field with a default is optional.
-  const input = wireInput(op.input);
+  const input: SchemaKeywords = wireInput(op.input);
   const parameterNames = operationPathParameters(http.path);
   const pathNames = new Set(parameterNames);
   const pathParameters = parameterNames.map((pathName) => {
@@ -479,8 +482,8 @@ function requestContract(
       schemas.length === 1 && schemas[0] ? schemas[0] : Type.Union(schemas)
     );
   });
-  const properties = (input.properties ?? {}) as Record<string, TSchema>;
-  const required = (input.required ?? []) as string[];
+  const properties = input.properties ?? {};
+  const required = input.required ?? [];
   const fields = Object.entries(properties).filter(([field]) => !pathNames.has(field));
   if (http.body === 'bytes') {
     return {
@@ -541,7 +544,7 @@ function requestContract(
  */
 function bodySchema(
   name: string,
-  body: TSchema,
+  body: SchemaKeywords,
   components: ComponentSchemas,
   suffix: 'Body' | 'Input' = 'Body'
 ): TSchema | SchemaReference {
@@ -602,7 +605,7 @@ function successResponse(
  * operation that answers a note shares), `EmptyResponse` for an output without fields, and otherwise after
  * the operation, with its output as `<Operation>Result`.
  */
-function successSchema(name: string, output: TSchema, components: ComponentSchemas): SchemaReference {
+function successSchema(name: string, output: SchemaKeywords, components: ComponentSchemas): SchemaReference {
   if (isEmptyObject(output)) {
     return components.add('EmptyResponse', successEnvelope(components.add('Empty', EMPTY_OBJECT)));
   }
@@ -705,7 +708,7 @@ function failureResponse(
 
 /** A failure as its component, `<Code>Failure`, with its data: the schema its definition declares, else `Empty`. */
 function addFailure(definition: ErrorDefinition, components: ComponentSchemas): void {
-  const { dataSchema } = definition;
+  const dataSchema: SchemaKeywords | undefined = definition.dataSchema;
   let data: unknown;
   if (dataSchema === undefined || isEmptyObject(dataSchema)) {
     data = components.add('Empty', EMPTY_OBJECT);

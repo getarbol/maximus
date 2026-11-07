@@ -1,6 +1,6 @@
 /**
  * Type tests of input codecs and readers: a field a codec declares is sent as its source and received
- * decoded, `inputSchema()` decodes TypeBox transforms for the handler, and `checkSchema` and `readSchema`
+ * decoded, `inputSchema()` decodes TypeBox codecs for the handler, and `checkSchema` and `readSchema`
  * answer the decoded data.
  */
 import { defineErrors, maximus, ok, t } from '../src/index.ts';
@@ -19,7 +19,7 @@ import type { Checked, InputIssue, SchemaInput, Static, StaticDecode } from '../
 
 /** A date-time on the wire, a `Date` once decoded. */
 const Instant = t
-  .Transform(t.String({ format: 'date-time' }))
+  .Codec(t.String({ format: 'date-time' }))
   .Decode((value) => new Date(value))
   .Encode((value) => value.toISOString());
 /** A canonical schema whose fields each use a codec. */
@@ -45,7 +45,7 @@ const decodedTags: Wire = { ...wire, tags: ['a', 'b'] };
 const decodedSizes: Wire = { ...wire, sizes: [2] };
 // @ts-expect-error A piped field is sent as its source schema's type.
 const decodedPage: Wire = { ...wire, page: 2 };
-// @ts-expect-error A TypeBox transform is sent encoded.
+// @ts-expect-error A TypeBox codec is sent encoded.
 const decodedSince: Wire = { ...wire, since: new Date() };
 const withLimit: SchemaInput<typeof Search> = { ...wire, limit: '10' };
 
@@ -116,7 +116,7 @@ if (checked.success) {
   const name: string = checked.data.name;
   void name;
 }
-const issue: InputIssue = { path: '/tags', message: 'Expected string' };
+const issue: InputIssue = { path: '/tags', message: 'must be string' };
 
 void [decodedTags, decodedSizes, decodedPage, decodedSince, withLimit, tags, sizes, page, limit, since];
 void [sinceText, at, atText, issue];

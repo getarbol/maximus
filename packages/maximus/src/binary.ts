@@ -2,8 +2,8 @@
  * Byte bodies and file attachments over HTTP: the on-demand reader of a declared byte body, the checks an
  * attachment output passes before anything is sent, and the exact-length response that serves it.
  */
-import { Kind } from '@sinclair/typebox';
-import type { TSchema } from '@sinclair/typebox';
+import { IsKind } from 'typebox';
+import type { TSchema } from 'typebox';
 
 import type { Attachment } from './attachment-schema.ts';
 import { standardErrors } from './errors.ts';
@@ -59,7 +59,7 @@ export function binaryBody(request: Request, maxBytes: number): BinaryBody {
 
 /** Whether an output schema is `AttachmentOutputSchema`. */
 export function isAttachmentSchema(schema: TSchema): boolean {
-  return schema[Kind] === 'HttpAttachment';
+  return IsKind(schema, 'HttpAttachment');
 }
 
 /**

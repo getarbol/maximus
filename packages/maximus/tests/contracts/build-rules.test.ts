@@ -223,7 +223,7 @@ it('refuses an input or output that is not a strict object or a union of strict 
 });
 
 it('refuses a record whose keys follow a pattern unless it refuses every other key, at any depth', () => {
-  const labels = (options: object = {}) =>
+  const labels = (options: { additionalProperties?: boolean } = {}) =>
     t.Object({ labels: t.Record(t.String({ pattern: '^[a-z]+$' }), t.String(), options) }, strict);
   const refused = new TypeError(
     'Operation "readRecord": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.'

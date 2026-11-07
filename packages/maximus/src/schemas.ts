@@ -4,10 +4,10 @@
  * browsers import (a Dashboard reading an API's limits, a widget's settings) imports from here rather than
  * the package root.
  */
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 
-export { Type, Type as t } from '@sinclair/typebox';
-export type { Static, TSchema } from '@sinclair/typebox';
+export { Type, Type as t } from 'typebox';
+export type { Static, TSchema } from 'typebox';
 export type { StaticDecode } from './schema-types.ts';
 export { parseInput, parseSchema, decodeInput, decodeSchema } from './validation.ts';
 export type { InputIssue } from './validation.ts';
@@ -32,6 +32,7 @@ export const UuidSchema = Type.String({
 });
 
 export {
+  annotate,
   literalUnion,
   defaultSchema,
   stripObject,

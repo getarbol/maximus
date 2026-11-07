@@ -2,16 +2,16 @@
  * Reads untrusted data, such as a stored record or a provider's or a model's answer, through a schema's
  * owner semantics.
  */
-import type { TSchema } from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
 
 import { inputSchema, SchemaValidationError } from './input-schemas.ts';
-import { codecFault, decodeIssues } from './internal/decode-issues.ts';
+import { decodeIssues } from './internal/decode-issues.ts';
 import type { StaticDecode } from './schema-types.ts';
 import { decodeSchema } from './validation.ts';
 
 /**
  * What `checkSchema` answers: the decoded data, `StaticDecode<S>` (which is `Static<S>` unless `S` holds a
- * TypeBox transform), or the error that lists every issue.
+ * TypeBox codec), or the error that lists every issue.
  */
 export type Checked<S extends TSchema> =
   | { success: true; data: StaticDecode<S>; error?: never }
@@ -29,7 +29,7 @@ export function checkSchema<S extends TSchema>(schema: S, input: unknown): Check
   } catch (error) {
     const issues = decodeIssues(error);
     if (!issues) {
-      throw codecFault(error);
+      throw error;
     }
     return { success: false, error: new SchemaValidationError(issues) };
   }

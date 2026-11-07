@@ -2,22 +2,25 @@
  * What a route's path says about its operation: the schemas a path parameter has in each variant of its
  * input, and the group the path names.
  */
-import type { TSchema } from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
+
+import type { SchemaKeywords } from '../schema-types.ts';
 
 /**
  * The parameter's schema in an object input, or in each member of a union. Every one must declare the
  * parameter as a required string field, or this throws a TypeError.
  */
-export function pathParameterSchemas(input: TSchema, parameter: string): TSchema[] {
-  if (input.type === 'object') {
-    const schema = input.properties?.[parameter] as TSchema | undefined;
-    if (!schema || schema.type !== 'string' || !input.required?.includes(parameter)) {
+export function pathParameterSchemas(input: TSchema, parameter: string): SchemaKeywords[] {
+  const node: SchemaKeywords = input;
+  if (node.type === 'object') {
+    const schema = node.properties?.[parameter];
+    if (!schema || schema.type !== 'string' || !node.required?.includes(parameter)) {
       throw new TypeError(`Path parameter "${parameter}" must be a required string input field.`);
     }
     return [schema];
   }
-  if (Array.isArray(input.anyOf) && input.anyOf.length > 0) {
-    return input.anyOf.flatMap((schema: TSchema) => pathParameterSchemas(schema, parameter));
+  if (Array.isArray(node.anyOf) && node.anyOf.length > 0) {
+    return node.anyOf.flatMap((schema) => pathParameterSchemas(schema, parameter));
   }
   throw new TypeError('Path parameters require object input contracts.');
 }

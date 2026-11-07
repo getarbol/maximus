@@ -1,7 +1,8 @@
 /**
- * INVALID_INPUT issues: JSON Pointer paths and expectations, never the refused values, bounded in number.
+ * INVALID_INPUT issues: JSON Pointer paths and expectations, never the refused values, bounded in number,
+ * a missing property at its own path.
  */
-import { DefaultErrorFunction, SetErrorFunction } from '@sinclair/typebox/errors';
+import { Locale } from 'typebox/system';
 import { expect, it } from 'vite-plus/test';
 
 import { executeOperation } from '../src/execution.ts';
@@ -60,11 +61,11 @@ it('reports an issue of a codec nested in a field at its full path from the inpu
 });
 
 it('builds no more issues than a refusal carries, however many the input has', () => {
-  // TypeBox builds each issue's message through the error function, so its calls count the issues built.
+  // TypeBox builds each error's message through its locale, so its calls count the errors built.
   let built = 0;
-  SetErrorFunction((parameter) => {
+  Locale.Set((failure) => {
     built += 1;
-    return DefaultErrorFunction(parameter);
+    return Locale.en_US(failure);
   });
   try {
     const refused = decodeInput(
@@ -74,7 +75,7 @@ it('builds no more issues than a refusal carries, however many the input has', (
     expect(refused.ok ? 0 : refused.error.data.issues.length).toBe(10);
     expect(built).toBeLessThanOrEqual(10);
   } finally {
-    SetErrorFunction(DefaultErrorFunction);
+    Locale.Reset();
   }
 });
 
@@ -132,12 +133,7 @@ it('an operation refuses an invalid input with the declared INVALID_INPUT failur
     return;
   }
   expect(standardErrors.invalidInput.is(refused.error)).toBe(true);
-  expect(refused.error.data).toEqual({
-    issues: [
-      { path: '/offerToken', message: 'Expected required property' },
-      { path: '/offerToken', message: 'Expected string' },
-    ],
-  });
+  expect(refused.error.data).toEqual({ issues: [{ path: '/offerToken', message: 'must be present' }] });
   const withdrawn = await executeOperation(
     app,
     app.operations.confirm,

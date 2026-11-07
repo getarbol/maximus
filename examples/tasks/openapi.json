@@ -1179,18 +1179,18 @@
   "components": {
     "schemas": {
       "CreateTaskBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "title"
         ],
         "properties": {
           "title": {
+            "type": "string",
             "minLength": 1,
-            "maxLength": 200,
-            "type": "string"
+            "maxLength": 200
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Empty": {
         "type": "object",
@@ -1413,20 +1413,19 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ListTasksResult": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "tasks"
@@ -1438,7 +1437,8 @@
               "$ref": "#/components/schemas/Task"
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ListTasksResultResponse": {
         "type": "object",
@@ -1669,7 +1669,6 @@
         }
       },
       "Task": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "taskId",
@@ -1682,18 +1681,19 @@
             "$ref": "#/components/schemas/Uuid"
           },
           "title": {
+            "type": "string",
             "minLength": 1,
-            "maxLength": 200,
-            "type": "string"
+            "maxLength": 200
           },
           "done": {
             "type": "boolean"
           },
           "createdAt": {
-            "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "TaskNotFoundError": {
         "type": "object",
@@ -2034,12 +2034,11 @@
         }
       },
       "Uuid": {
+        "type": "string",
         "format": "uuid",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-        "type": "string"
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -2047,15 +2046,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {

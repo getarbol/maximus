@@ -723,10 +723,10 @@
             "required": true,
             "description": "The filename.",
             "schema": {
+              "type": "string",
               "minLength": 1,
               "maxLength": 200,
-              "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$",
-              "type": "string"
+              "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
             },
             "x-input-field": "filename"
           },
@@ -736,9 +736,9 @@
             "required": true,
             "description": "The content-type header.",
             "schema": {
+              "type": "string",
               "maxLength": 255,
-              "description": "The content-type header.",
-              "type": "string"
+              "description": "The content-type header."
             },
             "x-input-field": "contentType"
           }
@@ -1006,7 +1006,6 @@
         }
       },
       "Document": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "documentId",
@@ -1021,27 +1020,28 @@
             "$ref": "#/components/schemas/Uuid"
           },
           "filename": {
+            "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$",
-            "type": "string"
+            "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
           },
           "contentType": {
             "type": "string"
           },
           "byteLength": {
-            "minimum": 1,
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "sha256": {
-            "pattern": "^[0-9a-f]{64}$",
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           },
           "uploadedAt": {
-            "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "DocumentNotAcceptedFailure": {
         "type": "object",
@@ -1388,17 +1388,17 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OutcomeUnknownError": {
         "type": "object",
@@ -1821,12 +1821,11 @@
         }
       },
       "Uuid": {
+        "type": "string",
         "format": "uuid",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-        "type": "string"
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -1834,15 +1833,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {

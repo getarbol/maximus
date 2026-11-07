@@ -29,7 +29,7 @@ const entries = {
 
 /**
  * One build of every entry, so a module shared by several entries is emitted once, in a chunk they
- * all import: its state (TypeBox formats, schema symbols, the telemetry store) exists once. Chunks are
+ * all import: its state (TypeBox's settings and formats, schema symbols, the telemetry store) exists once. Chunks are
  * split by the entries that use them, so no entry loads code it does not use, and the browser entries
  * never load a chunk that imports node:, cloudflare:, pg or the MCP SDK.
  */
@@ -65,10 +65,9 @@ export default defineConfig({
       onlyImport: [
         '@modelcontextprotocol/server',
         '@scalar/openapi-parser',
-        '@sinclair/typebox',
-        'ajv-formats',
         'jose',
         'rou3',
+        'typebox',
         'yaml',
         'pg',
         'vite',

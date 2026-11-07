@@ -777,17 +777,17 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OutcomeUnknownError": {
         "type": "object",
@@ -948,21 +948,20 @@
         }
       },
       "ReadPageBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "url"
         ],
         "properties": {
           "url": {
+            "type": "string",
             "maxLength": 2048,
-            "description": "An https address at an allowed host.",
-            "type": "string"
+            "description": "An https address at an allowed host."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ReadPageResult": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "url",
@@ -973,10 +972,11 @@
             "type": "string"
           },
           "markdown": {
-            "maxLength": 20000,
-            "type": "string"
+            "type": "string",
+            "maxLength": 20000
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ReadPageResultResponse": {
         "type": "object",
@@ -1128,26 +1128,26 @@
         }
       },
       "ScreenshotPageBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "url"
         ],
         "properties": {
           "url": {
+            "type": "string",
             "maxLength": 2048,
-            "description": "An https address at an allowed host.",
-            "type": "string"
+            "description": "An https address at an allowed host."
           },
           "width": {
+            "type": "integer",
             "minimum": 320,
-            "maximum": 1920,
-            "type": "integer"
+            "maximum": 1920
           },
           "fullPage": {
             "type": "boolean"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ScreenshotPageUnprocessableContentError": {
         "type": "object",
@@ -1443,7 +1443,6 @@
         }
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -1451,15 +1450,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {

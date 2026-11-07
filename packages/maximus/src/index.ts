@@ -47,9 +47,10 @@ export type {
 } from './handler.ts';
 
 // Schemas: TypeBox as `t`, the validators and the schemas services share.
-export { Type, Type as t } from '@sinclair/typebox';
-export type { Static, TSchema } from '@sinclair/typebox';
+export { Type, Type as t } from 'typebox';
+export type { Static, TSchema } from 'typebox';
 export { parseInput, parseSchema } from './validation.ts';
+export { annotate } from './input-schemas.ts';
 export { EmptyInputSchema, OrganizationIdSchema, UuidSchema } from './schemas.ts';
 export {
   DeletedObjectSchema,

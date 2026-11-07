@@ -21,6 +21,7 @@ import {
 import type { TSchema } from '../../src/index.ts';
 import { defineApp, operation } from '../../src/internals.ts';
 import { mcp } from '../../src/mcp/index.ts';
+import type { SchemaKeywords } from '../../src/schema-types.ts';
 import { inputSchema } from '../../src/schemas.ts';
 
 // MCP clients compile each tool's schemas with a JSON Schema validator; the MCP TypeScript SDK uses
@@ -31,9 +32,9 @@ const Contact = t.Object(
   { $id: 'Contact', additionalProperties: false }
 );
 const ContactPage = Page(Contact, { $id: 'ContactPage' });
-const JsonValue = t.Recursive(
-  (Self) => t.Union([t.String(), t.Number(), t.Null(), t.Array(Self, { maxItems: 8 })]),
-  { $id: 'JsonValue' }
+const JsonValue = t.Cyclic(
+  { JsonValue: t.Union([t.String(), t.Number(), t.Null(), t.Array(t.Ref('JsonValue'), { maxItems: 8 })]) },
+  'JsonValue'
 );
 const plain = t.Object({ query: t.String({ maxLength: 100 }) }, { additionalProperties: false });
 /** One notice to a contact, by email or by text message: a union input, discriminated by its channel. */
@@ -229,8 +230,8 @@ it('lists every tool schema self-contained, with no $id, and Ajv compiles them a
   expect(byName.get('get_contact')?.outputSchema).toStrictEqual({
     type: 'object',
     properties: {
-      contactId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
-      ownerId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
+      contactId: { type: 'string', format: 'uuid', pattern: (UuidSchema as SchemaKeywords).pattern },
+      ownerId: { type: 'string', format: 'uuid', pattern: (UuidSchema as SchemaKeywords).pattern },
       email: { type: 'string', format: 'email', maxLength: 254, description: 'Email address.' },
     },
     required: ['contactId', 'ownerId', 'email'],
@@ -258,7 +259,7 @@ it('lists a union input as one object and still checks every call against the ex
     type: 'object',
     properties: {
       channel: { type: 'string', enum: ['email', 'sms'] },
-      contactId: { type: 'string', format: 'uuid', pattern: UuidSchema.pattern },
+      contactId: { type: 'string', format: 'uuid', pattern: (UuidSchema as SchemaKeywords).pattern },
       address: { type: 'string', format: 'email', maxLength: 254, description: 'Email address.' },
       phone: { type: 'string', pattern: '^\\+[1-9][0-9]{7,14}$' },
     },

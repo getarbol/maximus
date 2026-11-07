@@ -46,7 +46,7 @@ it('refuses a reference outside any definition when its name has several shapes'
   );
   // Inside its definition, a recursive schema's reference names its own variant.
   const tree = (leaf: TSchema) =>
-    t.Recursive((Self) => t.Object({ leaf, children: t.Array(Self) }, strict), { $id: 'Tree' });
+    t.Cyclic({ Tree: t.Object({ leaf, children: t.Array(t.Ref('Tree')) }, strict) }, 'Tree');
   const { values, components } = bundleSchemas([tree(t.String()), tree(t.Integer())], {});
   expect(values).toEqual([component('Tree'), component('Tree_2')]);
   expect(components).toMatchObject({
@@ -67,7 +67,7 @@ it('suffixes a component whose name the document already uses, keeping one compo
 });
 
 it('writes a standalone schema with named definitions under $defs and references to other documents untouched', () => {
-  const Node = t.Recursive((Self) => t.Object({ children: t.Array(Self) }, strict), { $id: 'Node' });
+  const Node = t.Cyclic({ Node: t.Object({ children: t.Array(t.Ref('Node')) }, strict) }, 'Node');
   const external = 'https://schemas.example.test/address.json';
   const schema = t.Object({ tree: Node, address: t.Unsafe({ $ref: external }) }, strict);
   expect(standaloneSchema(schema)).toEqual({

@@ -3,12 +3,12 @@
  * allowlisted analytics event and records it in a sink the application provides. No input, output or
  * credential ever reaches the event.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import { Type } from 'typebox';
+import type { Static } from 'typebox';
 
 import { OrganizationIdSchema, UuidSchema } from '../index.ts';
 import type { Observer } from '../index.ts';
+import { Value } from '../internal/value.ts';
 import { telemetryEnabled } from '../telemetry.ts';
 
 /** An analytics event: the allowlisted metadata of one operation call, flattened, with an id of its own. */

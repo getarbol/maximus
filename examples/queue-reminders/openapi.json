@@ -496,23 +496,23 @@
   "components": {
     "schemas": {
       "CreateReminderBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "text"
         ],
         "properties": {
           "text": {
+            "type": "string",
             "minLength": 1,
-            "maxLength": 500,
-            "type": "string"
+            "maxLength": 500
           },
           "delaySeconds": {
+            "type": "integer",
             "minimum": 0,
-            "maximum": 43200,
-            "type": "integer"
+            "maximum": 43200
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Empty": {
         "type": "object",
@@ -707,17 +707,17 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OutcomeUnknownError": {
         "type": "object",
@@ -844,7 +844,6 @@
         }
       },
       "Reminder": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "reminderId",
@@ -857,31 +856,32 @@
             "$ref": "#/components/schemas/Uuid"
           },
           "text": {
+            "type": "string",
             "minLength": 1,
-            "maxLength": 500,
-            "type": "string"
+            "maxLength": 500
           },
           "status": {
             "anyOf": [
               {
-                "const": "pending",
-                "type": "string"
+                "type": "string",
+                "const": "pending"
               },
               {
-                "const": "delivered",
-                "type": "string"
+                "type": "string",
+                "const": "delivered"
               }
             ]
           },
           "dueAt": {
-            "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           },
           "deliveredAt": {
-            "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ReminderNotFoundError": {
         "type": "object",
@@ -1298,12 +1298,11 @@
         }
       },
       "Uuid": {
+        "type": "string",
         "format": "uuid",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-        "type": "string"
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -1311,15 +1310,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {

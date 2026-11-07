@@ -4,7 +4,7 @@
  */
 import { withoutSecretKeyword } from './secrets.ts';
 
-/** Plain identifiers TypeBox uses for Recursive/Ref schemas; URLs and pointers are left untouched. */
+/** Plain identifiers TypeBox uses for Cyclic/Ref schemas; URLs and pointers are left untouched. */
 const SCHEMA_ID = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
 /** Use-site annotations: they describe one occurrence and do not change which values validate. */
 const ANNOTATIONS = new Set([
@@ -85,7 +85,7 @@ function replaceReferences(value: unknown, replace: (reference: string) => strin
 }
 
 /**
- * Bundles `$id`-named schemas (TypeBox Recursive/Ref) into components so that every reference in an
+ * Bundles `$id`-named schemas (TypeBox Cyclic/Ref) into components so that every reference in an
  * OpenAPI document is a local `#/components/schemas/<name>` pointer. A plain-name reference resolves
  * against its enclosing `$id`, as in JSON Schema; structurally different definitions that share an
  * `$id` (for example a normalized input projection and its output) become distinct components. A
@@ -115,6 +115,18 @@ export function bundleSchemas(
       return value;
     }
     const record = value as Record<string, unknown>;
+    const definitions = record.$defs as Record<string, unknown> | undefined;
+    if (definitions && typeof record.$ref === 'string' && Object.hasOwn(definitions, record.$ref)) {
+      // TypeBox's Cyclic: named definitions that refer to each other, and the one this schema is, whose
+      // reference keeps the annotations of this use.
+      for (const [name, definition] of Object.entries(definitions)) {
+        if (name !== record.$ref) {
+          rewrite(definition, scope);
+        }
+      }
+      const annotations = Object.fromEntries(Object.entries(record).filter(([key]) => ANNOTATIONS.has(key)));
+      return { ...(rewrite(definitions[record.$ref], scope) as object), ...annotations };
+    }
     if (typeof record.$id === 'string' && ids.has(record.$id)) {
       const { $id: id, ...rest } = record;
       const definition = Object.fromEntries(Object.entries(rest).filter(([key]) => !ANNOTATIONS.has(key)));
@@ -201,7 +213,7 @@ function collectReferences(value: unknown, references: Set<string>): void {
 /**
  * The schema with every `$id` nothing refers to removed, the definition left in place: what a reader
  * that resolves no components meets, the same as before the schema was named. A definition a `$ref`
- * names (TypeBox Recursive or Ref) keeps its `$id`, so the reference still resolves.
+ * names (TypeBox Cyclic or Ref) keeps its `$id`, so the reference still resolves.
  */
 function inlineSchemaNames(value: unknown): unknown {
   const references = new Set<string>();

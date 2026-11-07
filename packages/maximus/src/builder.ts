@@ -3,7 +3,7 @@
  * `.operation()` declares operations, `.mount()` composes resource modules that share one base, and
  * `.build()` checks the result.
  */
-import type { TSchema } from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
 
 import { defineApp } from './define-app.ts';
 import type { Failure } from './errors.ts';

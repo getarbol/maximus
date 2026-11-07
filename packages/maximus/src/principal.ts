@@ -3,8 +3,8 @@
  * the request id. Token verification (`tokens.ts`) and Cloudflare Access (`cloudflare-access.ts`) both answer
  * a `TokenPrincipal`, parsed strictly against these schemas.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { Static } from 'typebox';
 
 import { OrganizationIdSchema, UuidSchema } from './schemas.ts';
 

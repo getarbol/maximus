@@ -7,10 +7,10 @@
  * `PageInfo` and each `Page` are named schemas, so an OpenAPI document carries them once as
  * `#/components/schemas/<name>` and every SDK generated from it shares their types.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static, TArray, TLiteral, TObject, TProperties, TSchema } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { Static, TArray, TLiteral, TObject, TProperties, TSchema } from 'typebox';
 
-import { defaultSchema } from './input-schemas.ts';
+import { annotate, defaultSchema } from './input-schemas.ts';
 
 /** A public schema name: an SDK type in every language generated from the document. */
 const PAGE_ID = /^[A-Z][A-Za-z0-9]{0,127}$/;
@@ -105,10 +105,9 @@ export function Page<Item extends TSchema>(item: Item, options: { $id: string })
         description: 'Items admitted by this resource contract within the verified organization.',
       }),
       object: Type.Literal('list', { description: 'Discriminator for a resource list response.' }),
-      pageInfo: {
-        ...PageInfoSchema,
+      pageInfo: annotate(PageInfoSchema, {
         description: 'Opaque navigation cursors for this page’s stable keyset order.',
-      },
+      }),
     },
     { $id: options.$id, additionalProperties: false }
   );

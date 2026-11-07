@@ -273,18 +273,14 @@
   "components": {
     "schemas": {
       "CreateQuoteBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "items"
         ],
         "properties": {
           "items": {
-            "minItems": 1,
-            "maxItems": 50,
             "type": "array",
             "items": {
-              "additionalProperties": false,
               "type": "object",
               "required": [
                 "sku",
@@ -292,21 +288,24 @@
               ],
               "properties": {
                 "sku": {
-                  "pattern": "^[A-Z]{3}-[0-9]{3}$",
-                  "type": "string"
+                  "type": "string",
+                  "pattern": "^[A-Z]{3}-[0-9]{3}$"
                 },
                 "quantity": {
+                  "type": "integer",
                   "minimum": 1,
-                  "maximum": 1000,
-                  "type": "integer"
+                  "maximum": 1000
                 }
-              }
-            }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 50
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateQuoteResult": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "currency",
@@ -314,14 +313,15 @@
         ],
         "properties": {
           "currency": {
-            "const": "USD",
-            "type": "string"
+            "type": "string",
+            "const": "USD"
           },
           "totalCents": {
-            "minimum": 0,
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateQuoteResultResponse": {
         "type": "object",
@@ -544,17 +544,17 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OutcomeUnknownError": {
         "type": "object",
@@ -881,17 +881,17 @@
         }
       },
       "UnknownItemFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "index"
         ],
         "properties": {
           "index": {
-            "minimum": 0,
-            "type": "integer"
+            "type": "integer",
+            "minimum": 0
           }
-        }
+        },
+        "additionalProperties": false
       },
       "UnsupportedMediaTypeError": {
         "type": "object",
@@ -1080,7 +1080,6 @@
         }
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -1088,15 +1087,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {
