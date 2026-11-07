@@ -4,7 +4,7 @@ An appointments service whose schedules are Durable Objects: one per organizatio
 booking of that day passes through one call at a time, so two callers never hold the same slot.
 
 ```text
-vite.config.ts                                         The service, the DaySchedule export and its SCHEDULES binding
+vite.config.ts                                         The service, its Durable Object exports and their bindings
 errors.ts                                              SLOT_TAKEN and BOOKING_NOT_FOUND
 context.ts                                             daySchedule(date): the organization's schedule for that day
 src/schedule.ts                                        The day's slots and which are free; a booking's schemas
@@ -13,6 +13,7 @@ routes/v1/days/[date]/slots.get.ts                     GET    /api/v1/days/{date
 routes/v1/days/[date]/bookings.get.ts                  GET    /api/v1/days/{date}/bookings
 routes/v1/days/[date]/bookings.post.ts                 POST   /api/v1/days/{date}/bookings   (+ MCP book_slot)
 routes/v1/days/[date]/bookings/[bookingId].delete.ts   DELETE /api/v1/days/{date}/bookings/{bookingId}
+routes/v1/days/[date]/confirmed-bookings.post.ts       POST   /api/v1/days/{date}/confirmed-bookings (a task)
 mcp/instructions.md                                    What MCP clients read when they connect
 tests/appointments.test.ts                             The API, the object and MCP in Node, the object on SQLite
 ```
@@ -58,5 +59,9 @@ bun run build && bunx cf deploy --prebuilt --mode production
   anything else.
 - The object reads its rows back through the booking's schema: a row the schema refuses is the
   service's error, never an answer.
+- `confirmed-bookings` declares `task: true` and takes three seconds: a caller that sends
+  `Prefer: respond-async` gets `202` and the task at once, then reads the booking from
+  `GET /api/v1/operation-tasks/{taskId}`. Each task runs in its own `MaximusTasks` object, so one
+  organization's tasks run side by side.
 - `vp test` runs the class in Node: `maximus()` resolves `cloudflare:workers` to a stand-in, and the
   tests give it SQL storage on Node's SQLite.

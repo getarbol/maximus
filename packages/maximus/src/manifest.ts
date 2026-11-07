@@ -70,6 +70,11 @@ export interface Invocation<Env> {
   /** The name of the operation being called, which the builder sets; never taken from caller input. */
   readonly operation?: string;
   /**
+   * The id of the task the call runs as, when it runs as one: the task store sets it, never caller input.
+   * Absent on a call that answers its own result.
+   */
+  readonly taskId?: string;
+  /**
    * Where the call keeps best-effort work running after its answer, the runtime's `waitUntil`; absent when
    * the runtime gives none.
    */
@@ -156,6 +161,18 @@ export interface Exposure {
    * the listed ones among them.
    */
   rpc?: true | { callers: readonly string[] };
+  /**
+   * Whether a call that outlasts a short wait may answer a task instead of its result: over MCP when the client
+   * declares the Tasks extension, over HTTP when it sends `Prefer: respond-async`. The work then goes on in the
+   * `MAXIMUS_TASKS` task store, at most once; without that binding the operation always answers its result.
+   * `{ ttlMs }` keeps the task and its result for that long after the call, instead of an hour.
+   */
+  task?:
+    | true
+    | {
+        /** How long the task and its result are kept after the call, in milliseconds, at most a day. */
+        ttlMs: number;
+      };
 }
 /**
  * An operation as an application holds it: its scope, words, effect, schemas, limits, exposure and handler.

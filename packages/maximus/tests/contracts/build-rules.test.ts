@@ -237,6 +237,29 @@ it('refuses a record whose keys follow a pattern unless it refuses every other k
   ).not.toThrow();
 });
 
+it('refuses a task whose output marks a secret, which its store would keep, that reads bytes, or keeps too long', () => {
+  const secret = t.Object({ token: t.String({ secret: true }) }, strict);
+  expect(build({ ...readRecord, output: secret, task: true })).toThrow(
+    new TypeError(
+      'Operation "readRecord": a task keeps its result until it expires, so its output marks nothing secret: true.'
+    )
+  );
+  // Its input stays in memory, never in the store.
+  expect(build({ ...readRecord, input: secret, task: true })).not.toThrow();
+  expect(build({ ...uploadFile, task: true }, 'uploadFile')).toThrow(
+    new TypeError('Operation "uploadFile": byte bodies and attachments are HTTP-only and never tasks.')
+  );
+  for (const task of [{ ttlMs: 0 }, { ttlMs: 1.5 }, { ttlMs: 86_400_001 }, { ttlMs: 1000, wait: 1 }]) {
+    expect(build({ ...readRecord, task })).toThrow(
+      new TypeError(
+        'Operation "readRecord": task is true or { ttlMs }, a positive integer of milliseconds up to a day.'
+      )
+    );
+  }
+  expect(build({ ...readRecord, task: true })).not.toThrow();
+  expect(build({ ...readRecord, task: { ttlMs: 900_000 } })).not.toThrow();
+});
+
 it('refuses a byte body or an attachment outside its HTTP-only, matching and non-GET contract', () => {
   expect(build(uploadFile, 'uploadFile')).not.toThrow();
   expect(build(downloadFile, 'downloadFile')).not.toThrow();
@@ -248,7 +271,9 @@ it('refuses a byte body or an attachment outside its HTTP-only, matching and non
       new TypeError('Operation "uploadFile": unsupported HTTP binary contract.')
     );
   }
-  const httpOnly = new TypeError('Operation "uploadFile": byte bodies and attachments are HTTP-only.');
+  const httpOnly = new TypeError(
+    'Operation "uploadFile": byte bodies and attachments are HTTP-only and never tasks.'
+  );
   expect(build({ ...uploadFile, mcp: { name: 'upload_file', idempotent: false } }, 'uploadFile')).toThrow(
     httpOnly
   );

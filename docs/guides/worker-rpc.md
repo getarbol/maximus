@@ -71,7 +71,7 @@ The method's name is the operation's: what the method does to what the path name
 with one method per route or tool that declares `rpc`. A route that declares no `rpc` is no method, and
 `visibility: 'internal'` keeps this one out of the public OpenAPI document while it still answers over
 HTTP to tokens that hold its scope. Routes with byte bodies or attachments are HTTP-only:
-`Operation "<name>": byte bodies and attachments are HTTP-only.`
+`Operation "<name>": byte bodies and attachments are HTTP-only and never tasks.`
 
 Each method takes the caller's principal and the input, and answers a `Result`:
 `(principal, input) => Promise<Result<Output, Failure>>`. The input is what the route's schema accepts on

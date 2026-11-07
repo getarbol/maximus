@@ -1,6 +1,6 @@
 /**
- * The only configuration: the appointments service, its Worker, and the Durable Object class that keeps each
- * day's schedule, which the Worker exports and binds itself.
+ * The only configuration: the appointments service, its Worker, and the Durable Object classes that keep each
+ * day's schedule and each task, which the Worker exports and binds itself.
  */
 import { maximus } from '@arbol-ai/maximus/vite';
 import { bindings, exports } from 'cf/config';
@@ -24,10 +24,17 @@ export default defineConfig({
       origin: `https://${NAME}.${process.env.WORKERS_SUBDOMAIN ?? 'example'}.workers.dev`,
       tokens: { issuer: 'https://auth.example.com/' },
       compatibilityDate: '2026-10-26',
-      // durable-objects/day-schedule.ts, exported as DaySchedule, keeps its bookings in SQLite. Its name is its
-      // storage's: renaming or removing it is a migration, declared here.
-      exports: { DaySchedule: exports.durableObject({ storage: 'sqlite' }) },
-      env: { SCHEDULES: bindings.durableObject({ worker: NAME, exportName: 'DaySchedule' }) },
+      // durable-objects/day-schedule.ts, exported as DaySchedule, keeps its bookings in SQLite, and MaximusTasks
+      // each task of the route that declares one. Their names are their storage's: renaming or removing one is
+      // a migration, declared here.
+      exports: {
+        DaySchedule: exports.durableObject({ storage: 'sqlite' }),
+        MaximusTasks: exports.durableObject({ storage: 'sqlite' }),
+      },
+      env: {
+        SCHEDULES: bindings.durableObject({ worker: NAME, exportName: 'DaySchedule' }),
+        MAXIMUS_TASKS: bindings.durableObject({ worker: NAME, exportName: 'MaximusTasks' }),
+      },
     }),
   ],
 });

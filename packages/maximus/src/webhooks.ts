@@ -1,5 +1,6 @@
 /**
- * `@arbol-ai/maximus/webhooks`: webhook signature verification for the three schemes providers use.
+ * `@arbol-ai/maximus/webhooks`: webhook signature verification for the three schemes providers use, and
+ * {@link signStandardWebhook}, which signs a delivery as the Standard Webhooks specification does.
  *
  * - {@link verifyHmacSignature}: an HMAC-SHA256 of the raw body, hex or base64,
  *   in one header (the common `X-…-Signature` / `X-Hub-Signature-256` scheme).
@@ -19,6 +20,8 @@
  * Sources: https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md,
  * https://docs.stripe.com/webhooks#verify-manually.
  */
+import { Webhook } from 'standardwebhooks';
+
 import type { Failure } from './errors.ts';
 import type { Result } from './result.ts';
 
@@ -271,4 +274,27 @@ export async function verifyStandardWebhook(options: {
     }
   }
   return failure('mismatch');
+}
+
+/**
+ * Signs a Standard Webhooks delivery with the specification's own `standardwebhooks` package: the headers to
+ * send with `payload`, exactly as given. The secret is the `whsec_<base64>` value the receiver verifies with,
+ * and `id` names the delivery, which the receiver keeps as its idempotency key.
+ */
+export function signStandardWebhook(options: {
+  id: string;
+  now?: () => number;
+  payload: string;
+  secret: string;
+}): Record<'webhook-id' | 'webhook-signature' | 'webhook-timestamp', string> {
+  const timestamp = new Date(options.now?.() ?? Date.now());
+  return {
+    'webhook-id': options.id,
+    'webhook-timestamp': String(Math.floor(timestamp.getTime() / 1000)),
+    'webhook-signature': new Webhook(requireSecret(options.secret)).sign(
+      options.id,
+      timestamp,
+      options.payload
+    ),
+  };
 }
