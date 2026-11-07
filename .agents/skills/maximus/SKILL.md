@@ -66,7 +66,7 @@ each one.
 | `bunx maximus gen route get /v1/notes/{noteId} --tool get_note` | Writes `routes/v1/notes/[noteId].get.ts`, which is also the MCP tool `get_note`.                                                            |
 | `bunx maximus gen tool summarize-notes`                         | Writes `mcp/tools/summarize-notes.ts`, the tool `summarize_notes`.                                                                          |
 | `bunx maximus prepare`                                          | Writes `.maximus/` for production, or with `--mode development` as `vp dev` does. `vp dev`, `vp build` and `vp test` prepare by themselves. |
-| `bunx maximus openapi`                                          | Writes `openapi.json`, and `openapi.rpc.json` when a route declares `rpc`; `--check` fails when they differ from the routes.                |
+| `bunx maximus openapi`                                          | Writes `openapi.json`, and `openapi.rpc.json` when a route declares `rpc`; `--check` fails on a stale or invalid file.                      |
 | `bun run test`                                                  | `vp test run`: the tests, in Node.                                                                                                          |
 | `bun run typecheck`                                             | `maximus prepare`, then `tsc`, which also checks type tests.                                                                                |
 | `bun run check`, `bun run fix`                                  | Lint and format; with fixes.                                                                                                                |

@@ -134,6 +134,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
+    "@scalar/openapi-parser": "0.29.20",
     "@sinclair/typebox": "0.34.52",
     "ajv-formats": "3.0.1",
     "jose": "6.2.13"

@@ -526,8 +526,8 @@ maximus({
 ### Generate clients
 
 `bunx maximus openapi` writes the document the Worker serves to `openapi.json`, and
-`bunx maximus openapi --check` fails when the routes changed and the file did not; commit the file and run the
-check in CI. Any OpenAPI generator reads it, and the clients it writes take the document's names:
+`bunx maximus openapi --check` fails when the routes changed and the file did not, or when the document is not
+valid OpenAPI 3.1; commit the file and run the check in CI. Any OpenAPI generator reads it, and the clients it writes take the document's names:
 
 ```sh
 # TypeScript types, for openapi-fetch
