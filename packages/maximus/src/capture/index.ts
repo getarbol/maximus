@@ -13,6 +13,8 @@ export type { CaptureRecord } from '../capture-record.ts';
 export { withoutSecrets } from '../secrets.ts';
 export { pipeline } from './pipeline.ts';
 export type { PipelineOptions } from './pipeline.ts';
+export { queue } from './queue.ts';
+export type { QueueOptions } from './queue.ts';
 
 /** The fields `capture.ts` states. */
 const CAPTURE_FIELDS: ReadonlySet<string> = new Set(['enabled', 'sink', 'payloads', 'dimensions']);

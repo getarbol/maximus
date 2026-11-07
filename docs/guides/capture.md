@@ -162,9 +162,41 @@ dimensions and logs `maximus.capture.dimensions_failed`.
   over 900 KB together, measured in bytes, are written to `payloads/<organizationId>/<id>.json`, and the record
   carries `payloadRef`. Without `blobs`, both are failed deliveries.
 
+`queue({ binding, blobs? })` sends each record to a Cloudflare Queue as one JSON message, and leaves retries and
+the dead letter to the queue:
+
+```ts
+// capture.ts
+import { defineCapture, queue } from '@arbol-ai/maximus/capture';
+
+export default defineCapture({
+  enabled: (env) => env.CAPTURE !== 'off',
+  sink: queue({ binding: 'CAPTURE_QUEUE', blobs: 'CAPTURE_BLOBS' }),
+  payloads: 'all',
+});
+```
+
+```ts
+// vite.config.ts: inside maximus()
+env: {
+  CAPTURE_QUEUE: bindings.queue({ name: 'capture' }),
+  CAPTURE_BLOBS: bindings.r2({ name: 'capture-blobs' }),
+},
+```
+
+- **While the env has no such binding**, a call builds no record and logs nothing.
+- **The sink sends once.** A queue keeps a message it accepted and delivers it at least once; a send it refuses
+  is a failed delivery. Retries and the dead letter belong to the queue's consumer: a Worker of its own, such
+  as a lake's ingest, whose `triggers.queue({ name, maxRetries, deadLetterQueue })` says how often a message it
+  fails is retried before it moves to the dead letter queue. The consumer writes each record to the store,
+  deduplicating on its `id`, and acknowledges it.
+- **A message holds 128 KB**: an `input`, `output` and `failureData` over 96 KB together are written to `blobs`
+  by reference, as `pipeline` does. Without `blobs`, such a record is a failed delivery.
+
 Any object with `send(record, env)` is a sink, and `available(env)` may say when it cannot take records. Capture
 itself never retries: `pipeline` retries because a stream takes a repeated row and a consumer deduplicates on the
-id. A sink whose append can lose its outcome should not retry at all.
+id, and `queue` leaves retries to its consumer. A sink whose append can lose its outcome should not retry at
+all.
 
 ## What delivery costs and promises
 

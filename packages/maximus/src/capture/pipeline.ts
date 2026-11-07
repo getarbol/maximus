@@ -8,7 +8,7 @@ import { delay } from '../internal/delay.ts';
 import { sha256Hex } from '../internal/digest.ts';
 import { isRecord } from '../internal/record.ts';
 
-/** The largest `input`, `output` and `failureData` one record carries together, in bytes. */
+/** The largest `input`, `output` and `failureData` one record a stream takes carries together, in bytes. */
 const MAX_PAYLOAD_BYTES = 900_000;
 /** How long the one retry waits. A stream that refuses a send usually recovers within a moment. */
 const RETRY_DELAY_MILLISECONDS = 200;
@@ -17,8 +17,8 @@ const RETRY_DELAY_MILLISECONDS = 200;
 interface PipelineStream {
   send: (records: unknown[]) => Promise<unknown>;
 }
-/** What this sink calls of an R2 binding. */
-interface PayloadBucket {
+/** What a sink calls of an R2 binding. */
+export interface PayloadBucket {
   put: (
     key: string,
     value: string | Uint8Array,
@@ -48,15 +48,22 @@ export interface PipelineOptions<E> {
 }
 
 /** A binding of the env, by name. */
-function bindingOf(env: unknown, name: string): unknown {
+export function bindingOf(env: unknown, name: string): unknown {
   return isRecord(env) ? env[name] : undefined;
 }
 
-/** The record, with a payload over the limit written to the bucket: it fails when there is no bucket. */
-async function withinLimit(record: CaptureRecord, bucket: PayloadBucket | undefined): Promise<CaptureRecord> {
+/**
+ * The record, with a payload over `maxBytes` written to the bucket: it fails when there is no bucket. The
+ * limit is a stream's unless a sink gives its own.
+ */
+export async function withinLimit(
+  record: CaptureRecord,
+  bucket: PayloadBucket | undefined,
+  maxBytes = MAX_PAYLOAD_BYTES
+): Promise<CaptureRecord> {
   const { input, output, failureData } = record;
   const payload = new TextEncoder().encode(JSON.stringify({ input, output, failureData }));
-  if (payload.byteLength <= MAX_PAYLOAD_BYTES) {
+  if (payload.byteLength <= maxBytes) {
     return record;
   }
   if (!bucket) {
