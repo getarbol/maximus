@@ -38,8 +38,11 @@ OpenAPI document and the MCP tool listing, as [Concepts](../concepts.md#schemas)
 - `.build()` checks the outermost object. Declare nested objects strict as well, or their unknown fields are
   admitted.
 - The formats `date`, `time`, `date-time`, `email`, `uuid` and `uri` are checked by maintained RFC
-  validators, without generating code at runtime. `time` and `date-time` require a time zone. A value longer
-  than 8192 characters fails any format, and a format outside this list refuses every value.
+  validators, and the other formats TypeBox knows (`hostname`, `ipv4`, `ipv6`, `url`, `uri-reference`,
+  `duration` and the rest of JSON Schema's) by TypeBox's own, without generating code at runtime. `time` and
+  `date-time` require a time zone. A value longer than 8192 characters fails any format. TypeBox admits any
+  text for a format it does not know, so `.build()` refuses a contract that names one:
+  `Operation "createNote": no validator checks the format "datetime", so any text would pass; use a format TypeBox checks, or a pattern.`
 - Ids are strings. The organization is `organizationId`, and a request's id `requestId`.
 - An output states every field. Declare "no value" as a union with `t.Null()` rather than leaving the field
   out.
@@ -69,9 +72,13 @@ once as a component of that name, and every client generated from those document
 The package root and `@arbol-ai/maximus/schemas` export them all, except `FailureSchema`, which the root and
 `@arbol-ai/maximus/errors` export.
 
-Use them as they are. To give a field its own description, spread the schema:
-`{ ...EmailAddressSchema, description: 'Where the receipt goes.' }` keeps the reference to `EmailAddress` and
-adds the description beside it. Your own records are named by an `$id` of their own, as `TaskSchema` is.
+Use them as they are. To give a field its own description, annotate the schema:
+`annotate(EmailAddressSchema, { description: 'Where the receipt goes.' })` keeps the reference to
+`EmailAddress` and adds the description beside it. Never spread a schema to do it: TypeBox keeps what makes a
+schema optional, a codec or a refinement in properties a spread leaves behind, so
+`{ ...t.Optional(t.String()), description }` is a required field and a spread codec decodes nothing.
+Spreading a record of fields, such as `{ ...PageQueryFields, done: t.Boolean() }`, copies the schemas whole and
+is safe. Your own records are named by an `$id` of their own, as `TaskSchema` is.
 
 ## Lists
 
@@ -235,7 +242,9 @@ defaults and skip the rest, so `.build()` refuses such an input:
 | `urlSchema({ protocol, hostname?, maxLength? })`    | A `uri` whose protocol, and hostname when given, match the expressions.                                                                              |
 
 Codecs run in the order they are declared. A refinement's message reaches the caller in the issues of
-`INVALID_INPUT`, so it never contains the input's values. A codec that throws anything but a refusal is the
+`INVALID_INPUT`, so it never contains the input's values. TypeBox's own `t.Codec` and `t.Refine` run in an
+input too, inside `inputSchema()` or without it; `t.Refine` takes its message as a function of the value,
+which must not return the value either. A codec that throws anything but a refusal is the
 service's error: the call answers `INTERNAL_ERROR`.
 
 A codec gives an input two types: what callers send, which the OpenAPI document publishes, and what the
@@ -276,11 +285,11 @@ A GET reads its input from the query string, each field the input declares once,
 - A `null` alternative is ignored: `t.Union([t.Integer(), t.Null()])` reads as an integer.
 - Any other field (an object, a list of numbers, a tuple, a union of different kinds such as an integer or
   `'all'`) has no query kind. Its value stays text, which its schema refuses unless it admits text.
-- A key the input does not declare stays text too, and the strict input refuses it as `Unexpected property`.
+- A key the input does not declare stays text too, and the strict input refuses it as `must not be present`.
 
 To read a field another way, declare the shape it travels in, its wire schema, beside the input the handler
 receives, and join them with `inputSchema(input, wire)`. A wire field declared as a string stays a string,
-and its transform decodes it:
+and its codec decodes it:
 
 ```ts
 // src/task-queries.ts
@@ -291,7 +300,7 @@ const ListTasksQuery = t.Object(
   {
     priority: t.Optional(
       t
-        .Transform(t.String({ pattern: '^[1-5](,[1-5])*$' }))
+        .Codec(t.String({ pattern: '^[1-5](,[1-5])*$' }))
         .Decode((text) => text.split(',').map(Number))
         .Encode((priorities) => priorities.join(','))
     ),
@@ -322,7 +331,8 @@ at the use stays. The shared schemas and every page are named; name your own rec
   second suffixed `_2`, and clients generated from the document see two types.
 - An MCP tool's schemas are self-contained, as MCP clients compile them: each named schema is written where it
   is used, without its `$id`, and a definition that a reference names is written once under `$defs`.
-- `t.Ref('Note')` refers to a schema by its name, and a recursive schema (`t.Recursive`) to itself. A
+- `t.Ref('Note')` refers to a schema by its name, and a cyclic schema
+  (`t.Cyclic({ Node: t.Object({ children: t.Array(t.Ref('Node')) }) }, 'Node')`) to itself. A
   reference made outside the schema it names resolves only when that name has exactly one definition among
   the application's schemas, which `.build()` checks before the service starts:
   `Schema reference "Note" does not name exactly one definition.`

@@ -96,9 +96,10 @@ See [Project structure](../guides/project-structure.md), [Routes](../guides/rout
 
 | Export                   | Kind           | What it is                                                                                                            |
 | ------------------------ | -------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `Type`, `t`              | constant       | [TypeBox](https://github.com/sinclairzx81/typebox)'s schema builder.                                                  |
+| `Type`, `t`              | constant       | [TypeBox](https://github.com/sinclairzx81/typebox) 1.x's schema builder.                                              |
 | `Static`                 | type           | The TypeScript type of a schema's values.                                                                             |
 | `TSchema`                | type           | Any TypeBox schema.                                                                                                   |
+| `annotate`               | function       | The schema with more options, such as a `description`, keeping its optionality, codecs and refinements.               |
 | `parseInput`             | function       | Checks a value against a schema without decoding it: a `Result` of the value, or `INVALID_INPUT`.                     |
 | `parseSchema`            | function       | Checks a value against a schema and returns it typed, or throws a `TypeError` that names no value.                    |
 | `EmptyInputSchema`       | schema         | The empty strict object: the input of an operation that takes none.                                                   |
@@ -232,10 +233,11 @@ The schema vocabulary without the rest of the core: what a contract module that 
 
 | Export                   | Kind           | What it is                                                                                                      |
 | ------------------------ | -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `Type`, `t`              | constant       | TypeBox's schema builder.                                                                                       |
+| `Type`, `t`              | constant       | TypeBox 1.x's schema builder.                                                                                   |
 | `Static`                 | type           | The TypeScript type of a schema's values.                                                                       |
 | `TSchema`                | type           | Any TypeBox schema.                                                                                             |
 | `StaticDecode`           | type           | A schema's decoded value: what a handler receives from an input with codecs.                                    |
+| `annotate`               | function       | The schema with more options, such as a `description`, keeping its optionality, codecs and refinements.         |
 | `parseInput`             | function       | Checks a value against a schema without decoding it: a `Result` of the value, or `INVALID_INPUT`.               |
 | `parseSchema`            | function       | Checks a value against a schema and returns it typed, or throws a `TypeError` that names no value.              |
 | `decodeInput`            | function       | Decodes input as an operation does: a `Result` of the value, or `INVALID_INPUT` with its issues.                |

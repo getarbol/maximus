@@ -17,12 +17,12 @@ contracts beside their handlers, and Hono's
 [middleware composition](https://github.com/honojs/hono/blob/main/src/compose.ts), with its inferred chains
 and its entry and exit middleware, inform the API; no source is copied or vendored.
 
-Maintained implementations stay in their own packages: TypeBox for schemas, `jose` for JWTs, `ajv-formats`
-for string formats and the official SDK for MCP. Maximus writes YAML itself, for its OpenAPI document and an
-Agent Skill's frontmatter, with a small writer for JSON data.
+Maintained implementations stay in their own packages: TypeBox 1.x for schemas, `jose` for JWTs,
+`ajv-formats` and TypeBox for string formats and the official SDK for MCP. Maximus writes YAML itself, for its
+OpenAPI document and an Agent Skill's frontmatter, with a small writer for JSON data.
 
-Nothing compiles code at runtime. TypeBox checks values with its value checker, and the formats are plain
-validators, so the framework runs in workerd without `eval`.
+Nothing compiles code at runtime. TypeBox checks values with its interpreted value checker, its acceleration
+turned off, and the formats are plain validators, so the framework runs in workerd without `eval`.
 
 ## One package, one version
 

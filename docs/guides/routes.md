@@ -186,7 +186,7 @@ schema does not declare is refused by name:
     "code": "INVALID_INPUT",
     "message": "The request does not match the published schema.",
     "retryable": false,
-    "data": { "issues": [{ "path": "/archived", "message": "Unexpected property" }] }
+    "data": { "issues": [{ "path": "/archived", "message": "must not be present" }] }
   },
   "metadata": { "requestId": "…" }
 }

@@ -7,6 +7,43 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
+## 9.0.0 (2026-11-07)
+
+Maximus runs on TypeBox 1.x (`typebox` 1.4.5) instead of `@sinclair/typebox` 0.34. Routes, transports, the
+response envelope, failures, MCP, RPC and the OpenAPI documents keep their shapes. [Upgrading to
+9.0](docs/upgrading-to-9.md) lists what a service changes.
+
+Breaking:
+
+- `t` (`Type`), `Static` and `TSchema`, from the root and `/schemas`, are TypeBox 1.x's. A schema built with
+  0.34's `Type` is not read. TypeBox 1.x removes `t.Transform` (now `t.Codec`), `t.Recursive` (now
+  `t.Cyclic`), `t.Composite`, `t.Ref(schema)` (a reference takes the name alone), `t.Date`, `t.Uint8Array`,
+  `t.RegExp`, `t.Promise`, `t.Iterator`, `t.AsyncIterator`, `t.Awaited`, `t.Const`, `t.Not`,
+  `t.ReadonlyOptional` and `t.Argument`; adds `t.Refine`; types `t.Union`'s members as a tuple, so a union of
+  a mapped array is `never`; and makes `TSchema` an empty interface, so a keyword read from a value typed
+  `TSchema` no longer compiles.
+- TypeBox 1.x keeps the marks of an optional field, a codec, a refinement and a TypeBox type in properties a
+  spread drops: `{ ...schema, description }` now loses them. `annotate(schema, options)`, new in the root and
+  `/schemas`, adds options to a schema and keeps them, and every Maximus helper copies schemas that way.
+- `INVALID_INPUT` issues keep their shape, JSON Pointer paths and limit of ten, and carry TypeBox 1.x's
+  messages: `must be present` (one issue, where a missing field had two), `must not be present`,
+  `must be string`, `must match pattern "…"`, `must match format "…"`, `must be <= 100`,
+  `must not have more than 64 characters`, `must match a schema in anyOf` and the rest of TypeBox's wording.
+  Owner refinement, inspection and codec messages are unchanged.
+- TypeBox 1.x admits any text for a format it does not know, where 0.34 refused every value: `.build()` now
+  refuses an operation whose input or output names such a format. TypeBox's own formats beyond the six
+  Maximus documents (`hostname`, `ipv4`, `url`, …) are checked by its validators instead of refusing every
+  value; `date`, `time`, `date-time`, `email`, `uuid` and `uri` keep the RFC validators of 8.x, and every
+  format still reads at most 8 KiB.
+- `inputSchema()` answers a TypeBox `TCodec` instead of a `TTransform`, and `StaticDecode` is TypeBox's own.
+  The owner codecs keep their signatures and behavior, and issues found inside nested codecs, refinements and
+  pipes keep their full paths.
+- An OpenAPI document lists the keys of each schema in TypeBox 1.x's order, and `t.Record(t.String(), …)`
+  publishes the key pattern `^.*$` instead of `^(.*)$`.
+
+Validation stays interpreted: Maximus turns TypeBox's acceleration off and lets it build at most ten errors
+per check, so nothing is compiled at runtime and a refusal costs no more than the issues it carries.
+
 ## 8.2.0 (2026-11-07)
 
 - The MCP Skills extension is served by the MCP SDK's `SkillCatalog`

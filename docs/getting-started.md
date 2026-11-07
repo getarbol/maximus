@@ -303,7 +303,7 @@ Every refusal is a failure in the same envelope, with its own status:
     "code": "INVALID_INPUT",
     "message": "The request does not match the published schema.",
     "retryable": false,
-    "data": { "issues": [{ "path": "/text", "message": "Expected string length greater or equal to 1" }] }
+    "data": { "issues": [{ "path": "/text", "message": "must not have fewer than 1 characters" }] }
   },
   "metadata": { "requestId": "…" }
 }

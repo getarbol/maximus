@@ -128,6 +128,11 @@ browsers can import):
   `HttpsUrlSchema`, `HexColorSchema`, `PostalAddressSchema`, `NamedReferenceSchema`, `SignedUrlSchema`,
   `DeletedObjectSchema`, `EmptyInputSchema`.
 - Absent values in an output are `t.Union([X, t.Null()])`: answer every field.
+- `t` is TypeBox 1.x, which keeps what makes a schema optional, a codec (`t.Codec`) or a refinement
+  (`t.Refine`) in properties a spread drops: give a schema a description with
+  `annotate(schema, { description })`, never `{ ...schema, description }`. Spreading a record of fields
+  (`{ ...PageQueryFields, done: t.Boolean() }`) is safe. A recursive schema is
+  `t.Cyclic({ Node: … t.Ref('Node') … }, 'Node')`.
 - `secret: true` on a schema marks a value capture never records, such as `t.String({ secret: true })`. It
   changes nothing a caller or a handler sees.
 - Codecs from `@arbol-ai/maximus/schemas` (`normalizeSchema`, `transformSchema`, `refineSchema`,

@@ -101,7 +101,6 @@ export type Fail<Codes extends string> = <const Code extends Codes>(
   ...data: FailureArguments<Code>
 ) => Failed<Code>;
 
-/** A schema, or the fields of a strict object schema. */
 /**
  * A TypeBox type rather than a record of fields: TypeBox marks every type it builds with a hidden kind, and
  * `Type.Unsafe` its own. Every object is a `TSchema`, so the marks are what tell the two apart.
@@ -111,6 +110,7 @@ type TypeBoxType = { readonly '~kind': string } | { readonly '~unsafe': unknown 
 function isTypeBoxType(value: object): value is TSchema {
   return '~kind' in value || '~unsafe' in value;
 }
+/** A schema, or the fields of a strict object schema. */
 export type SchemaOrFields = TSchema | TProperties;
 /** The schema `input` or `output` stands for: itself, or the strict object of its fields. */
 export type SchemaOf<S> = S extends TypeBoxType ? S : S extends TProperties ? TObject<S> : never;
