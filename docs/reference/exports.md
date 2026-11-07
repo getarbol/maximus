@@ -120,6 +120,9 @@ See [Project structure](../guides/project-structure.md), [Routes](../guides/rout
 | `PageInfoSchema`         | schema         | Whether a list's neighboring pages exist, and their cursors, named `PageInfo`.                                        |
 | `PageQueryFields`        | constant       | A list's query fields, `cursor`, `direction` and `limit`, to spread into its input.                                   |
 | `pageLimit`              | function       | A list's `limit` field with its own maximum and default: 100 and 25 unless given.                                     |
+| `cutPage`                | function       | One page of a list held whole; `undefined` for a cursor it did not make.                                              |
+| `cursorKey`              | function       | The key a cursor of `cutPage` carries, or `undefined`.                                                                |
+| `PageOrder`              | type           | How `cutPage` orders a list: an item's `key`, and `asc` or `desc`.                                                    |
 | `PageInfo`               | type           | A value of `PageInfoSchema`.                                                                                          |
 | `PageQuery`              | type           | The list query a handler receives, its defaults applied.                                                              |
 | `TPage`                  | type           | The TypeBox type of a `Page` schema.                                                                                  |
@@ -197,6 +200,7 @@ See [Authentication and scopes](../guides/authentication-and-scopes.md).
 | `HttpRouteMatch`          | type     | A matched route: its `definition` and its decoded `parameters`.                                                       |
 | `readBodyText`            | function | Reads a body as UTF-8 within a byte limit: a `Result`.                                                                |
 | `readBodyBytes`           | function | Reads a body's bytes within a byte limit, chunked bodies included: a `Result`.                                        |
+| `publicDestination`       | function | The URL when a Worker may call it for others: https, a public name; else `undefined`.                                 |
 | `BodyReadOptions`         | type     | `maxBytes`, and an optional `signal`.                                                                                 |
 | `HttpBodyFailure`         | type     | A body that could not be read: `HTTP_BODY_INVALID`, with its `reason`.                                                |
 | `HttpBodyFailureReason`   | type     | `too_large`, `invalid_length`, `invalid_json`, `invalid_utf8`, `unexpected_content_type`, `aborted` or `read_failed`. |
@@ -266,6 +270,9 @@ The schema vocabulary without the rest of the core: what a contract module that 
 | `PageInfoSchema`         | schema         | A list's neighboring pages, named `PageInfo`.                                                                   |
 | `PageQueryFields`        | constant       | A list's query fields: `cursor`, `direction` and `limit`.                                                       |
 | `pageLimit`              | function       | A list's `limit` field with its own maximum and default.                                                        |
+| `cutPage`                | function       | One page of a list held whole; `undefined` for a cursor it did not make.                                        |
+| `cursorKey`              | function       | The key a cursor of `cutPage` carries.                                                                          |
+| `PageOrder`              | type           | How `cutPage` orders a list.                                                                                    |
 | `DeletedObjectSchema`    | schema         | What a delete answers, named `DeletedObject`.                                                                   |
 | `EmailAddressSchema`     | schema         | An email address, named `EmailAddress`.                                                                         |
 | `HexColorSchema`         | schema         | A `#rrggbb` color, named `HexColor`.                                                                            |
@@ -313,12 +320,13 @@ them, such as an API gateway.
 
 ## @arbol-ai/maximus/body
 
-Bounded body readers: the root's, alone.
+Bounded body readers and `publicDestination`: the root's, alone.
 
 | Export                  | Kind     | What it is                                                                  |
 | ----------------------- | -------- | --------------------------------------------------------------------------- |
 | `readBodyText`          | function | Reads a body as UTF-8 within a byte limit: a `Result`.                      |
 | `readBodyBytes`         | function | Reads a body's bytes within a byte limit: a `Result`.                       |
+| `publicDestination`     | function | The URL when a Worker may call it for others, else `undefined`.             |
 | `BodyReadOptions`       | type     | `maxBytes`, and an optional `signal`.                                       |
 | `HttpBodyFailure`       | type     | A body that could not be read: `HTTP_BODY_INVALID`, with its `reason`.      |
 | `HttpBodyFailureReason` | type     | Why a body could not be read.                                               |

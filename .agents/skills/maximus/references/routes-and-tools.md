@@ -172,7 +172,9 @@ export default defineHandler(
 `PageQueryFields` are `cursor`, `direction` (`forward` or `backward`) and `limit` (25 by default, at most
 100; `pageLimit({ maximum })` lowers it). The answer is `{ object: 'list', data, pageInfo }`, whose
 `pageInfo` holds `hasNextPage`, `hasPreviousPage`, `nextCursor` and `previousCursor`. Spread the fields
-beside a list's own filters: `{ ...PageQueryFields, text: t.String() }`.
+beside a list's own filters: `{ ...PageQueryFields, text: t.String() }`. A list the service holds whole is
+cut with `cutPage(items, { key: (item) => [item.createdAt, item.id], order: 'desc' }, input)`: never write
+cursors or offsets by hand. It answers `undefined` for a cursor it did not make; answer your own failure.
 
 ## Byte bodies and attachments
 

@@ -54,7 +54,7 @@ export { withoutSecrets } from './secrets.ts';
 
 export { AttachmentOutputSchema } from './attachment-schema.ts';
 export type { Attachment } from './attachment-schema.ts';
-export { Page, PageInfoSchema, PageQueryFields, pageLimit } from './pagination.ts';
+export { Page, PageInfoSchema, PageQueryFields, cursorKey, cutPage, pageLimit } from './pagination.ts';
 export {
   DeletedObjectSchema,
   EmailAddressSchema,
@@ -66,4 +66,4 @@ export {
   SignedUrlSchema,
 } from './common-schemas.ts';
 export type { DeletedObject, NamedReference, PostalAddress, SignedUrl } from './common-schemas.ts';
-export type { PageInfo, PageQuery, TPage } from './pagination.ts';
+export type { PageInfo, PageOrder, PageQuery, TPage } from './pagination.ts';
