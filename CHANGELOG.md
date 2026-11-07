@@ -7,7 +7,7 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
-## Unreleased
+## 8.2.0 (2026-11-07)
 
 - The MCP Skills extension is served by the MCP SDK's `SkillCatalog`
   (`@modelcontextprotocol/server/ext/skills`) instead of Maximus's own implementation, with the same
