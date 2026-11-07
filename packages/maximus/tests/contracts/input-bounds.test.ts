@@ -1,9 +1,11 @@
 /**
- * The input boundary every transport shares: format validators never see more than 8 KiB, decoding admits
+ * The input boundary every transport shares: TypeBox checks by interpretation and builds no more errors than a
+ * refusal carries, format validators never see more than 8 KiB, decoding admits
  * only bounded plain JSON trees (no cycles, class instances, functions, non-finite numbers, nesting beyond
  * 100 levels or own `__proto__` key, while a value shared by two fields is still a tree), a refusal carries
  * field issues and never a value, and an owner codec that fails is the server's error, never the input's.
  */
+import { Settings } from 'typebox/system';
 import { expect, it, vi } from 'vite-plus/test';
 
 import { executeOperation } from '../../src/execution.ts';
@@ -28,6 +30,43 @@ function nested(depth: number): unknown {
   }
   return value;
 }
+
+it('checks, decodes and refuses by interpretation, never by compiling code, which Workers refuse', () => {
+  expect(Settings.Get()).toMatchObject({ useAcceleration: false, maxErrors: 10 });
+  const Input = inputSchema(
+    t.Object(
+      {
+        code: transformSchema(t.String({ pattern: '^[a-z]{1,8}$' }), (value) => value.toUpperCase()),
+        at: t.String({ format: 'date-time' }),
+      },
+      { additionalProperties: false }
+    )
+  );
+  // TypeBox compiles a check through the Function constructor: a check that never calls it is interpreted.
+  const original = globalThis.Function;
+  let compiled = 0;
+  globalThis.Function = new Proxy(original, {
+    apply(target, self, args) {
+      compiled += 1;
+      return Reflect.apply(target, self, args);
+    },
+    construct(target, args) {
+      compiled += 1;
+      return Reflect.construct(target, args);
+    },
+  });
+  let admitted: unknown;
+  let refused: unknown;
+  try {
+    admitted = decodeInput(Input, { code: 'ab', at: '2026-11-07T10:00:00Z' });
+    refused = decodeInput(Input, { code: 'AB', at: 'now', extra: true });
+  } finally {
+    globalThis.Function = original;
+  }
+  expect(compiled).toBe(0);
+  expect(admitted).toEqual({ ok: true, value: { code: 'AB', at: '2026-11-07T10:00:00Z' } });
+  expect(refused).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } });
+});
 
 it('refuses a format-checked value longer than 8 KiB before its validator runs', () => {
   const Uri = t.String({ format: 'uri' });

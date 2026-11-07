@@ -2,8 +2,9 @@
  * Owner codecs compiled by inputSchema(): literal unions; strict, loose, stripping and extended objects;
  * normalizers (chained, and on nullable text) before their checks; transforms after them; inspections and
  * refinements with the owner's messages; URL checks; pipes from a wire shape to a canonical one; tuples and
- * records; a separate wire schema; the codec detection `.build()` relies on; and readers that rethrow an
- * owner's own fault. Every refusal names the field and the expectation, never the refused value.
+ * records; a separate wire schema; the codec detection `.build()` relies on; annotations that keep what
+ * TypeBox hides on a schema; and readers that rethrow an owner's own fault. Every refusal names the field and
+ * the expectation, never the refused value.
  */
 import { expect, it, vi } from 'vite-plus/test';
 
@@ -12,6 +13,7 @@ import type { Static, TSchema } from '../../src/index.ts';
 import { hasUncompiledCodecs } from '../../src/input-schemas.ts';
 import {
   SchemaValidationError,
+  annotate,
   checkSchema,
   decodeInput,
   defaultSchema,
@@ -333,6 +335,41 @@ it('detects a codec only inputSchema() runs below any child, and trusts a compil
   const tree: { type: string; properties: Record<string, unknown> } = { type: 'object', properties: {} };
   tree.properties.child = tree;
   expect(hasUncompiledCodecs(tree as unknown as TSchema)).toBe(false);
+});
+
+it('annotates a schema and keeps what a spread drops: its optionality, its codec and its refinement', () => {
+  const Code = t
+    .Codec(t.String())
+    .Decode((value) => value.toUpperCase())
+    .Encode((value) => value.toLowerCase());
+  const Even = t.Refine(
+    t.Integer(),
+    (value) => value % 2 === 0,
+    () => 'must be even'
+  );
+  const Name = transformSchema(t.String({ minLength: 1 }), (value) => value.trim());
+  const Input = inputSchema(
+    t.Object(
+      {
+        note: annotate(t.Optional(t.String()), { description: 'A note.' }),
+        code: annotate(Code, { description: 'A code.' }),
+        even: annotate(Even, { description: 'An even number.' }),
+        name: annotate(Name, { description: 'A name.' }),
+      },
+      strict
+    )
+  );
+  expect(decode(Input, { code: 'ab', even: 2, name: ' Ana ' })).toEqual({
+    value: { code: 'AB', even: 2, name: 'Ana' },
+  });
+  expect(decode(Input, { code: 'ab', even: 3, name: 'Ana' })).toEqual({
+    issues: [{ path: '/even', message: 'must be even' }],
+  });
+  const sent: SchemaInput<typeof Input> = { code: 'ab', even: 2, name: 'Ana' };
+  expect(sent).not.toHaveProperty('note');
+  // A spread copies only what TypeBox enumerates: the optional field becomes required.
+  const spread = t.Object({ note: { ...t.Optional(t.String()), description: 'A note.' } });
+  expect(spread.required).toEqual(['note']);
 });
 
 it('carries every issue of a refusal and names the first, or the generic refusal when there is none', () => {
