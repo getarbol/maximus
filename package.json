@@ -23,11 +23,11 @@
     "deploy:examples": "bun e2e/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261027.1",
-    "@types/node": "26.6.5",
+    "@cloudflare/workers-types": "5.20261029.1",
+    "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.0.5",
-    "oxfmt": "0.74.0",
-    "oxlint": "1.89.0",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
     "publint": "0.3.25",
     "typescript": "7.0.2",
     "ultracite": "8.1.0",
