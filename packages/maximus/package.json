@@ -150,7 +150,7 @@
     "@modelcontextprotocol/ext-tasks": "0.2.3",
     "@types/pg": "8.23.1",
     "ajv": "8.20.0",
-    "cf": "1.0.0-beta.23",
+    "cf": "1.0.0-beta.27",
     "miniflare": "5.20261023.0-beta",
     "pg": "8.23.1",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
