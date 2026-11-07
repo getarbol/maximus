@@ -2,7 +2,7 @@
  * Owner codecs on TypeBox schemas: defaults, normalizers, transforms, inspections, refinements, pipes and
  * unknown-key stripping. `inputSchema()` compiles them into TypeBox codecs and refinements, so the wire is
  * checked as declared and the handler receives the decoded value. Every helper copies a schema with what
- * TypeBox keeps hidden on it, as `annotate` does.
+ * TypeBox keeps hidden on it, as `t.With` does.
  */
 import { IsCodec, Type as t } from 'typebox';
 import type {
@@ -91,14 +91,11 @@ type OwnerSchema = SchemaKeywords & {
 };
 
 /**
- * The schema with `options` added (`description`, `examples`, `default`, …), keeping what TypeBox keeps hidden
- * on it: an optional field stays optional, a codec or a refinement stays one. Spreading a schema into an
- * object literal, `{ ...schema, description }`, loses them.
+ * The schema with `options` added, keeping what TypeBox keeps hidden on it, as TypeBox's `Type.With` does;
+ * unlike it, a reference (`t.Ref`) is copied too, since a helper below may be given one.
  */
-export const annotate = <S extends TSchema, const O extends Record<string, unknown>>(
-  schema: S,
-  options: O
-): S & O => Memory.Update(schema, {}, options) as S & O;
+const annotate = <S extends TSchema, const O extends Record<string, unknown>>(schema: S, options: O): S & O =>
+  Memory.Update(schema, {}, options) as S & O;
 
 /**
  * The literals of a union, as TypeBox types its members: one per value of a tuple, or for an array of unknown

@@ -1,9 +1,8 @@
 /**
  * What `.build()` refuses, rule by rule: the namespace, origin, limits and telemetry of the application, each
- * operation's name, scopes, actors, schemas and their formats, byte bodies, attachments, headers, limits and
- * routes, schema references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a
- * TypeError with the rule's message, and an application that breaks several rules always meets the same one
- * first.
+ * operation's name, scopes, actors, schemas, byte bodies, attachments, headers, limits and routes, schema
+ * references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with
+ * the rule's message, and an application that breaks several rules always meets the same one first.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -236,23 +235,6 @@ it('refuses a record whose keys follow a pattern unless it refuses every other k
   expect(
     build({ ...readRecord, input: t.Object({ labels: t.Record(t.String(), t.String()) }, strict) })
   ).not.toThrow();
-});
-
-it('refuses a format no validator checks, which would admit any text, at any depth', () => {
-  const refused = new TypeError(
-    'Operation "readRecord": no validator checks the format "datetime", so any text would pass; use a format TypeBox checks, or a pattern.'
-  );
-  const at = (format: string, name = 'at') => t.Object({ [name]: t.String({ format }) }, strict);
-  expect(build({ ...readRecord, input: at('datetime') })).toThrow(refused);
-  expect(build({ ...readRecord, output: t.Object({ pages: t.Array(at('datetime')) }, strict) })).toThrow(
-    refused
-  );
-  expect(build({ ...readRecord, input: at('datetime', 'default') })).toThrow(refused);
-  expect(build({ ...readRecord, input: at('date-time') })).not.toThrow();
-  expect(build({ ...readRecord, input: at('ipv4') })).not.toThrow();
-  // A default or an example is data: a format key inside it names no format.
-  const example = t.Object({ body: t.Unknown({ examples: [{ format: 'markdown' }] }) }, strict);
-  expect(build({ ...readRecord, input: example })).not.toThrow();
 });
 
 it('refuses a byte body or an attachment outside its HTTP-only, matching and non-GET contract', () => {

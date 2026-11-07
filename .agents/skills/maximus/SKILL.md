@@ -108,7 +108,7 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 - **Schemas are strict.** Inputs and outputs are strict objects or unions of strict objects: fields given as
   `input: { … }` make one; a `t.Object` needs `{ additionalProperties: false }`. A shared entity has a
   PascalCase `$id`. Use the shared schemas (`UuidSchema`, `EmailAddressSchema`, …) rather than copies, and
-  describe a use with `annotate(schema, { description })`, never by spreading the schema.
+  describe a use with TypeBox's `t.With(schema, { description })`, never by spreading the schema.
 - **Each value is checked once, where it enters.** Maximus checks an operation's input and output; a handler
   never parses its input again. Data from outside the pipeline, such as a stored record, a provider's
   answer or a model's output, goes through `readSchema` or `checkSchema`. No casts, trust flags or no-op

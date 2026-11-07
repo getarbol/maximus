@@ -40,9 +40,8 @@ OpenAPI document and the MCP tool listing, as [Concepts](../concepts.md#schemas)
 - The formats `date`, `time`, `date-time`, `email`, `uuid` and `uri` are checked by maintained RFC
   validators, and the other formats TypeBox knows (`hostname`, `ipv4`, `ipv6`, `url`, `uri-reference`,
   `duration` and the rest of JSON Schema's) by TypeBox's own, without generating code at runtime. `time` and
-  `date-time` require a time zone. A value longer than 8192 characters fails any format. TypeBox admits any
-  text for a format it does not know, so `.build()` refuses a contract that names one:
-  `Operation "createNote": no validator checks the format "datetime", so any text would pass; use a format TypeBox checks, or a pattern.`
+  `date-time` require a time zone. A value longer than 8192 characters fails any format. A format no
+  validator knows checks nothing, as JSON Schema specifies, so name one of these or use a `pattern`.
 - Ids are strings. The organization is `organizationId`, and a request's id `requestId`.
 - An output states every field. Declare "no value" as a union with `t.Null()` rather than leaving the field
   out.
@@ -72,13 +71,14 @@ once as a component of that name, and every client generated from those document
 The package root and `@arbol-ai/maximus/schemas` export them all, except `FailureSchema`, which the root and
 `@arbol-ai/maximus/errors` export.
 
-Use them as they are. To give a field its own description, annotate the schema:
-`annotate(EmailAddressSchema, { description: 'Where the receipt goes.' })` keeps the reference to
-`EmailAddress` and adds the description beside it. Never spread a schema to do it: TypeBox keeps what makes a
-schema optional, a codec or a refinement in properties a spread leaves behind, so
-`{ ...t.Optional(t.String()), description }` is a required field and a spread codec decodes nothing.
-Spreading a record of fields, such as `{ ...PageQueryFields, done: t.Boolean() }`, copies the schemas whole and
-is safe. Your own records are named by an `$id` of their own, as `TaskSchema` is.
+Use them as they are. To give a field its own description, use TypeBox's `t.With`:
+`t.With(EmailAddressSchema, { description: 'Where the receipt goes.' })` keeps the reference to
+`EmailAddress` and adds the description beside it; a reference takes its options where it is made,
+`t.Ref('Note', { description })`. Never spread a schema to do it: TypeBox keeps what makes a schema optional,
+a codec or a refinement in properties a spread leaves behind, so `{ ...t.Optional(t.String()), description }`
+is a required field and a spread codec decodes nothing. Spreading a record of fields, such as
+`{ ...PageQueryFields, done: t.Boolean() }`, copies the schemas whole and is safe. Your own records are named
+by an `$id` of their own, as `TaskSchema` is.
 
 ## Lists
 

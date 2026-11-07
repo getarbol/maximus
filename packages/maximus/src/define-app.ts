@@ -3,8 +3,6 @@
  * service that breaks one never starts: each refusal is a TypeError whose message names the rule, and most
  * of the rules about one operation also name that operation.
  */
-import { Format } from 'typebox/format';
-
 import { isAttachmentSchema } from './binary.ts';
 import type { CaptureConfig } from './capture.ts';
 import type { ErrorCatalog } from './errors.ts';
@@ -308,13 +306,6 @@ function checkOperationContract(name: string, op: OperationShape, namespace: str
       `Operation "${name}": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.`
     );
   }
-  const format =
-    uncheckedFormat(op.input) ?? (isAttachmentSchema(op.output) ? undefined : uncheckedFormat(op.output));
-  if (format !== undefined) {
-    throw new TypeError(
-      `Operation "${name}": no validator checks the format "${format}", so any text would pass; use a format TypeBox checks, or a pattern.`
-    );
-  }
 }
 
 /** Byte bodies, attachments, limits, header-sourced fields and the route itself. */
@@ -484,35 +475,6 @@ function looseRecord(schema: unknown): boolean {
     return true;
   }
   return Object.values(node).some(looseRecord);
-}
-
-/** Keywords whose values are data, never a schema: a `format` key inside them names no format. */
-const DATA_KEYWORDS: ReadonlySet<string> = new Set(['const', 'default', 'enum', 'examples']);
-/** Keywords whose values are schemas by name, where any key, `default` included, names a schema. */
-const SCHEMA_RECORDS: ReadonlySet<string> = new Set(['properties', 'patternProperties', '$defs']);
-
-/**
- * The first format a schema names, at any depth, that no validator checks: TypeBox admits any text for a
- * format it does not know, so a misspelt one would check nothing.
- */
-function uncheckedFormat(schema: unknown, record = false): string | undefined {
-  if (!schema || typeof schema !== 'object') {
-    return undefined;
-  }
-  const node = schema as Record<string, unknown>;
-  if (!record && typeof node.format === 'string' && !Format.Has(node.format)) {
-    return node.format;
-  }
-  for (const [key, child] of Object.entries(node)) {
-    if (!record && DATA_KEYWORDS.has(key)) {
-      continue;
-    }
-    const format = uncheckedFormat(child, !record && SCHEMA_RECORDS.has(key));
-    if (format !== undefined) {
-      return format;
-    }
-  }
-  return undefined;
 }
 
 /**

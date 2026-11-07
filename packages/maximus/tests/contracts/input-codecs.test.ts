@@ -13,7 +13,6 @@ import type { Static, TSchema } from '../../src/index.ts';
 import { hasUncompiledCodecs } from '../../src/input-schemas.ts';
 import {
   SchemaValidationError,
-  annotate,
   checkSchema,
   decodeInput,
   defaultSchema,
@@ -337,7 +336,7 @@ it('detects a codec only inputSchema() runs below any child, and trusts a compil
   expect(hasUncompiledCodecs(tree as unknown as TSchema)).toBe(false);
 });
 
-it('annotates a schema and keeps what a spread drops: its optionality, its codec and its refinement', () => {
+it('decodes a schema t.With describes, which keeps what a spread drops: optionality, codecs and refinements', () => {
   const Code = t
     .Codec(t.String())
     .Decode((value) => value.toUpperCase())
@@ -351,10 +350,10 @@ it('annotates a schema and keeps what a spread drops: its optionality, its codec
   const Input = inputSchema(
     t.Object(
       {
-        note: annotate(t.Optional(t.String()), { description: 'A note.' }),
-        code: annotate(Code, { description: 'A code.' }),
-        even: annotate(Even, { description: 'An even number.' }),
-        name: annotate(Name, { description: 'A name.' }),
+        note: t.With(t.Optional(t.String()), { description: 'A note.' }),
+        code: t.With(Code, { description: 'A code.' }),
+        even: t.With(Even, { description: 'An even number.' }),
+        name: t.With(Name, { description: 'A name.' }),
       },
       strict
     )

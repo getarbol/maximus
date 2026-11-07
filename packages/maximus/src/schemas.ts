@@ -32,7 +32,6 @@ export const UuidSchema = Type.String({
 });
 
 export {
-  annotate,
   literalUnion,
   defaultSchema,
   stripObject,

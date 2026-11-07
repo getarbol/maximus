@@ -7,8 +7,6 @@
 import { Type } from 'typebox';
 import type { Static, TString } from 'typebox';
 
-import { annotate } from './input-schemas.ts';
-
 /** An email address of at most 254 characters, named `EmailAddress`. */
 export const EmailAddressSchema = Type.String({
   $id: 'EmailAddress',
@@ -49,7 +47,7 @@ export const DeletedObjectSchema = Type.Object(
 export type DeletedObject = Static<typeof DeletedObjectSchema>;
 
 /** The URL of a `SignedUrl`, described as the credential it is. */
-const SignedUrlFieldSchema: TString = annotate(HttpsUrlSchema, {
+const SignedUrlFieldSchema: TString = Type.With(HttpsUrlSchema, {
   description: 'The signed URL. Anyone holding it has access until it expires.',
 });
 /**

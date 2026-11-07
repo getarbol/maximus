@@ -25,18 +25,17 @@ Breaking:
   new type `SchemaKeywords`, from the root and `/schemas`, reads them: `(schema as SchemaKeywords).pattern`.
   `literalUnion(values)` types a list of any length as the union of its values.
 - TypeBox 1.x keeps the marks of an optional field, a codec, a refinement and a TypeBox type in properties a
-  spread drops: `{ ...schema, description }` now loses them. `annotate(schema, options)`, new in the root and
-  `/schemas`, adds options to a schema and keeps them, and every Maximus helper copies schemas that way.
+  spread drops: `{ ...schema, description }` now loses them. TypeBox's `t.With(schema, options)` adds options
+  and keeps them, and every Maximus helper copies schemas that way.
 - `INVALID_INPUT` issues keep their shape, JSON Pointer paths and limit of ten, and carry TypeBox 1.x's
   messages: `must be present` (one issue, where a missing field had two), `must not be present`,
   `must be string`, `must match pattern "…"`, `must match format "…"`, `must be <= 100`,
   `must not have more than 64 characters`, `must match a schema in anyOf` and the rest of TypeBox's wording.
   Owner refinement, inspection and codec messages are unchanged.
-- TypeBox 1.x admits any text for a format it does not know, where 0.34 refused every value: `.build()` now
-  refuses an operation whose input or output names such a format. TypeBox's own formats beyond the six
-  Maximus documents (`hostname`, `ipv4`, `url`, …) are checked by its validators instead of refusing every
-  value; `date`, `time`, `date-time`, `email`, `uuid` and `uri` keep the RFC validators of 8.x, and every
-  format still reads at most 8 KiB.
+- A format no validator knows checks nothing, as JSON Schema specifies, where 0.34 refused every value of it.
+  TypeBox's own formats beyond the six Maximus documents (`hostname`, `ipv4`, `url`, …) are checked by its
+  validators instead of refusing every value; `date`, `time`, `date-time`, `email`, `uuid` and `uri` keep the
+  RFC validators of 8.x, and every format still reads at most 8 KiB.
 - `inputSchema()` answers a TypeBox `TCodec` instead of a `TTransform`, and `StaticDecode` is TypeBox's own.
   The owner codecs keep their signatures and behavior, and issues found inside nested codecs, refinements and
   pipes keep their full paths.

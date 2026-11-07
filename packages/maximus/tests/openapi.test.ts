@@ -15,7 +15,7 @@ import {
   t,
 } from '../src/index.ts';
 import type { AppManifest, OperationShape } from '../src/index.ts';
-import { annotate, defaultSchema } from '../src/schemas.ts';
+import { defaultSchema } from '../src/schemas.ts';
 
 const ISSUER = 'https://issuer.example.test/';
 const empty = t.Object({}, { additionalProperties: false });
@@ -735,7 +735,7 @@ it('bundles a recursive $id schema into a local component, in the built and the 
       Condition: t.Union([
         t.Object({ all: t.Array(t.Ref('Condition'), { maxItems: 8 }) }, { additionalProperties: false }),
         t.Object(
-          { path: t.String(), value: annotate(t.Optional(value), { description: 'The compared value.' }) },
+          { path: t.String(), value: t.With(t.Optional(value), { description: 'The compared value.' }) },
           { additionalProperties: false }
         ),
       ]),
@@ -745,7 +745,7 @@ it('bundles a recursive $id schema into a local component, in the built and the 
   const setting = t.Object(
     {
       value,
-      fallback: annotate(value, { description: 'The value used when none is set.' }),
+      fallback: t.With(value, { description: 'The value used when none is set.' }),
       when: t.Optional(condition),
     },
     { additionalProperties: false }

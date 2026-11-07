@@ -31,20 +31,23 @@ only the enumerable ones. In 8.x, `{ ...schema, description }` kept them; in 9.0
 - a spread `AttachmentOutputSchema` is no longer an attachment;
 - a spread schema given whole as an operation's `input` or `output` is read as a record of fields.
 
-`annotate(schema, options)`, from the root and `/schemas`, copies a schema with everything TypeBox keeps on
-it and adds the options. Its type is the schema's and the options':
+TypeBox's own `t.With(schema, options)` copies a schema with everything TypeBox keeps on it and adds the
+options. Its type is the schema's and the options':
 
 ```ts
-import { annotate, EmailAddressSchema, t } from '@arbol-ai/maximus';
+import { EmailAddressSchema, t } from '@arbol-ai/maximus';
 
 const ReceiptSchema = t.Object(
   {
-    sendTo: annotate(EmailAddressSchema, { description: 'Where the receipt goes.' }),
-    note: annotate(t.Optional(t.String({ maxLength: 500 })), { description: 'A note for the patient.' }),
+    sendTo: t.With(EmailAddressSchema, { description: 'Where the receipt goes.' }),
+    note: t.With(t.Optional(t.String({ maxLength: 500 })), { description: 'A note for the patient.' }),
   },
   { additionalProperties: false }
 );
 ```
+
+A reference is the exception: `t.With` defers it, so give a `t.Ref` its options where it is made,
+`t.Ref('Note', { description: '…' })`.
 
 Spreading a record of fields is still safe, because it copies each schema whole:
 `t.Object({ ...PageQueryFields, done: t.Optional(t.Boolean()) }, { additionalProperties: false })`. To find
@@ -64,8 +67,8 @@ the spreads to change, search for object spreads whose source is a schema, such 
 - `t.Refine(type, check, error?)` is new: TypeBox's own refinement, whose `error` is a function of the value
   that answers the message. Like a `refineSchema` message, it reaches the caller and never holds the value.
 - `t.Union` types its members as a tuple: `t.Union(values.map((value) => t.Literal(value)))` has the static
-  type `never`. Use `literalUnion(values)`, which types the values of a list of any length, and `annotate` it
-  for a description: `annotate(literalUnion(PRODUCTS.map(({ id }) => id)), { description: '…' })`.
+  type `never`. Use `literalUnion(values)`, which types the values of a list of any length, and `t.With` it
+  for a description: `t.With(literalUnion(PRODUCTS.map(({ id }) => id)), { description: '…' })`.
 - A schema's type names its kind and structure only: `TSchema` is an empty interface, and a `TObject` has
   `properties` and `required` but no `additionalProperties`, `$id` or `description`, as a `TString` has no
   `pattern`. Reading such a keyword no longer compiles: read it through `SchemaKeywords`, from the root and
@@ -77,10 +80,9 @@ the spreads to change, search for object spreads whose source is a schema, such 
   and admit exactly the same values.
 - The other formats TypeBox knows (`hostname`, `ipv4`, `ipv6`, `url`, `uri-reference`, `duration`, …) are
   checked by TypeBox's own validators, where 8.x refused every value of them.
-- TypeBox admits any text for a format it does not know, where 0.34 refused every value. So that a misspelt
-  format cannot check nothing, `.build()` refuses a contract that names one:
-  `Operation "createNote": no validator checks the format "datetime", so any text would pass; use a format TypeBox checks, or a pattern.`
-  A schema read outside a contract, with `checkSchema` or `readSchema`, is not checked this way.
+- A format no validator knows checks nothing, as JSON Schema specifies, where 0.34 refused every value of it:
+  a misspelt format (`datetime` for `date-time`) now admits any text. Search the service's schemas for
+  formats outside these lists.
 - A value longer than 8192 characters still fails every format.
 
 ## INVALID_INPUT issues
@@ -121,6 +123,6 @@ tests that assert TypeBox's messages; issues that only check paths keep passing.
 ## Check the service
 
 1. Run the type check: it finds removed builders, keywords read from a `TSchema` and unions typed `never`.
-2. Replace every spread of a schema with `annotate`.
+2. Replace every spread of a schema with `t.With`.
 3. Update the tests that assert TypeBox's messages.
 4. Compare the OpenAPI document with the one you saved, as parsed JSON.
