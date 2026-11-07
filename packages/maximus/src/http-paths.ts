@@ -1,7 +1,8 @@
 /**
  * `@arbol-ai/maximus/http-paths`: versioned route templates, path parameter decoding, and the router that
- * matches a request to exactly one operation.
+ * matches a request to exactly one operation, on rou3's route tree.
  */
+import { addRoute, createRouter, findRoute, routesOverlap } from 'rou3';
 
 /** A fixed path segment of a route template. */
 const STATIC_SEGMENT = /^[a-zA-Z0-9_-]+$/;
@@ -106,34 +107,30 @@ interface Route<D> {
 function routeName(route: Route<HttpRouteDefinition>): string {
   return `${route.definition.http?.method} ${route.definition.http?.path}`;
 }
-/**
- * A node of the template tree, as the declarations build it: fixed children, one parameter child and the
- * route ending here.
- */
-interface Branch<D> {
-  /** Identifies the node within the resolver, so each distinct set of nodes compiles to one shared state. */
-  id: number;
-  /** The children reached by fixed segments, keyed by the segment's text. */
-  fixed: Map<string, Branch<D>>;
-  /** The child reached by a `{name}` parameter segment; absent when no template has a parameter here. */
-  parameter?: Branch<D>;
-  /** The route whose template ends at this node; absent when none does. */
-  route?: Route<D>;
+/** A template with parameters, as the overlap refusal compares it with the others of its method. */
+interface Template<D> {
+  /** The route it serves. */
+  route: Route<D>;
+  /** Its segments after the leading slash. */
+  segments: readonly string[];
+  /** Its rou3 pattern: `/v1/notes/:noteId`. */
+  pattern: string;
 }
-/** A compiled matching state: each fixed segment and a parameter lead to exactly one next state. */
-interface State<D> {
-  /**
-   * The next state for each fixed segment, keyed by its text; it also continues the templates that take a
-   * parameter here.
-   */
-  fixed: Map<string, State<D>>;
-  /**
-   * The next state for a segment with no fixed transition, read as a parameter value; absent when no template
-   * takes a parameter here.
-   */
-  parameter?: State<D>;
-  /** The route a path ending in this state matches; absent when none ends here. */
-  route?: Route<D>;
+/**
+ * Two templates of one method that match a common path, in the order a refusal names them: from the last
+ * segment where one is fixed and the other a parameter, the fixed one first.
+ */
+function overlapping<D>(left: Template<D>, right: Template<D>): [Template<D>, Template<D>] | undefined {
+  if (left.segments.length !== right.segments.length || !routesOverlap(left.pattern, right.pattern)) {
+    return undefined;
+  }
+  for (let index = left.segments.length - 1; index >= 0; index -= 1) {
+    const leftFixed = !left.segments[index]?.startsWith('{');
+    if (leftFixed !== !right.segments[index]?.startsWith('{')) {
+      return leftFixed ? [left, right] : [right, left];
+    }
+  }
+  return [left, right];
 }
 /** A matched route: its definition and its decoded path parameters. */
 export interface HttpRouteMatch<D> {
@@ -147,30 +144,24 @@ export interface HttpRouteMatch<D> {
  * The router for a set of definitions: `match(method, path)` finds the one route a request reaches, with its
  * decoded parameters, and `ownsPath(path)` says whether any route answers a path. A definition without `http`
  * is skipped. Construction throws a TypeError for an unsupported method, a malformed template, a duplicate
- * route, or two templates that could match the same path. A fixed route is one map lookup; templates compile
- * into states with one transition per segment, so matching never scans the routes.
+ * route, or two templates that could match the same path; a fixed route may share its path with a template,
+ * and wins it. Matching is rou3's route tree, fixed segments before parameters.
  */
 export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitions: readonly D[]) {
-  const exact = new Map<string, Route<D>>();
-  const roots = new Map<string, Branch<D>>();
-  let nextId = 0;
-  /** A new tree node with the next id. */
-  const branch = (): Branch<D> => {
-    const node: Branch<D> = { id: nextId, fixed: new Map() };
-    nextId += 1;
-    return node;
-  };
+  const router = createRouter<Route<D>>();
+  const fixed = new Set<string>();
+  const shapes = new Map<string, Route<D>>();
+  const templates = new Map<string, Template<D>[]>();
   for (const definition of definitions) {
     if (!definition.http) {
       continue;
     }
-    if (!HTTP_METHODS.has(definition.http.method)) {
-      throw new TypeError(
-        `Operation routes require a supported HTTP method: ${definition.http.method} ${definition.http.path}`
-      );
+    const { method, path } = definition.http;
+    if (!HTTP_METHODS.has(method)) {
+      throw new TypeError(`Operation routes require a supported HTTP method: ${method} ${path}`);
     }
-    const names = operationPathParameters(definition.http.path);
-    const segments = definition.http.path.slice(1).split('/');
+    const names = operationPathParameters(path);
+    const segments = path.slice(1).split('/');
     const route: Route<D> = {
       definition,
       parameters: segments.flatMap((segment, position) => {
@@ -179,93 +170,46 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
       }),
     };
     if (names.length === 0) {
-      const key = `${definition.http.method} ${definition.http.path}`;
-      if (exact.has(key)) {
+      const key = `${method} ${path}`;
+      if (fixed.has(key)) {
         throw new TypeError(`Duplicate operation route: ${key}`);
       }
-      exact.set(key, route);
+      fixed.add(key);
+      addRoute(router, method, path, route);
       continue;
     }
-    let node = roots.get(definition.http.method);
-    if (!node) {
-      node = branch();
-      roots.set(definition.http.method, node);
+    // The same template under other parameter names: one tree node, two routes.
+    const shape = `${method} ${path.replaceAll(/\{\w+\}/g, '{}')}`;
+    const same = shapes.get(shape);
+    if (same) {
+      throw new TypeError(`Ambiguous operation path templates: ${routeName(same)} and ${routeName(route)}`);
     }
-    for (const segment of segments) {
-      if (segment.startsWith('{')) {
-        node.parameter ??= branch();
-        node = node.parameter;
-      } else {
-        let child = node.fixed.get(segment);
-        if (!child) {
-          child = branch();
-          node.fixed.set(segment, child);
+    shapes.set(shape, route);
+    const template: Template<D> = { route, segments, pattern: path.replaceAll(/\{(\w+)\}/g, ':$1') };
+    templates.set(method, [...(templates.get(method) ?? []), template]);
+    addRoute(router, method, template.pattern, route);
+  }
+  for (const declared of templates.values()) {
+    for (const [index, template] of declared.entries()) {
+      for (const other of declared.slice(0, index)) {
+        const pair = overlapping(other, template);
+        if (pair) {
+          throw new TypeError(
+            `Ambiguous overlapping operation path templates: ${routeName(pair[0].route)} and ${routeName(pair[1].route)}`
+          );
         }
-        node = child;
       }
     }
-    if (node.route) {
-      throw new TypeError(
-        `Ambiguous operation path templates: ${routeName(node.route)} and ${routeName(route)}`
-      );
-    }
-    node.route = route;
   }
-  const states = new Map<string, State<D>>();
   /**
-   * The state for a set of tree nodes: their routes (at most one), and for each next segment the state of
-   * every node it can lead to, compiled once per set.
+   * The route for a method and the path's segments. An empty segment matches none, where rou3 would ignore a
+   * trailing slash.
    */
-  function compile(nodes: readonly Branch<D>[]): State<D> {
-    const distinct = [...new Map(nodes.map((node) => [node.id, node])).values()];
-    const key = distinct
-      .map((node) => node.id)
-      .toSorted((left, right) => left - right)
-      .join(',');
-    const known = states.get(key);
-    if (known) {
-      return known;
+  function routeOf(method: string, segments: readonly string[]): Route<D> | null {
+    if (segments.some((segment) => !segment)) {
+      return null;
     }
-    const routes = distinct.flatMap((node) => (node.route ? [node.route] : []));
-    if (routes.length > 1) {
-      throw new TypeError(
-        `Ambiguous overlapping operation path templates: ${routes.map(routeName).join(' and ')}`
-      );
-    }
-    const state: State<D> = { fixed: new Map(), route: routes[0] };
-    states.set(key, state);
-    const parameters = distinct.flatMap((node) => (node.parameter ? [node.parameter] : []));
-    if (parameters.length > 0) {
-      state.parameter = compile(parameters);
-    }
-    const fixed = new Set(distinct.flatMap((node) => [...node.fixed.keys()]));
-    for (const segment of fixed) {
-      const children = distinct.flatMap((node) => {
-        const child = node.fixed.get(segment);
-        return child ? [child] : [];
-      });
-      state.fixed.set(segment, compile([...children, ...parameters]));
-    }
-    return state;
-  }
-  const templates = new Map([...roots].map(([method, root]) => [method, compile([root])]));
-  /**
-   * The route for a method and the path's segments: an exact route first, then one transition per segment
-   * through the compiled states.
-   */
-  function findRoute(method: string, segments: readonly string[]): Route<D> | null {
-    const fixed = exact.get(`${method} /${segments.join('/')}`);
-    if (fixed) {
-      return fixed;
-    }
-    let state = templates.get(method);
-    for (const segment of segments) {
-      if (!segment || !state) {
-        return null;
-      }
-      state = state.fixed.get(segment) ?? state.parameter;
-    }
-    return state?.route ?? null;
+    return findRoute(router, method, `/${segments.join('/')}`, { params: false })?.data ?? null;
   }
   /**
    * The route a request reaches, with its path parameters: every segment is decoded before it is matched, so
@@ -284,7 +228,7 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
       }
       segments.push(decoded);
     }
-    const route = findRoute(method, segments);
+    const route = routeOf(method, segments);
     if (!route) {
       return null;
     }
@@ -299,7 +243,7 @@ export function createHttpRouteResolver<D extends HttpRouteDefinition>(definitio
     /** Whether any route answers a declared path, so a transport cannot claim an operation's path. */
     ownsPath(path: string): boolean {
       const segments = path.slice(1).split('/');
-      return [...HTTP_METHODS].some((method) => findRoute(method, segments) !== null);
+      return [...HTTP_METHODS].some((method) => routeOf(method, segments) !== null);
     },
   };
 }

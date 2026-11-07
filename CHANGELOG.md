@@ -27,6 +27,11 @@ of the release commits.
 - `maximus openapi --check` also validates each document with Scalar's OpenAPI parser
   (`@scalar/openapi-parser`) and fails for one that is not valid OpenAPI 3.1, naming its first problems. The
   parser is a dependency of the CLI alone: it loads for the check, never in a Worker.
+- The HTTP router matches on rou3's route tree (`rou3` 1.0.0) instead of Maximus's own compiled states, and
+  refuses templates that could match one path with rou3's `routesOverlap`. Matching, the decoding of every
+  segment before it, the refusal of empty segments and trailing slashes, and the construction refusals are
+  unchanged; with several conflicting templates in one application, the first pair named may differ. The
+  rou3 compiler, which generates code at runtime, is never loaded.
 
 ## 8.1.0 (2026-11-04)
 

@@ -1,8 +1,8 @@
 /**
  * Route templates and the router: versioned templates with whole-segment parameters, parameter values that
  * cannot change URL ownership, the header names a byte upload may read, path parameters every input member
- * must declare, and the compiled matcher that refuses ambiguity at construction and lets overlapping
- * templates share their continuations.
+ * must declare, and the matcher that refuses ambiguity at construction, lets overlapping templates share
+ * their continuations, lets a fixed route win its path and reads every decoded segment as a plain value.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -209,4 +209,66 @@ it('lets a fixed segment continue an overlapping parameter template', () => {
   for (const path of ['/v1/exports/daily', '/v1/reports/daily/2026-10-27', '/v1/exports']) {
     expect(routes.match('GET', path), path).toBeNull();
   }
+});
+
+it('names two overlapping templates in one order, whichever is declared first', () => {
+  const route = (path: string) => ({ http: { method: 'GET' as const, path } });
+  const history = route('/v1/records/{recordId}/history');
+  const archived = route('/v1/records/archived/{entryId}');
+  for (const declared of [
+    [history, archived],
+    [archived, history],
+  ]) {
+    expect(() => createHttpRouteResolver(declared)).toThrow(
+      new TypeError(
+        'Ambiguous overlapping operation path templates: GET /v1/records/{recordId}/history and GET /v1/records/archived/{entryId}'
+      )
+    );
+  }
+  // A duplicate fixed route is named before an overlap declared ahead of it.
+  expect(() =>
+    createHttpRouteResolver([history, archived, route('/v1/records'), route('/v1/records')])
+  ).toThrow(new TypeError('Duplicate operation route: GET /v1/records'));
+});
+
+it('lets a fixed route win its path from a template, and only under its own method', () => {
+  const read = { name: 'read', http: { method: 'GET', path: '/v1/records/{recordId}' } } as const;
+  const archive = { name: 'archive', http: { method: 'GET', path: '/v1/records/archive' } } as const;
+  const purge = { name: 'purge', http: { method: 'DELETE', path: '/v1/records/purged' } } as const;
+  const routes = createHttpRouteResolver<Definition | typeof purge>([read, archive, purge]);
+  expect(routes.match('GET', '/v1/records/archive')).toEqual({ definition: archive, parameters: {} });
+  expect(routes.match('GET', '/v1/records/%61rchive')).toEqual({ definition: archive, parameters: {} });
+  expect(routes.match('GET', '/v1/records/purged')).toEqual({
+    definition: read,
+    parameters: { recordId: 'purged' },
+  });
+  expect(routes.match('DELETE', '/v1/records/purged')).toEqual({ definition: purge, parameters: {} });
+  // Methods are matched as they are written: a request's method names an operation's exactly.
+  expect(routes.match('get', '/v1/records/r1')).toBeNull();
+});
+
+it('reads every decoded segment as a plain value, whatever a router could take it for', () => {
+  const read = { name: 'read', http: { method: 'GET', path: '/v1/records/{recordId}' } } as const;
+  const routes = createHttpRouteResolver<Definition>([read]);
+  for (const [segment, value] of [
+    ['a%3Fb', 'a?b'],
+    ['a%23b', 'a#b'],
+    [':recordId', ':recordId'],
+    ['*', '*'],
+    ['**', '**'],
+    ['%7Bid%7D', '{id}'],
+    ['%2525', '%25'],
+    ['__proto__', '__proto__'],
+    ['constructor', 'constructor'],
+    ['caf%C3%A9', 'café'],
+  ]) {
+    expect(routes.match('GET', `/v1/records/${segment}`), segment).toEqual({
+      definition: read,
+      parameters: { recordId: value },
+    });
+  }
+  for (const path of ['/v1/records/', '/v1/records//', '/v1//records', '/v1/records/r1/', '/']) {
+    expect(routes.match('GET', path), path).toBeNull();
+  }
+  expect(routes.ownsPath('/v1/records/r1/')).toBe(false);
 });
