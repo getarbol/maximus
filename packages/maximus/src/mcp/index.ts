@@ -5,6 +5,8 @@
  */
 import type { HttpTransport } from '../index.ts';
 
+export { attachTasks, mcpTask, toolResult } from './tasks.ts';
+
 /**
  * The MCP transport, for `createWorker(app, { transports: [mcp()] })`: serves the operations that declare
  * `mcp` as tools over Streamable HTTP at `/mcp` (or `path`), with the OpenAPI document and guides as

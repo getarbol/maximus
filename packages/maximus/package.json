@@ -133,11 +133,13 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-tasks": "0.2.3",
     "@modelcontextprotocol/server": "2.4.0",
     "@scalar/openapi-parser": "0.29.20",
     "ajv-formats": "3.0.1",
     "jose": "6.2.13",
     "rou3": "1.0.0",
+    "standardwebhooks": "1.1.1",
     "typebox": "1.4.5"
   },
   "devDependencies": {

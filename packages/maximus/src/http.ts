@@ -42,6 +42,8 @@ import { protectedResourceMetadata } from './oauth.ts';
 import { createOpenApi } from './openapi.ts';
 import { err, ok } from './result.ts';
 import type { Result } from './result.ts';
+import { taskAccess, taskView } from './tasks.ts';
+import type { TaskAccess } from './tasks.ts';
 import {
   recordExecution,
   recordAdmission,
@@ -117,6 +119,8 @@ export interface TransportContext {
   body: string;
   /** The body limit HTTP applies to an operation; a transport holds each invocation to it. */
   bodyLimit: (operation: OperationShape) => number;
+  /** The caller's tasks, which an operation that declares `task` may answer; absent without a task store. */
+  tasks?: TaskAccess;
 }
 /**
  * A protocol served at one path beside the operations, such as MCP: the scope a caller needs, the body it
@@ -626,6 +630,15 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
           requestId,
         };
         principal = actor;
+        const authority = authenticated.client
+          ? {
+              surface: transport ? ('mcp' as const) : ('http' as const),
+              scopes: authenticated.scopes,
+              client: authenticated.client,
+              ...(accessToken ? { token: accessToken } : {}),
+            }
+          : undefined;
+        const tasks = taskAccess(manifest.namespace, scopedEnv, actor, authority);
         if (manifest.capture) {
           const token = presentedToken(incoming, manifest.tokens);
           verified = {
@@ -715,14 +728,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             scopedEnv,
             actor,
             input,
-            authenticated.client
-              ? {
-                  surface: transport ? 'mcp' : 'http',
-                  scopes: authenticated.scopes,
-                  client: authenticated.client,
-                  ...(accessToken ? { token: accessToken } : {}),
-                }
-              : undefined,
+            authority,
             background,
             byteOperation ? binaryBody(incoming, op.maxBodyBytes ?? fallbackBodyBytes) : undefined,
             call
@@ -773,6 +779,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
             },
             body: bodyText,
             bodyLimit: (op) => op.maxBodyBytes ?? fallbackBodyBytes,
+            ...(tasks ? { tasks } : {}),
           });
         }
         if (!operationRoute) {
@@ -782,11 +789,26 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
         if (!input.ok) {
           return reject(input.error);
         }
-        const output = await invoke(
-          operationRoute.definition.name,
-          operationRoute.definition.op,
-          input.value
-        );
+        // RFC 7240: a client that prefers to be answered at once gets the task of a call that outlasts the wait.
+        const task =
+          operationRoute.definition.op.task && /\brespond-async\b/i.test(incoming.headers.get('prefer') ?? '')
+            ? await tasks?.start(operationRoute.definition.name, input.value)
+            : undefined;
+        if (task?.status === 'working') {
+          return Response.json(
+            { success: true, data: taskView(task), error: null, metadata: { requestId } },
+            {
+              status: 202,
+              headers: {
+                'preference-applied': 'respond-async',
+                location: `${manifest.origin}${paths.mount(`/v1/tasks/${task.taskId}`)}`,
+              },
+            }
+          );
+        }
+        const output =
+          task?.result ??
+          (await invoke(operationRoute.definition.name, operationRoute.definition.op, input.value));
         if (!output.ok) {
           return failure(output.error, requestId, resolutionContext());
         }

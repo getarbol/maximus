@@ -15,6 +15,7 @@ import { createOpenApi } from './openapi.ts';
 import { hasSchemaReferences } from './schema-bundle.ts';
 import type { SchemaKeywords } from './schema-types.ts';
 import { isNamespacedScope } from './scopes.ts';
+import { holdsSecrets } from './secrets.ts';
 import type { TelemetryConfig } from './telemetry.ts';
 import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
@@ -41,6 +42,7 @@ const OPERATION_FIELDS: ReadonlySet<string> = new Set(
     visibility: true,
     mcp: true,
     rpc: true,
+    task: true,
     scope: true,
     scopeMatch: true,
     conditionalScopes: true,
@@ -306,6 +308,11 @@ function checkOperationContract(name: string, op: OperationShape, namespace: str
       `Operation "${name}": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.`
     );
   }
+  if (op.task && (holdsSecrets(op.input) || holdsSecrets(op.output))) {
+    throw new TypeError(
+      `Operation "${name}": a task keeps its input until it runs and its result for an hour, so its schemas mark nothing secret: true.`
+    );
+  }
 }
 
 /** Byte bodies, attachments, limits, header-sourced fields and the route itself. */
@@ -318,8 +325,8 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
   }
   const binary = op.http?.body === 'bytes';
   const attachment = isAttachmentSchema(op.output);
-  if ((binary || attachment) && (!op.http || op.mcp || op.rpc)) {
-    throw new TypeError(`Operation "${name}": byte bodies and attachments are HTTP-only.`);
+  if ((binary || attachment) && (!op.http || op.mcp || op.rpc || op.task)) {
+    throw new TypeError(`Operation "${name}": byte bodies and attachments are HTTP-only and never tasks.`);
   }
   if ((op.http?.response === 'attachment') !== attachment || (binary && op.http?.method === 'GET')) {
     throw new TypeError(`Operation "${name}": declare matching attachment output and non-GET byte bodies.`);

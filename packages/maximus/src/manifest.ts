@@ -156,6 +156,12 @@ export interface Exposure {
    * the listed ones among them.
    */
   rpc?: true | { callers: readonly string[] };
+  /**
+   * Whether a call that outlasts a short wait may answer a task instead of its result: over MCP when the client
+   * declares the Tasks extension, over HTTP when it sends `Prefer: respond-async`. The work then goes on in the
+   * `MAXIMUS_TASKS` task store, at most once; without that binding the operation always answers its result.
+   */
+  task?: true;
 }
 /**
  * An operation as an application holds it: its scope, words, effect, schemas, limits, exposure and handler.

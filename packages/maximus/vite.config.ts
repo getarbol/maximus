@@ -63,11 +63,13 @@ export default defineConfig({
       // Nothing from node_modules is bundled, and the output imports nothing the package does not declare.
       onlyBundle: [],
       onlyImport: [
+        '@modelcontextprotocol/ext-tasks',
         '@modelcontextprotocol/server',
         '@scalar/openapi-parser',
         'ajv-formats',
         'jose',
         'rou3',
+        'standardwebhooks',
         'typebox',
         'yaml',
         'pg',

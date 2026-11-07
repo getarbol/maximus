@@ -237,6 +237,20 @@ it('refuses a record whose keys follow a pattern unless it refuses every other k
   ).not.toThrow();
 });
 
+it('refuses a task whose schemas mark a secret, which its store would keep, or that reads bytes', () => {
+  expect(
+    build({ ...readRecord, input: t.Object({ token: t.String({ secret: true }) }, strict), task: true })
+  ).toThrow(
+    new TypeError(
+      'Operation "readRecord": a task keeps its input until it runs and its result for an hour, so its schemas mark nothing secret: true.'
+    )
+  );
+  expect(build({ ...uploadFile, task: true }, 'uploadFile')).toThrow(
+    new TypeError('Operation "uploadFile": byte bodies and attachments are HTTP-only and never tasks.')
+  );
+  expect(build({ ...readRecord, task: true })).not.toThrow();
+});
+
 it('refuses a byte body or an attachment outside its HTTP-only, matching and non-GET contract', () => {
   expect(build(uploadFile, 'uploadFile')).not.toThrow();
   expect(build(downloadFile, 'downloadFile')).not.toThrow();
@@ -248,7 +262,9 @@ it('refuses a byte body or an attachment outside its HTTP-only, matching and non
       new TypeError('Operation "uploadFile": unsupported HTTP binary contract.')
     );
   }
-  const httpOnly = new TypeError('Operation "uploadFile": byte bodies and attachments are HTTP-only.');
+  const httpOnly = new TypeError(
+    'Operation "uploadFile": byte bodies and attachments are HTTP-only and never tasks.'
+  );
   expect(build({ ...uploadFile, mcp: { name: 'upload_file', idempotent: false } }, 'uploadFile')).toThrow(
     httpOnly
   );

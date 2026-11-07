@@ -19,6 +19,7 @@ import type {
 } from './manifest.ts';
 import { ok } from './result.ts';
 import type { Result } from './result.ts';
+import { withTaskOperations } from './tasks.ts';
 
 export type { OperationFields } from './manifest.ts';
 
@@ -153,7 +154,8 @@ export class ApplicationBuilder<E, C, Ops extends Record<string, OperationShape>
    * the rule; most of the rules about one operation also name that operation.
    */
   build(): AppManifest<E, C, Ops> {
-    return defineApp<E, C>()(this.definition);
+    const { operations, namespace } = this.definition;
+    return defineApp<E, C>()({ ...this.definition, operations: withTaskOperations(operations, namespace) });
   }
 }
 /**
