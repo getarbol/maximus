@@ -483,8 +483,6 @@ One complete record of every operation call and refusal, on every transport, for
 | `defineCapture`       | function | `capture.ts`'s default export: `enabled`, `sink`, `payloads` and `dimensions`. Refuses any other field.  |
 | `pipeline`            | function | The sink that sends each record to a Cloudflare Pipelines stream, retrying once.                         |
 | `PipelineOptions`     | type     | What `pipeline()` takes: `binding`, `map` and `blobs`.                                                   |
-| `queue`               | function | The sink that sends each record to a Cloudflare Queue once; its consumer retries and dead-letters.       |
-| `QueueOptions`        | type     | What `queue()` takes: `binding` and `blobs`.                                                             |
 | `CaptureRecordSchema` | schema   | One record: who called which operation over which transport, when, what it answered and what it carried. |
 | `CaptureRecord`       | type     | A value of `CaptureRecordSchema`.                                                                        |
 | `CaptureConfig`       | type     | What `defineCapture` takes.                                                                              |
