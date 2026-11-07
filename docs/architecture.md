@@ -193,11 +193,14 @@ never in a public bypass.
 
 ## Routing
 
-Fixed routes are one map lookup. Templates such as `/v1/notes/{noteId}` compile, when the handler is built,
-into deterministic states: one transition per segment, with no scan per request, so several hundred routes
-cost nothing extra. Every segment is decoded before it is matched, so an encoded fixed segment reaches its
-own route and never a sibling's parameter. A parameter occupies a whole segment and names a required string
-field of the input. Ambiguous templates fail at construction, and a static segment wins over a parameter.
+Matching is rou3's route tree: fixed routes are one map lookup, and templates such as `/v1/notes/{noteId}`
+are walked a segment at a time, fixed segments before parameters, with no scan of the routes per request.
+Maximus keeps what makes routing safe around it: every segment is decoded before it is matched, so an
+encoded fixed segment reaches its own route and never a sibling's parameter, and a path with an empty
+segment or a trailing slash matches nothing. A parameter occupies a whole segment and names a required
+string field of the input. Templates that could match one path fail at construction, rou3's
+`routesOverlap` deciding, and a static segment wins over a parameter. The compiled matcher rou3 also ships
+generates code at runtime, which Maximus never loads.
 Paths are never normalized or redirected, and an unmatched path answers `404` before authentication, so
 routing reveals nothing about authorization. A GET query field is read as its declared kind (integer,
 number, boolean, list of strings, else string), repeated keys are refused, and JSON bodies are never coerced.

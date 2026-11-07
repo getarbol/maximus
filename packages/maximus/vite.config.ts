@@ -68,6 +68,7 @@ export default defineConfig({
         '@sinclair/typebox',
         'ajv-formats',
         'jose',
+        'rou3',
         'yaml',
         'pg',
         'vite',
