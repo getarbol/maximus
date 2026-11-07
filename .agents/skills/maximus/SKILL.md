@@ -98,8 +98,8 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 | Data in Postgres                                | `withTenantTransaction` from `@arbol-ai/maximus/postgres`.                                                                                                                                               |
 | A record of every call, for audit or a lake     | `capture.ts` with `defineCapture` from `@arbol-ai/maximus/capture`; mark credential fields `secret: true`. See [Capture](https://github.com/getarbol/maximus/blob/main/docs/guides/capture.md).          |
 | Guidance agents read over MCP                   | `mcp/instructions.md`, `mcp/guides/<name>.md`, `mcp/skills/<name>.md`: static text for every caller, never tenant data.                                                                                  |
-| An 8.x service                                  | [Upgrading to 9.0](https://github.com/getarbol/maximus/blob/main/docs/upgrading-to-9.md): TypeBox 1.x.                                                                                                   |
-| A 7.x service                                   | [Upgrading to 8.0](https://github.com/getarbol/maximus/blob/main/docs/upgrading-to-8.md), then to 9.0.                                                                                                   |
+| A service on 8.2 or earlier                     | [Upgrading to 8.3](https://github.com/getarbol/maximus/blob/main/docs/upgrading-to-8.3.md): TypeBox 1.x.                                                                                                 |
+| A 7.x service                                   | [Upgrading to 8.0](https://github.com/getarbol/maximus/blob/main/docs/upgrading-to-8.md), then to 8.3.                                                                                                   |
 
 ## Rules that are never broken
 

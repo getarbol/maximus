@@ -1,18 +1,18 @@
-# Upgrading to 9.0
+# Upgrading to 8.3
 
-This guide moves an 8.x service to Maximus 9.0, which runs on TypeBox 1.x (the package `typebox`, 1.4.5)
+This guide moves a service on Maximus 8.2 or earlier to 8.3, which runs on TypeBox 1.x (the package `typebox`, 1.4.5)
 instead of `@sinclair/typebox` 0.34. Routes, transports, the response envelope, failures, MCP and RPC do not
 change, and neither do the OpenAPI documents, apart from the order of the keys inside a schema and the key
 pattern of `t.Record(t.String(), …)`. What callers see changes in one place: the wording of the issues an
 `INVALID_INPUT` failure carries.
 
 Work on a branch, and save the OpenAPI document your service serves today before you start. Compare it with
-the one 9.0 serves as parsed JSON, since the key order differs: any other difference is a change to look at.
+the one 8.3 serves as parsed JSON, since the key order differs: any other difference is a change to look at.
 
 ## Update the package
 
 ```sh
-bun add @arbol-ai/maximus@^9
+bun add @arbol-ai/maximus@^8.3
 ```
 
 Remove `@sinclair/typebox` from the service's dependencies and import `t`, `Static` and `TSchema` from
@@ -24,7 +24,7 @@ instance, depends on exactly the version Maximus uses, `typebox@1.4.5`, so the t
 
 TypeBox 1.x keeps what makes a schema optional (`'~optional'`), a codec (`'~codec'`), a refinement
 (`'~refine'`) or a TypeBox type at all (`'~kind'`) in properties that are not enumerable, and a spread copies
-only the enumerable ones. In 8.x, `{ ...schema, description }` kept them; in 9.0 it drops them:
+only the enumerable ones. Until 8.2, `{ ...schema, description }` kept them; from 8.3 it drops them:
 
 - `{ ...t.Optional(t.String()), description }` is a required field;
 - a spread `t.Codec(…)` decodes nothing, and a spread `t.Refine(…)` refines nothing;
@@ -76,10 +76,10 @@ the spreads to change, search for object spreads whose source is a schema, such 
 
 ## Formats
 
-- `date`, `time`, `date-time`, `email`, `uuid` and `uri` are checked by the same RFC validators as in 8.x,
+- `date`, `time`, `date-time`, `email`, `uuid` and `uri` are checked by the same RFC validators as in 8.2,
   and admit exactly the same values.
 - The other formats TypeBox knows (`hostname`, `ipv4`, `ipv6`, `url`, `uri-reference`, `duration`, …) are
-  checked by TypeBox's own validators, where 8.x refused every value of them.
+  checked by TypeBox's own validators, where 8.2 refused every value of them.
 - A format no validator knows checks nothing, as JSON Schema specifies, where 0.34 refused every value of it:
   a misspelt format (`datetime` for `date-time`) now admits any text. Search the service's schemas for
   formats outside these lists.
@@ -90,7 +90,7 @@ the spreads to change, search for object spreads whose source is a schema, such 
 The failure keeps its shape: at most ten `{ path, message }` issues, each path a JSON Pointer from the
 input's root, never a value. The messages are TypeBox 1.x's:
 
-| 8.x                                                      | 9.0                                       |
+| 8.2                                                      | 8.3                                       |
 | -------------------------------------------------------- | ----------------------------------------- |
 | `Expected required property` and the field's own message | `must be present`, one issue              |
 | `Unexpected property`                                    | `must not be present`                     |
@@ -103,20 +103,20 @@ input's root, never a value. The messages are TypeBox 1.x's:
 | `Expected array length to be less or equal to 3`         | `must not have more than 3 items`         |
 | `Expected union value`                                   | `must match a schema in anyOf`            |
 
-A missing required field is one issue at its own path, where 8.x answered two. The messages of a
+A missing required field is one issue at its own path, where 8.2 answered two. The messages of a
 `refineSchema`, an `inspectSchema` or a codec that throws `SchemaValidationError` are unchanged. Update the
 tests that assert TypeBox's messages; issues that only check paths keep passing.
 
 ## Codecs, types and validation
 
-- `inputSchema()` answers a TypeBox codec, `TCodec`, where 8.x answered a `TTransform`. What callers send is
+- `inputSchema()` answers a TypeBox codec, `TCodec`, where 8.2 answered a `TTransform`. What callers send is
   still `SchemaInput<typeof schema>`, and what the handler receives `StaticDecode<typeof schema>`, now
   TypeBox's own. The owner codecs (`normalizeSchema`, `transformSchema`, `refineSchema`, `inspectSchema`,
   `pipeSchema`, `stripObject`, …) keep their signatures and behavior, and an issue found inside a nested codec,
   refinement or pipe keeps its full path.
 - TypeBox's own `t.Codec` and `t.Refine` run in an input, inside `inputSchema()` or without it.
 - An operation's `input` or `output` is told from a record of fields by the kind TypeBox marks its types with,
-  as `KindGuard` did in 8.x.
+  as `KindGuard` did in 8.2.
 - Validation stays interpreted: Maximus turns TypeBox's acceleration off, so nothing is compiled at runtime,
   and TypeBox builds at most ten errors per check.
 

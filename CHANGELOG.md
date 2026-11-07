@@ -7,7 +7,7 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
-## 9.1.0 (2026-11-07)
+## 8.4.0 (2026-11-07)
 
 - **Tasks.** An operation that declares `task: true` answers a task once a call outlasts one second: over MCP to
   a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`, revision 2026-07-28), in the
@@ -26,11 +26,11 @@ of the release commits.
   which keeps its failure reasons, its tolerance and clock options and the `svix-` headers.
 - The refusal of a byte body or an attachment outside HTTP reads `… are HTTP-only and never tasks.`
 
-## 9.0.0 (2026-11-07)
+## 8.3.0 (2026-11-07)
 
 Maximus runs on TypeBox 1.x (`typebox` 1.4.5) instead of `@sinclair/typebox` 0.34. Routes, transports, the
 response envelope, failures, MCP, RPC and the OpenAPI documents keep their shapes. [Upgrading to
-9.0](docs/upgrading-to-9.md) lists what a service changes.
+8.3](docs/upgrading-to-8.3.md) lists what a service changes.
 
 Breaking:
 
@@ -54,7 +54,7 @@ Breaking:
 - A format no validator knows checks nothing, as JSON Schema specifies, where 0.34 refused every value of it.
   TypeBox's own formats beyond the six Maximus documents (`hostname`, `ipv4`, `url`, …) are checked by its
   validators instead of refusing every value; `date`, `time`, `date-time`, `email`, `uuid` and `uri` keep the
-  RFC validators of 8.x, and every format still reads at most 8 KiB.
+  RFC validators of 8.2, and every format still reads at most 8 KiB.
 - `inputSchema()` answers a TypeBox `TCodec` instead of a `TTransform`, and `StaticDecode` is TypeBox's own.
   The owner codecs keep their signatures and behavior, and issues found inside nested codecs, refinements and
   pipes keep their full paths.
