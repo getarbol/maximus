@@ -40,24 +40,24 @@ declare their routes, tools, context, failures and tokens with.
 
 ### The application builder
 
-| Export                     | Kind     | What it is                                                                                                                                         |
-| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maximus`                  | function | Starts an application in code: `maximus<Env>(configuration)`, then `.derive()`, `.use()`, `.operation()`, `.mount()` and `.build()`.               |
-| `ApplicationBuilder`       | type     | An application under construction, as `maximus()` returns it.                                                                                      |
-| `ApplicationConfiguration` | type     | What `maximus()` takes: identity, origin, `tokens`, `errors`, `rpc`, and the optional limits, rate limit, telemetry and `mcp`.                     |
-| `AppManifest`              | type     | A built application: its configuration and its operations.                                                                                         |
-| `Exposure`                 | type     | Where an operation is reachable: `http`, `mcp`, `rpc`, `visibility` and `actorKinds`.                                                              |
-| `OperationShape`           | type     | An operation as an application holds it.                                                                                                           |
-| `OperationScope`           | type     | One scope, or a non-empty list of scopes.                                                                                                          |
-| `OperationMiddleware`      | type     | `(context, next) => Promise<Result>`: what `.use()` and `defineOperationMiddleware` take.                                                          |
-| `Invocation`               | type     | What preparation and middleware start from: `env`, `principal`, `authority`, `rpcCaller`, `userAgent`, `input`, `operation`, `background`, `body`. |
-| `InvocationAuthority`      | type     | What admission verified about a call's token: `surface`, `scopes`, `client` and `token`.                                                           |
-| `McpConfiguration`         | type     | The MCP server's description: `instructions`, `guides`, `skills` and `skillTool`.                                                                  |
-| `McpGuide`                 | type     | A guide: `name`, `title` and `text`.                                                                                                               |
-| `McpSkill`                 | type     | An Agent Skill: `name`, `description` and `text`.                                                                                                  |
-| `isPublicOperation`        | function | Whether an operation belongs in the public OpenAPI document and discovery: not `internal`.                                                         |
-| `operationScopes`          | function | An operation's scopes, as a list.                                                                                                                  |
-| `operationMatchesScopes`   | function | Whether granted scopes admit an operation, by its `scopeMatch`.                                                                                    |
+| Export                     | Kind     | What it is                                                                                                                                                   |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `maximus`                  | function | Starts an application in code: `maximus<Env>(configuration)`, then `.derive()`, `.use()`, `.operation()`, `.mount()` and `.build()`.                         |
+| `ApplicationBuilder`       | type     | An application under construction, as `maximus()` returns it.                                                                                                |
+| `ApplicationConfiguration` | type     | What `maximus()` takes: identity, origin, `tokens`, `errors`, `rpc`, and the optional limits, rate limit, telemetry and `mcp`.                               |
+| `AppManifest`              | type     | A built application: its configuration and its operations.                                                                                                   |
+| `Exposure`                 | type     | Where an operation is reachable: `http`, `mcp`, `rpc`, `visibility` and `actorKinds`.                                                                        |
+| `OperationShape`           | type     | An operation as an application holds it.                                                                                                                     |
+| `OperationScope`           | type     | One scope, or a non-empty list of scopes.                                                                                                                    |
+| `OperationMiddleware`      | type     | `(context, next) => Promise<Result>`: what `.use()` and `defineOperationMiddleware` take.                                                                    |
+| `Invocation`               | type     | What preparation and middleware start from: `env`, `principal`, `authority`, `rpcCaller`, `userAgent`, `taskId`, `input`, `operation`, `background`, `body`. |
+| `InvocationAuthority`      | type     | What admission verified about a call's token: `surface`, `scopes`, `client` and `token`.                                                                     |
+| `McpConfiguration`         | type     | The MCP server's description: `instructions`, `guides`, `skills` and `skillTool`.                                                                            |
+| `McpGuide`                 | type     | A guide: `name`, `title` and `text`.                                                                                                                         |
+| `McpSkill`                 | type     | An Agent Skill: `name`, `description` and `text`.                                                                                                            |
+| `isPublicOperation`        | function | Whether an operation belongs in the public OpenAPI document and discovery: not `internal`.                                                                   |
+| `operationScopes`          | function | An operation's scopes, as a list.                                                                                                                            |
+| `operationMatchesScopes`   | function | Whether granted scopes admit an operation, by its `scopeMatch`.                                                                                              |
 
 See [Worker composition](../guides/worker-composition.md).
 
@@ -353,6 +353,7 @@ Webhook signature verification on a request's raw bytes. See
 | `verifyHmacSignature`           | function | Verifies an HMAC-SHA256 of the body in one header, hex or base64.                     |
 | `verifyTimestampedSignature`    | function | Verifies a `t=<seconds>,v1=<hex>` header that signs `<t>.<body>`.                     |
 | `verifyStandardWebhook`         | function | Verifies a Standard Webhooks delivery, `webhook-*` or `svix-*` headers.               |
+| `signStandardWebhook`           | function | Signs a Standard Webhooks delivery with the `standardwebhooks` package: its headers.  |
 
 ## @arbol-ai/maximus/http-paths
 
@@ -452,7 +453,7 @@ The Worker: it imports `cloudflare:workers`, so only a Worker loads it. See
 | --------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `WorkerAssetsOptions` | type     | The `assets` option: `binding`, `pages`, `files`, `immutablePrefixes`, `headers` and `development`. |
 | `RpcMethods`          | type     | `RpcMethods<typeof app.operations>`: the methods the RPC entrypoint serves.                         |
-| `WorkerRuntime`       | type     | What `createWorker` returns: `handler`, `entrypoint`, `service` and `durableObject`.                |
+| `WorkerRuntime`       | type     | What `createWorker` returns: `handler`, `entrypoint`, `service`, `durableObject` and `tasks`.       |
 | `WorkerOptions`       | type     | What `createWorker` takes: `handlers`, `transports`, `http`, `assets` and `routes`.                 |
 | `createWorker`        | function | Serves an application as a Worker.                                                                  |
 | `credentials`         | function | Prepares one organization's credential from its own store, for a `.derive()`.                       |
@@ -462,6 +463,22 @@ The Worker: it imports `cloudflare:workers`, so only a Worker loads it. See
 | Export | Kind     | What it is                                                                                                                        |
 | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `mcp`  | function | The MCP transport, `mcp({ path? })`, at `/mcp` by default. The MCP SDK loads with its first request. See [MCP](../guides/mcp.md). |
+
+## @arbol-ai/maximus/mcp/tasks
+
+The MCP Tasks extension on the official SDK, for another MCP server that relays a service's tasks, such as a
+gateway's. See [Tasks](../guides/mcp.md#tasks).
+
+| Export                     | Kind     | What it is                                                                                                     |
+| -------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `attachTasks`              | function | Declares the Tasks extension on an `McpServer` and serves `tasks/get` and `tasks/cancel` for a caller's tasks. |
+| `declaresTasks`            | function | Whether a request's `_meta` declares the Tasks extension.                                                      |
+| `isTaskResult`             | function | Whether a `tools/call` result is a task, `resultType: "task"`, rather than the call's result.                  |
+| `mcpTask`                  | function | A task as an MCP client reads it.                                                                              |
+| `toolResult`               | function | A Result as a tool call answers it: the value, or the failure as a tool error.                                 |
+| `TASKS_EXTENSION`          | constant | `io.modelcontextprotocol/tasks`, the extension's id.                                                           |
+| `McpTask`                  | type     | What `mcpTask` answers.                                                                                        |
+| `TaskAccess`, `TaskRecord` | type     | A caller's tasks, as `attachTasks` reads them, and a task as the store keeps it.                               |
 
 ## @arbol-ai/maximus/analytics
 

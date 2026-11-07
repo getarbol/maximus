@@ -14,6 +14,7 @@ import {
   DEFAULT_TOLERANCE_SECONDS,
   MAX_SIGNATURES,
   WEBHOOK_SIGNATURE_FAILURES,
+  signStandardWebhook,
   verifyHmacSignature,
   verifyStandardWebhook,
   verifyTimestampedSignature,
@@ -292,6 +293,28 @@ it('reads only v1 signatures that decode, and signs the id, so a replay under an
   } finally {
     computed.mockRestore();
   }
+});
+
+it('signs a delivery with the Standard Webhooks package, as the verifier accepts it and only for its body', async () => {
+  const headers = signStandardWebhook({ id: 'msg_1', payload: body, secret: standardSecret, now });
+  expect(headers).toMatchObject({ 'webhook-id': 'msg_1', 'webhook-timestamp': String(T) });
+  expect(
+    await verifyStandardWebhook({ body, headers: new Headers(headers), now, secret: standardSecret })
+  ).toEqual({
+    ok: true,
+    value: { id: 'msg_1', timestamp: T },
+  });
+  expect(
+    reason(
+      await verifyStandardWebhook({
+        body: `${body} `,
+        headers: new Headers(headers),
+        now,
+        secret: standardSecret,
+      })
+    )
+  ).toBe('mismatch');
+  expect(() => signStandardWebhook({ id: 'msg_1', payload: body, secret: '' })).toThrow(TypeError);
 });
 
 it('describes every refusal by its reason alone, never the body, the secret or a header value', async () => {

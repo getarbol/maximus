@@ -246,6 +246,10 @@ secret is the deployment's mistake, not the sender's: the verifier throws
 `A webhook secret is required; check the binding that holds it.` before it reads any header, and the
 route answers `INTERNAL_ERROR`.
 
+To send webhooks, `signStandardWebhook({ id, payload, secret })` signs a delivery with the specification's own
+`standardwebhooks` package and answers the `webhook-id`, `webhook-timestamp` and `webhook-signature` headers
+to send with the payload, exactly as given; `verifyStandardWebhook` on the receiving side accepts them.
+
 `WEBHOOK_SIGNATURE_INVALID` is not a failure of the standard catalog, and `context.fail` answers only
 failures of the application's catalog: answer a refused delivery with one of those, as the webhook above
 answers `UNAUTHORIZED`. Then record the delivery durably, by its id when the scheme has one, and answer
@@ -385,6 +389,9 @@ class Session extends DurableObject<Env> {
 export const ReportsService = worker.service(ReportsEntrypoint);
 export const SessionObject = worker.durableObject(Session);
 ```
+
+`worker.tasks` is the task store of the routes that declare `task`: export it as `MaximusTasks` and bind it
+as `MAXIMUS_TASKS`, a SQLite Durable Object (see [Tasks](mcp.md#tasks)).
 
 A wrapped class keeps its methods, its type and its identity. Maximus does not check the arguments of
 your own methods: check them where they enter, as any boundary does. Keep Durable Object class names and

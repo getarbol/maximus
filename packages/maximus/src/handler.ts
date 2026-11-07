@@ -244,6 +244,8 @@ export interface HandlerOptions {
   mcp?: HandlerMcp;
   /** Also serve it as a native RPC method, to every allowed caller or to the listed ones. */
   rpc?: Exposure['rpc'];
+  /** `true`, or `{ ttlMs }`: a call that outlasts one second may answer a task instead of its result. */
+  task?: Exposure['task'];
   /**
    * The largest request body it accepts, in bytes: its JSON body, or its byte body. By default, the
    * application's limit.

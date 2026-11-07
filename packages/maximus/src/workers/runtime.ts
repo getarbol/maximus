@@ -11,11 +11,13 @@ import type { ExecutionCall } from '../execution.ts';
 import { standardErrors, createHttpHandler, err, PrincipalSchema, parseInput } from '../index.ts';
 import type { Static, Failure, Result, Principal, HttpRoute } from '../index.ts';
 import type { HttpOptions, AppManifest, OperationShape } from '../internals.ts';
+import type { TaskStore } from '../tasks.ts';
 import { recordExecution, reportUnexpected, telemetryEnabled, withTelemetry } from '../telemetry.ts';
 import { createAssetHandler } from './assets.ts';
 import type { WorkerAssetsOptions } from './assets.ts';
 import { instrumentDurableObject, instrumentService } from './internal/instrumentation.ts';
 import { annotateInvocation } from './internal/worker-tracing.ts';
+import { tasksObject } from './tasks.ts';
 
 export type { WorkerAssetsOptions } from './assets.ts';
 
@@ -53,6 +55,11 @@ export interface WorkerRuntime<E, O extends Record<string, OperationShape>> {
   durableObject: <T extends DurableObject<E>, D extends new (state: DurableObject['ctx'], env: E) => T>(
     implementation: D
   ) => D;
+  /**
+   * The task store of the operations that declare `task: true`: export it by name, `MaximusTasks`, as the class
+   * of a SQLite Durable Object binding named `MAXIMUS_TASKS`.
+   */
+  tasks: new (state: DurableObject['ctx'], env: E) => DurableObject<E> & TaskStore;
 }
 /** A Worker event handler besides fetch: the event, then the bindings and the execution context. */
 type WorkerEventHandler<E> = (
@@ -223,6 +230,7 @@ export function createWorker<E, C, O extends Record<string, OperationShape>>(
     durableObject(implementation) {
       return instrumentDurableObject(implementation, manifest.telemetry);
     },
+    tasks: instrumentDurableObject(tasksObject(manifest), manifest.telemetry),
   };
 }
 export { credentials } from './credentials.ts';

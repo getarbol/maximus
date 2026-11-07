@@ -231,6 +231,49 @@ internal error (`-32603`) with the message `Internal error`, never the failure's
 as `maximus.unexpected`. A client's mistake, such as a protocol revision the server does not speak or a
 missing header, is answered with a `4xx` status by the SDK and is not reported.
 
+## Tasks
+
+A route that may outlast a client's patience declares `task: true`. A call to it that has not finished
+after one second then answers a task, which goes on running, instead of its result:
+
+- over MCP, to a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`, revision
+  2026-07-28) on the call: `resultType: "task"`, then `tasks/get` and `tasks/cancel`, in the wire format of
+  `@modelcontextprotocol/ext-tasks`. A failure completes the task with the same tool error a direct call
+  answers. A task id the caller did not start, or one that expired, is invalid params (`-32602`);
+- over HTTP, to a request that sends `Prefer: respond-async` (RFC 7240): `202` with the task, its URL in
+  `Location`, then `getOperationTask` (`GET /v1/operation-tasks/{taskId}`) and `cancelOperationTask`
+  (`POST /v1/operation-tasks/{taskId}/cancel`), which `.build()` adds, which any scope of the task routes
+  admits and whose only failure besides admission's is `INVALID_INPUT` at `/taskId`: another caller's task,
+  or an unknown or expired one. No service resource uses those names or paths, so a service's own `tasks`
+  keeps its routes.
+
+Any other call answers its result however long it takes, as before. Each task lives in its own SQLite
+Durable Object, named by its id, bound as `MAXIMUS_TASKS` to the class `createWorker` returns as `tasks`,
+which the Worker exports as `MaximusTasks`. A project that binds it gets the export:
+
+```ts
+exports: { MaximusTasks: exports.durableObject({ storage: 'sqlite' }) },
+env: { MAXIMUS_TASKS: bindings.durableObject({ worker: NAME, exportName: 'MaximusTasks' }) },
+```
+
+Without the binding, no call answers a task. The object's alarm starts the task at once, so no task waits for
+another, and runs it as the caller, at most once: a task it finds started but unfinished, after a restart,
+settles as `OUTCOME_UNKNOWN` and never runs again. Cancelling stops only a task that has not started. The
+handler knows it runs as a task: `taskId` holds the task's id, and is absent on a call that answers its own
+result.
+
+The input is never stored. The object holds it in memory from the call until its alarm starts the task,
+which is at once, and drops it then; a task whose object restarted in between settles as `INTERNAL_ERROR`
+without running. The task and its result are kept for an hour after the call, then deleted; `task: { ttlMs }`
+keeps them for `ttlMs` milliseconds instead, up to a day. `.build()` refuses a task whose output marks
+anything `secret: true`, or that reads bytes or answers a file. The caller's bearer token is never stored, so
+a task runs without `authority.token`.
+
+A task id is the service's namespace, a dot and a UUID, so a gateway that relays tasks routes `tasks/get` and
+`tasks/cancel` by the namespace: one service per namespace. `@arbol-ai/maximus/mcp/tasks` serves the same
+methods on its MCP server with `attachTasks`, reads a client's declaration with `declaresTasks(meta)` and a
+task answered to `tools/call` with `isTaskResult(result)`, without loading `@modelcontextprotocol/ext-tasks`.
+
 ## Limits
 
 A request's body is admitted up to the largest `maxBodyBytes` among the tools its caller may call, or the
@@ -265,7 +308,8 @@ The server speaks both eras of the protocol:
 The server identifies itself by the service's `name`, `title` and `version`. Its lists change only with a
 deployment, so it declares `listChanged: false` for tools, resources and prompts and sends no
 notifications; a `subscriptions/listen` stream is acknowledged and closed at once. Its capabilities are
-tools, resources and prompts, and the Skills extension when it serves skills; it never asks a client to
+tools, resources and prompts, the Skills extension when it serves skills, and the Tasks extension when a
+route declares `task` and the task store is bound; it never asks a client to
 sample a model or to elicit input.
 
 ## Resources

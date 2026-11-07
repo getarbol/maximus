@@ -101,6 +101,7 @@ object, and its handler may return nothing.
 | `http`                           | `successStatus` (200, 201 or 202), `body: 'bytes'`, `headers`, `response: 'attachment'`.                                                |
 | `mcp`                            | `{ name, idempotent?, openWorld? }`: also an MCP tool. `openWorld` is `true` unless declared.                                           |
 | `rpc`                            | `true` for every caller in `rpc.callers`, or `{ callers }` for some of them.                                                            |
+| `task`                           | `true` or `{ ttlMs }`: a call that outlasts one second answers a task (MCP Tasks, or `Prefer: respond-async`); needs `MAXIMUS_TASKS`.    |
 | `maxBodyBytes`, `maxOutputBytes` | Its own limits, up to 16 MiB; the application's (32 KiB and 256 KiB) otherwise.                                                         |
 
 A field no operation has does not compile, and `.build()` refuses it. A contract kept in a `const` keeps

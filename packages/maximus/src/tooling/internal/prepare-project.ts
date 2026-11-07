@@ -702,6 +702,10 @@ export function prepareProject(directory: string, mode: string, project: Project
         'export default worker.handler;',
         'export const Service = worker.entrypoint;',
         ...durableObjects,
+        // The task store of the routes that declare `task`, when the project binds it.
+        ...(Object.hasOwn(project.env.production, 'MAXIMUS_TASKS')
+          ? ['export const MaximusTasks = worker.tasks;']
+          : []),
       ]
     ),
     // The HTTP handler the Worker serves, without the Workers runtime: what a project's tests call in Node.
