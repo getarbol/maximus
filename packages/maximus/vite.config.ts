@@ -64,6 +64,7 @@ export default defineConfig({
       onlyBundle: [],
       onlyImport: [
         '@modelcontextprotocol/server',
+        '@scalar/openapi-parser',
         '@sinclair/typebox',
         'ajv-formats',
         'jose',

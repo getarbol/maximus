@@ -2,10 +2,10 @@
  * `maximus openapi`: the OpenAPI documents of a project's Worker, as files beside its sources. The HTTP
  * document, the one the Worker serves, is the contract the project's clients are generated from; the RPC
  * document, of the operations it serves over native RPC, is the one other services type their bindings from.
- * `--check` keeps both current in CI.
+ * `--check` keeps both current and valid OpenAPI 3.1 in CI.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import type { AppManifest, OperationShape } from '../../manifest.ts';
 import { createRpcOpenApi } from '../../openapi.ts';
@@ -92,6 +92,28 @@ function operationCount(document: Record<string, unknown>): number {
   return Object.values(paths).reduce((count, methods) => count + Object.keys(methods).length, 0);
 }
 
+/** The most problems a refused document names. */
+const MAX_PROBLEMS = 5;
+
+/**
+ * Throws when a document is not valid OpenAPI 3.1, naming its file and its first problems. The validator is
+ * build-time tooling: it loads for the check alone, never in a Worker.
+ */
+export async function assertValidOpenApi(name: string, document: Record<string, unknown>): Promise<void> {
+  const { validate } = await import('@scalar/openapi-parser');
+  // The validator may fill in what it reads; the document written is the one generated.
+  const result = await validate(structuredClone(document));
+  if (result.valid && result.version === '3.1') {
+    return;
+  }
+  const problems = result.valid
+    ? [`it declares OpenAPI ${result.version}`]
+    : result.errors
+        .slice(0, MAX_PROBLEMS)
+        .map(({ path, message }) => (path?.length ? `${[path].flat().join('/')}: ${message}` : message));
+  throw new Error(`${name} is not valid OpenAPI 3.1: ${problems.join('; ')}.`);
+}
+
 /** Writes a document to a file as JSON with two-space indentation, unless `check` asks only whether it differs. */
 function writeDocument(file: string, document: Record<string, unknown>, check: boolean): OpenApiFile {
   const text = `${JSON.stringify(document, null, 2)}\n`;
@@ -106,7 +128,7 @@ function writeDocument(file: string, document: Record<string, unknown>, check: b
 /**
  * Writes the documents of the project's Worker: the HTTP one to `out`, `openapi.json` at its root by default,
  * and, when an operation declares `rpc`, the RPC one beside it, `openapi.rpc.json`. With `check`, writes
- * nothing and answers whether each file differs.
+ * nothing, throws for a document that is not valid OpenAPI 3.1 and answers whether each file differs.
  */
 export async function writeOpenApi(
   directory: string,
@@ -114,10 +136,17 @@ export async function writeOpenApi(
 ): Promise<OpenApiFiles> {
   const documents = await projectDocuments(directory);
   const file = resolve(directory, out);
+  const rpcFile = file.endsWith('.json') ? `${file.slice(0, -'.json'.length)}.rpc.json` : `${file}.rpc.json`;
+  const servesRpc = operationCount(documents.rpc) > 0;
+  if (check) {
+    await assertValidOpenApi(relative(directory, file), documents.http);
+    if (servesRpc) {
+      await assertValidOpenApi(relative(directory, rpcFile), documents.rpc);
+    }
+  }
   const written = writeDocument(file, documents.http, check);
-  if (!operationCount(documents.rpc)) {
+  if (!servesRpc) {
     return written;
   }
-  const rpcFile = file.endsWith('.json') ? `${file.slice(0, -'.json'.length)}.rpc.json` : `${file}.rpc.json`;
   return { ...written, rpc: writeDocument(rpcFile, documents.rpc, check) };
 }

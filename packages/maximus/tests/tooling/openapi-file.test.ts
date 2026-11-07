@@ -1,6 +1,6 @@
 /**
  * `maximus openapi`: the document the project's Worker serves, written beside its sources, kept when it is
- * current, and checked without being written.
+ * current, and checked without being written, a document that is not valid OpenAPI 3.1 failing the check.
  */
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
-import { writeOpenApi } from '../../src/tooling/internal/openapi-file.ts';
+import { assertValidOpenApi, writeOpenApi } from '../../src/tooling/internal/openapi-file.ts';
 import { options, project, removeProjects } from './fixtures.ts';
 
 /** Inside the workspace's node_modules, where the project resolves Vite and the Maximus build. */
@@ -101,3 +101,40 @@ test('writes the RPC document beside the HTTP one when a route is served over na
   writeFileSync(join(root, 'openapi.rpc.json'), '{}\n');
   expect(await writeOpenApi(root, { check: true })).toMatchObject({ changed: false, rpc: { changed: true } });
 }, 60_000);
+
+test('refuses a document that is not valid OpenAPI 3.1, naming its file and its first problems', async () => {
+  const valid = { openapi: '3.1.0', info: { title: 'Notes', version: '1' }, paths: {} };
+  await expect(assertValidOpenApi('openapi.json', valid)).resolves.toBeUndefined();
+  const listed = { get: { responses: { '200': { description: 'The notes.' } } } };
+  for (const [document, problem] of [
+    [{ ...valid, info: { version: '1' } }, "/info: must have required property 'title'"],
+    [{ ...valid, paths: { 'v1/notes': listed } }, '/paths: Property v1/notes is not expected to be here'],
+    [{ ...valid, openapi: '3.0.3' }, 'it declares OpenAPI 3.0'],
+    [
+      {
+        ...valid,
+        paths: {
+          '/v1/notes': {
+            get: {
+              responses: {
+                '200': {
+                  description: 'The notes.',
+                  content: { 'application/json': { schema: { $ref: '#/components/schemas/Missing' } } },
+                },
+              },
+            },
+          },
+        },
+      },
+      "Can't resolve reference: #/components/schemas/Missing",
+    ],
+  ] as const) {
+    await expect(assertValidOpenApi('openapi.rpc.json', document)).rejects.toThrow(
+      new Error(`openapi.rpc.json is not valid OpenAPI 3.1: ${problem}.`)
+    );
+  }
+  // The check reads a copy: the document it was given is the one written.
+  const document = structuredClone(valid);
+  await assertValidOpenApi('openapi.json', document);
+  expect(document).toStrictEqual(valid);
+});

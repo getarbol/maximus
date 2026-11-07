@@ -24,6 +24,9 @@ of the release commits.
   for someone it does not control, such as a customer's server: https on its default port to a public DNS
   name, without credentials or a fragment; never an IP literal, a special-use or private-network name, nor
   Cloudflare's or Arbol's own hosts (`getarbol.com`, `getarbol.app` and their subdomains).
+- `maximus openapi --check` also validates each document with Scalar's OpenAPI parser
+  (`@scalar/openapi-parser`) and fails for one that is not valid OpenAPI 3.1, naming its first problems. The
+  parser is a dependency of the CLI alone: it loads for the check, never in a Worker.
 
 ## 8.1.0 (2026-11-04)
 

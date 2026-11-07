@@ -243,9 +243,11 @@ openapi.json was written: 5 operations.
 
 It says `was written` when a file changed and `was current` when it did not, for each document. With
 `--check` it writes nothing: it says `matches the routes`, or that a file `differs from what the routes
-declare; run maximus openapi.` and exits with status 1, which keeps committed documents current in CI. With
-`--json` it prints `{ file, operations, changed, rpc? }`, `rpc` holding the same fields for the RPC
-document.
+declare; run maximus openapi.` and exits with status 1, which keeps committed documents current in CI. It also
+validates each document with Scalar's OpenAPI parser and fails, with status 1, for one that is not valid
+OpenAPI 3.1: `openapi.json is not valid OpenAPI 3.1: <its first problems>.` The parser runs only for the
+check, never in a Worker. With `--json` it prints `{ file, operations, changed, rpc? }`, `rpc` holding the
+same fields for the RPC document.
 
 Commit both files: SDK generators read `openapi.json`, as [Generate clients](../guides/routes.md#generate-clients)
 shows, and another service types its binding from `openapi.rpc.json`, as [Worker RPC](../guides/worker-rpc.md)
