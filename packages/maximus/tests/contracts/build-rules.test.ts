@@ -1,8 +1,8 @@
 /**
  * What `.build()` refuses, rule by rule: the namespace, origin, limits and telemetry of the application, each
  * operation's name, scopes, actors, schemas, byte bodies, attachments, headers, limits and routes, schema
- * references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with the rule's message,
- * and an application that breaks several rules always meets the same one first.
+ * references, MCP tool names, RPC callers, guides, skills and the skill tool. Each refusal is a TypeError with
+ * the rule's message, and an application that breaks several rules always meets the same one first.
  */
 import { expect, it } from 'vite-plus/test';
 
@@ -223,7 +223,7 @@ it('refuses an input or output that is not a strict object or a union of strict 
 });
 
 it('refuses a record whose keys follow a pattern unless it refuses every other key, at any depth', () => {
-  const labels = (options: object = {}) =>
+  const labels = (options: { additionalProperties?: boolean } = {}) =>
     t.Object({ labels: t.Record(t.String({ pattern: '^[a-z]+$' }), t.String(), options) }, strict);
   const refused = new TypeError(
     'Operation "readRecord": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.'

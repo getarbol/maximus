@@ -1,30 +1,13 @@
 /**
- * Schema validation: the check-only and the decoding validators, the guard that admits only bounded plain
- * JSON, and the RFC format validators registered once with TypeBox.
+ * Schema validation: the check-only and the decoding validators and the guard that admits only bounded plain
+ * JSON, on TypeBox as `internal/value.ts` configures it.
  */
-import { FormatRegistry } from '@sinclair/typebox';
-import type { Static, TSchema } from '@sinclair/typebox';
-import { Value, HasTransform, TransformDecode } from '@sinclair/typebox/value';
-import { fullFormats } from 'ajv-formats/dist/formats.js';
+import type { Static, TSchema } from 'typebox';
 
 import { SchemaValidationError } from './input-schemas.ts';
-import { codecFault, decodeIssues, jsonPointer } from './internal/decode-issues.ts';
+import { decodeIssues, jsonPointer } from './internal/decode-issues.ts';
+import { DecodeUnsafe, HasCodec, MAX_ISSUES, Value } from './internal/value.ts';
 import type { StaticDecode } from './schema-types.ts';
-
-// Maintained RFC validators only; never instantiate Ajv or compile dynamic JavaScript in workerd.
-for (const name of ['date', 'time', 'date-time', 'email', 'uuid', 'uri'] as const) {
-  const format = fullFormats[name];
-  const validator = typeof format === 'object' && !(format instanceof RegExp) ? format.validate : format;
-  FormatRegistry.Set(name, (value) => {
-    if (value.length > 8192) {
-      return false;
-    }
-    if (validator instanceof RegExp) {
-      return validator.test(value);
-    }
-    return typeof validator === 'function' && (validator as (input: string) => unknown)(value) === true;
-  });
-}
 
 /**
  * Checks a value against a schema without decoding it: the value when it matches, else an `INVALID_INPUT`
@@ -90,9 +73,9 @@ function boundedInput(value: unknown, depth = 0, parents = new Set<object>()): b
 
 /**
  * Decodes input against its schema: admits only a bounded plain JSON tree, applies the declared defaults to a
- * copy, checks it and runs its codecs. Throws a `SchemaValidationError` (or TypeBox's assertion error) when the
- * input is refused, and whatever an owner codec throws otherwise. Output is checked, never decoded: what a
- * handler returns must already be canonical.
+ * copy, checks it, refinements included, and runs its codecs. Throws a `SchemaValidationError` (or TypeBox's
+ * assertion error) when the input is refused, and whatever an owner codec throws otherwise. Output is checked,
+ * never decoded: what a handler returns must already be canonical.
  */
 export function decodeSchema<Schema extends TSchema>(schema: Schema, input: unknown): StaticDecode<Schema> {
   return admitSchema(schema, input).value;
@@ -111,8 +94,9 @@ function admitSchema<Schema extends TSchema>(
   const checked: unknown = Value.Default(schema, Value.Clone(input));
   Value.Assert(schema, checked);
   return {
-    value: (HasTransform(schema, [])
-      ? TransformDecode(schema, [], checked)
+    // Decoding changes objects in place: what the schema checked stays as it was checked.
+    value: (HasCodec(schema)
+      ? DecodeUnsafe({}, schema, Value.Clone(checked))
       : checked) as StaticDecode<Schema>,
     checked,
   };
@@ -125,8 +109,6 @@ export interface InputIssue {
   /** Why the field was refused, for people, at most 256 characters; it never contains the input value. */
   message: string;
 }
-/** The most field issues one refusal carries. */
-const MAX_ISSUES = 10;
 /** The longest path or message one issue carries. */
 const MAX_ISSUE_TEXT = 256;
 
@@ -151,7 +133,7 @@ export function admitInput<Schema extends TSchema>(schema: Schema, input: unknow
   } catch (error) {
     const refused = decodeIssues(error, MAX_ISSUES);
     if (!refused) {
-      throw codecFault(error);
+      throw error;
     }
     const issues: InputIssue[] = refused.map((issue) => ({
       path: jsonPointer(issue.path).slice(0, MAX_ISSUE_TEXT),

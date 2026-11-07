@@ -46,8 +46,8 @@
             "required": true,
             "description": "The date.",
             "schema": {
-              "format": "date",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           }
         ],
@@ -283,8 +283,8 @@
             "required": true,
             "description": "The date.",
             "schema": {
-              "format": "date",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           }
         ],
@@ -547,8 +547,8 @@
             "required": true,
             "description": "The date.",
             "schema": {
-              "format": "date",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           },
           {
@@ -777,8 +777,8 @@
             "required": true,
             "description": "The date.",
             "schema": {
-              "format": "date",
-              "type": "string"
+              "type": "string",
+              "format": "date"
             }
           }
         ],
@@ -988,7 +988,6 @@
   "components": {
     "schemas": {
       "Booking": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "bookingId",
@@ -1003,80 +1002,81 @@
           "slot": {
             "anyOf": [
               {
-                "const": "09:00",
-                "type": "string"
+                "type": "string",
+                "const": "09:00"
               },
               {
-                "const": "09:30",
-                "type": "string"
+                "type": "string",
+                "const": "09:30"
               },
               {
-                "const": "10:00",
-                "type": "string"
+                "type": "string",
+                "const": "10:00"
               },
               {
-                "const": "10:30",
-                "type": "string"
+                "type": "string",
+                "const": "10:30"
               },
               {
-                "const": "11:00",
-                "type": "string"
+                "type": "string",
+                "const": "11:00"
               },
               {
-                "const": "11:30",
-                "type": "string"
+                "type": "string",
+                "const": "11:30"
               },
               {
-                "const": "12:00",
-                "type": "string"
+                "type": "string",
+                "const": "12:00"
               },
               {
-                "const": "12:30",
-                "type": "string"
+                "type": "string",
+                "const": "12:30"
               },
               {
-                "const": "13:00",
-                "type": "string"
+                "type": "string",
+                "const": "13:00"
               },
               {
-                "const": "13:30",
-                "type": "string"
+                "type": "string",
+                "const": "13:30"
               },
               {
-                "const": "14:00",
-                "type": "string"
+                "type": "string",
+                "const": "14:00"
               },
               {
-                "const": "14:30",
-                "type": "string"
+                "type": "string",
+                "const": "14:30"
               },
               {
-                "const": "15:00",
-                "type": "string"
+                "type": "string",
+                "const": "15:00"
               },
               {
-                "const": "15:30",
-                "type": "string"
+                "type": "string",
+                "const": "15:30"
               },
               {
-                "const": "16:00",
-                "type": "string"
+                "type": "string",
+                "const": "16:00"
               },
               {
-                "const": "16:30",
-                "type": "string"
+                "type": "string",
+                "const": "16:30"
               }
             ]
           },
           "patientRef": {
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
           },
           "bookedAt": {
-            "format": "date-time",
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "BookingNotFoundError": {
         "type": "object",
@@ -1169,7 +1169,6 @@
         }
       },
       "CreateDayBookingBody": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "slot",
@@ -1179,76 +1178,77 @@
           "slot": {
             "anyOf": [
               {
-                "const": "09:00",
-                "type": "string"
+                "type": "string",
+                "const": "09:00"
               },
               {
-                "const": "09:30",
-                "type": "string"
+                "type": "string",
+                "const": "09:30"
               },
               {
-                "const": "10:00",
-                "type": "string"
+                "type": "string",
+                "const": "10:00"
               },
               {
-                "const": "10:30",
-                "type": "string"
+                "type": "string",
+                "const": "10:30"
               },
               {
-                "const": "11:00",
-                "type": "string"
+                "type": "string",
+                "const": "11:00"
               },
               {
-                "const": "11:30",
-                "type": "string"
+                "type": "string",
+                "const": "11:30"
               },
               {
-                "const": "12:00",
-                "type": "string"
+                "type": "string",
+                "const": "12:00"
               },
               {
-                "const": "12:30",
-                "type": "string"
+                "type": "string",
+                "const": "12:30"
               },
               {
-                "const": "13:00",
-                "type": "string"
+                "type": "string",
+                "const": "13:00"
               },
               {
-                "const": "13:30",
-                "type": "string"
+                "type": "string",
+                "const": "13:30"
               },
               {
-                "const": "14:00",
-                "type": "string"
+                "type": "string",
+                "const": "14:00"
               },
               {
-                "const": "14:30",
-                "type": "string"
+                "type": "string",
+                "const": "14:30"
               },
               {
-                "const": "15:00",
-                "type": "string"
+                "type": "string",
+                "const": "15:00"
               },
               {
-                "const": "15:30",
-                "type": "string"
+                "type": "string",
+                "const": "15:30"
               },
               {
-                "const": "16:00",
-                "type": "string"
+                "type": "string",
+                "const": "16:00"
               },
               {
-                "const": "16:30",
-                "type": "string"
+                "type": "string",
+                "const": "16:30"
               }
             ]
           },
           "patientRef": {
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Empty": {
         "type": "object",
@@ -1471,20 +1471,19 @@
         }
       },
       "InvalidInputFailureData": {
-        "additionalProperties": false,
         "type": "object",
         "properties": {
           "issues": {
-            "maxItems": 10,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ValidationIssue"
-            }
+            },
+            "maxItems": 10
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ListDayBookingsResult": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "bookings"
@@ -1496,7 +1495,8 @@
               "$ref": "#/components/schemas/Booking"
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ListDayBookingsResultResponse": {
         "type": "object",
@@ -1527,7 +1527,6 @@
         }
       },
       "ListDaySlotsResult": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "date",
@@ -1535,8 +1534,8 @@
         ],
         "properties": {
           "date": {
-            "format": "date",
-            "type": "string"
+            "type": "string",
+            "format": "date"
           },
           "slots": {
             "type": "array",
@@ -1550,68 +1549,68 @@
                 "slot": {
                   "anyOf": [
                     {
-                      "const": "09:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "09:00"
                     },
                     {
-                      "const": "09:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "09:30"
                     },
                     {
-                      "const": "10:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "10:00"
                     },
                     {
-                      "const": "10:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "10:30"
                     },
                     {
-                      "const": "11:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "11:00"
                     },
                     {
-                      "const": "11:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "11:30"
                     },
                     {
-                      "const": "12:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "12:00"
                     },
                     {
-                      "const": "12:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "12:30"
                     },
                     {
-                      "const": "13:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "13:00"
                     },
                     {
-                      "const": "13:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "13:30"
                     },
                     {
-                      "const": "14:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "14:00"
                     },
                     {
-                      "const": "14:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "14:30"
                     },
                     {
-                      "const": "15:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "15:00"
                     },
                     {
-                      "const": "15:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "15:30"
                     },
                     {
-                      "const": "16:00",
-                      "type": "string"
+                      "type": "string",
+                      "const": "16:00"
                     },
                     {
-                      "const": "16:30",
-                      "type": "string"
+                      "type": "string",
+                      "const": "16:30"
                     }
                   ]
                 },
@@ -1621,7 +1620,8 @@
               }
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ListDaySlotsResultResponse": {
         "type": "object",
@@ -2162,12 +2162,11 @@
         }
       },
       "Uuid": {
+        "type": "string",
         "format": "uuid",
-        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-        "type": "string"
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "ValidationIssue": {
-        "additionalProperties": false,
         "type": "object",
         "required": [
           "path",
@@ -2175,15 +2174,16 @@
         ],
         "properties": {
           "path": {
+            "type": "string",
             "maxLength": 256,
-            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input.",
-            "type": "string"
+            "description": "RFC 6901 JSON Pointer to the refused field; empty for the whole input."
           },
           "message": {
-            "maxLength": 256,
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "headers": {

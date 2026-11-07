@@ -4,8 +4,8 @@
  * for it. A name is public, so it names exactly one shape. Domain records (people, patients,
  * identity documents) stay with the service that owns them.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static, TString } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { Static, TString } from 'typebox';
 
 /** An email address of at most 254 characters, named `EmailAddress`. */
 export const EmailAddressSchema = Type.String({
@@ -47,10 +47,9 @@ export const DeletedObjectSchema = Type.Object(
 export type DeletedObject = Static<typeof DeletedObjectSchema>;
 
 /** The URL of a `SignedUrl`, described as the credential it is. */
-const SignedUrlFieldSchema: TString = {
-  ...HttpsUrlSchema,
+const SignedUrlFieldSchema: TString = Type.With(HttpsUrlSchema, {
   description: 'The signed URL. Anyone holding it has access until it expires.',
-};
+});
 /**
  * A link that grants access by itself until it expires, such as a file download: its HTTPS `url` and its
  * `expiresAt` date-time, named `SignedUrl`.

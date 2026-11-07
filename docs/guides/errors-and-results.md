@@ -176,8 +176,8 @@ An input its schema refuses answers `INVALID_INPUT` on every transport, with up 
   "retryable": false,
   "data": {
     "issues": [
-      { "path": "/title", "message": "Expected string length greater or equal to 1" },
-      { "path": "/archived", "message": "Unexpected property" }
+      { "path": "/title", "message": "must not have fewer than 1 characters" },
+      { "path": "/archived", "message": "must not be present" }
     ]
   }
 }

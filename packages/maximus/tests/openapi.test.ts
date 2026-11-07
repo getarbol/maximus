@@ -714,35 +714,38 @@ it('refuses a schema name the document gives its own components, or a generated 
 });
 
 it('bundles a recursive $id schema into a local component, in the built and the served document', async () => {
-  // As a service's bounded JSON value: TypeBox names it with its `$id` and refers to it by that name.
-  const value = t.Recursive(
-    (Self) =>
-      t.Union([
+  // As a service's bounded JSON value: TypeBox names its definition and refers to it by that name.
+  const value = t.Cyclic(
+    {
+      JsonValue: t.Union([
         t.String({ maxLength: 64 }),
         t.Number(),
         t.Boolean(),
         t.Null(),
-        t.Array(Self, { maxItems: 8 }),
-        t.Record(t.String(), Self, { maxProperties: 8 }),
+        t.Array(t.Ref('JsonValue'), { maxItems: 8 }),
+        t.Record(t.String(), t.Ref('JsonValue'), { maxProperties: 8 }),
       ]),
-    { $id: 'JsonValue', description: 'A bounded JSON value.' }
+    },
+    'JsonValue',
+    { description: 'A bounded JSON value.' }
   );
-  // A service spreads it to describe one use, optional or not, and nests it in another named schema.
-  const condition = t.Recursive(
-    (Self) =>
-      t.Union([
-        t.Object({ all: t.Array(Self, { maxItems: 8 }) }, { additionalProperties: false }),
+  // A service annotates it to describe one use, optional or not, and nests it in another named schema.
+  const condition = t.Cyclic(
+    {
+      Condition: t.Union([
+        t.Object({ all: t.Array(t.Ref('Condition'), { maxItems: 8 }) }, { additionalProperties: false }),
         t.Object(
-          { path: t.String(), value: { ...t.Optional(value), description: 'The compared value.' } },
+          { path: t.String(), value: t.With(t.Optional(value), { description: 'The compared value.' }) },
           { additionalProperties: false }
         ),
       ]),
-    { $id: 'Condition' }
+    },
+    'Condition'
   );
   const setting = t.Object(
     {
       value,
-      fallback: { ...value, description: 'The value used when none is set.' },
+      fallback: t.With(value, { description: 'The value used when none is set.' }),
       when: t.Optional(condition),
     },
     { additionalProperties: false }
@@ -800,7 +803,7 @@ it('bundles a recursive $id schema into a local component, in the built and the 
       { type: 'array', items: { $ref: '#/components/schemas/JsonValue' }, maxItems: 8 },
       {
         type: 'object',
-        patternProperties: { '^(.*)$': { $ref: '#/components/schemas/JsonValue' } },
+        patternProperties: { '^.*$': { $ref: '#/components/schemas/JsonValue' } },
         maxProperties: 8,
       },
     ],
@@ -862,9 +865,10 @@ function references(value: unknown, found: string[] = []): string[] {
 }
 
 it('bundles schemas in adapter operation extensions with the native document', () => {
-  const schema = t.Recursive((self) => t.Object({ value: t.String(), children: t.Array(self) }), {
-    $id: 'ExtensionTree',
-  });
+  const schema = t.Cyclic(
+    { ExtensionTree: t.Object({ value: t.String(), children: t.Array(t.Ref('ExtensionTree')) }) },
+    'ExtensionTree'
+  );
   const document = createOpenApi(application(), {
     operationExtensions: (name) => ({ 'x-owner-name': name, 'x-owner-input': schema }),
   });

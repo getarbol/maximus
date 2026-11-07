@@ -2,12 +2,11 @@
  * The one execution path every transport calls: the caller's eligibility, input decoding, context
  * preparation, middleware, the handler, and the checks on what it returns.
  */
-import { Value } from '@sinclair/typebox/value';
-
 import { isAttachmentSchema, validAttachment } from './binary.ts';
 import type { BinaryBody } from './binary.ts';
 import { standardErrors } from './errors.ts';
 import type { Failure } from './errors.ts';
+import { Value } from './internal/value.ts';
 import {
   ADMISSION_CODES,
   BODY_CODES,

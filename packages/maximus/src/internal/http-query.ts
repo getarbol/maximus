@@ -4,6 +4,7 @@
  */
 import { operationPathParameters } from '../http-paths.ts';
 import type { OperationShape } from '../manifest.ts';
+import type { SchemaKeywords } from '../schema-types.ts';
 import { queryKind } from './query-kind.ts';
 import type { QueryKind } from './query-kind.ts';
 
@@ -18,7 +19,7 @@ const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 export function queryKinds(op: OperationShape): ReadonlyMap<string, QueryKind> {
   const path = new Set(op.http ? operationPathParameters(op.http.path) : []);
   const kinds = new Map<string, QueryKind>();
-  for (const [field, schema] of Object.entries(op.input.properties ?? {})) {
+  for (const [field, schema] of Object.entries((op.input as SchemaKeywords).properties ?? {})) {
     const kind = path.has(field) ? null : queryKind(schema);
     if (kind) {
       kinds.set(field, kind);

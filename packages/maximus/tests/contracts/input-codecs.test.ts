@@ -2,8 +2,9 @@
  * Owner codecs compiled by inputSchema(): literal unions; strict, loose, stripping and extended objects;
  * normalizers (chained, and on nullable text) before their checks; transforms after them; inspections and
  * refinements with the owner's messages; URL checks; pipes from a wire shape to a canonical one; tuples and
- * records; a separate wire schema; the codec detection `.build()` relies on; and readers that rethrow an
- * owner's own fault. Every refusal names the field and the expectation, never the refused value.
+ * records; a separate wire schema; the codec detection `.build()` relies on; annotations that keep what
+ * TypeBox hides on a schema; and readers that rethrow an owner's own fault. Every refusal names the field and
+ * the expectation, never the refused value.
  */
 import { expect, it, vi } from 'vite-plus/test';
 
@@ -62,19 +63,18 @@ it('keeps, refuses or drops unknown keys as each object declares, and an extende
   expect(readSchema(looseObject(person), extra)).toEqual(extra);
   const refused = checkSchema(strictObject(stripObject({ name: t.String() })), extra);
   expect(refused.error?.issues).toEqual([
-    { code: 'invalid_input', message: 'Unexpected property', path: ['extra'] },
+    { code: 'invalid_input', message: 'must not be present', path: ['extra'] },
   ]);
   expect(JSON.stringify(refused.error?.issues)).not.toContain('EXTRA_SENTINEL');
   // On the wire, where nothing is stripped, a stripping object refuses unknown keys like a strict one.
   expect(decode(inputSchema(stripObject({ name: t.String() })), extra)).toEqual({
-    issues: [{ path: '/extra', message: 'Unexpected property' }],
+    issues: [{ path: '/extra', message: 'must not be present' }],
   });
   // Extended, each object keeps how it treats unknown keys, and requires its new fields.
   const stripped = extendObject(stripObject({ name: t.String() }), { age: t.Integer() });
   expect(readSchema(stripped, { ...extra, age: 3 })).toEqual({ name: 'Ana', age: 3 });
   expect(checkSchema(stripped, extra).error?.issues).toEqual([
-    expect.objectContaining({ path: ['age'], message: 'Expected required property' }),
-    expect.objectContaining({ path: ['age'], message: 'Expected integer' }),
+    { code: 'invalid_input', message: 'must be present', path: ['age'] },
   ]);
   expect(
     checkSchema(extendObject(strictObject(person), { age: t.Integer() }), { ...extra, age: 3 }).success
@@ -96,7 +96,7 @@ it('normalizes text before its checks, which run after the last normalizer of a 
   expect(decode(Input, { code: ' CODE_SENTINEL ' })).toEqual({
     issues: [{ path: '/code', message: NORMALIZED }],
   });
-  expect(decode(Input, { code: 7 })).toEqual({ issues: [{ path: '/code', message: 'Expected string' }] });
+  expect(decode(Input, { code: 7 })).toEqual({ issues: [{ path: '/code', message: 'must be string' }] });
 });
 
 it('normalizes a nullable text before its union checks the canonical pattern and length', () => {
@@ -113,7 +113,7 @@ it('normalizes a nullable text before its union checks the canonical pattern and
     expect(JSON.stringify(refused).toLowerCase()).not.toContain('sentinel');
   }
   expect(decode(Input, { code: 7 })).toEqual({
-    issues: [{ path: '/code', message: 'Expected union value' }],
+    issues: [{ path: '/code', message: 'must match a schema in anyOf' }],
   });
 });
 
@@ -125,7 +125,7 @@ it('transforms a value only once its source checks pass, each transform from the
   expect(decode(Input, { count: '42' })).toEqual({ value: { count: 42 } });
   toNumber.mockClear();
   expect(decode(Input, { count: '4x2' })).toEqual({
-    issues: [{ path: '/count', message: "Expected string to match '^[0-9]{1,6}$'" }],
+    issues: [{ path: '/count', message: 'must match pattern "^[0-9]{1,6}$"' }],
   });
   expect(toNumber).not.toHaveBeenCalled();
   // The wire sends the source; the handler receives what the last transform returns.
@@ -223,10 +223,10 @@ it('admits a URL only with an allowed protocol and hostname, within its length',
     expect(decode(Site, { site }), site).toEqual({ issues: [{ path: '/site', message: 'Invalid value' }] });
   }
   expect(decode(Site, { site: `https://example.test/${'x'.repeat(64)}` })).toEqual({
-    issues: [{ path: '/site', message: 'Expected string length less or equal to 64' }],
+    issues: [{ path: '/site', message: 'must not have more than 64 characters' }],
   });
   expect(decode(Site, { site: 'not a url' })).toEqual({
-    issues: [{ path: '/site', message: "Expected string to match 'uri' format" }],
+    issues: [{ path: '/site', message: 'must match format "uri"' }],
   });
   // Without a hostname pattern or a length, only the protocol is held.
   const Contact = inputSchema(urlSchema({ protocol: /^(https|mailto)$/ }));
@@ -253,10 +253,10 @@ it('pipes a wire shape into its canonical schema: the wire checked as the source
   );
   // The target's own normalizers run on what the source produced.
   expect(decode(Tags, 'News, Sports ')).toEqual({ value: ['news', 'sports'] });
-  expect(decode(Tags, ['news'])).toEqual({ issues: [{ path: '', message: 'Expected string' }] });
+  expect(decode(Tags, ['news'])).toEqual({ issues: [{ path: '', message: 'must be string' }] });
   expect(decode(Tags, 'news, ,sports')).toEqual({ issues: [{ path: '/1', message: NORMALIZED }] });
   expect(decode(Tags, 'a,b,c,d')).toEqual({
-    issues: [{ path: '', message: 'Expected array length to be less or equal to 3' }],
+    issues: [{ path: '', message: 'must not have more than 3 items' }],
   });
   // The target's defaults apply to what the source produced.
   const Page = inputSchema(
@@ -273,14 +273,14 @@ it('pipes a wire shape into its canonical schema: the wire checked as the source
   );
   expect(decode(Page, '30')).toEqual({ value: { limit: 30, direction: 'forward' } });
   expect(decode(Page, '300')).toEqual({
-    issues: [{ path: '/limit', message: 'Expected integer to be less or equal to 100' }],
+    issues: [{ path: '/limit', message: 'must be <= 100' }],
   });
   // Inside an object, a wire refusal names the piped field.
   const Filter = inputSchema(
     t.Object({ page: pipeSchema(t.String({ pattern: '^[0-9]+$' }), t.String()) }, strict)
   );
   expect(decode(Filter, { page: 'two' })).toEqual({
-    issues: [{ path: '/page', message: "Expected string to match '^[0-9]+$'" }],
+    issues: [{ path: '/page', message: 'must match pattern "^[0-9]+$"' }],
   });
 });
 
@@ -305,9 +305,9 @@ it('reads another wire shape into the canonical schema, its defaults and checks 
   expect(decode(Query, { limit: '30' })).toEqual({ value: { limit: 30 } });
   expect(decode(Query, {})).toEqual({ value: { limit: 25 } });
   expect(decode(Query, { limit: '500' })).toEqual({
-    issues: [{ path: '/limit', message: 'Expected integer to be less or equal to 100' }],
+    issues: [{ path: '/limit', message: 'must be <= 100' }],
   });
-  expect(decode(Query, { limit: 30 })).toEqual({ issues: [{ path: '/limit', message: 'Expected string' }] });
+  expect(decode(Query, { limit: 30 })).toEqual({ issues: [{ path: '/limit', message: 'must be string' }] });
 });
 
 it('detects a codec only inputSchema() runs below any child, and trusts a compiled subtree', () => {
@@ -336,6 +336,41 @@ it('detects a codec only inputSchema() runs below any child, and trusts a compil
   expect(hasUncompiledCodecs(tree as unknown as TSchema)).toBe(false);
 });
 
+it('decodes a schema t.With describes, which keeps what a spread drops: optionality, codecs and refinements', () => {
+  const Code = t
+    .Codec(t.String())
+    .Decode((value) => value.toUpperCase())
+    .Encode((value) => value.toLowerCase());
+  const Even = t.Refine(
+    t.Integer(),
+    (value) => value % 2 === 0,
+    () => 'must be even'
+  );
+  const Name = transformSchema(t.String({ minLength: 1 }), (value) => value.trim());
+  const Input = inputSchema(
+    t.Object(
+      {
+        note: t.With(t.Optional(t.String()), { description: 'A note.' }),
+        code: t.With(Code, { description: 'A code.' }),
+        even: t.With(Even, { description: 'An even number.' }),
+        name: t.With(Name, { description: 'A name.' }),
+      },
+      strict
+    )
+  );
+  expect(decode(Input, { code: 'ab', even: 2, name: ' Ana ' })).toEqual({
+    value: { code: 'AB', even: 2, name: 'Ana' },
+  });
+  expect(decode(Input, { code: 'ab', even: 3, name: 'Ana' })).toEqual({
+    issues: [{ path: '/even', message: 'must be even' }],
+  });
+  const sent: SchemaInput<typeof Input> = { code: 'ab', even: 2, name: 'Ana' };
+  expect(sent).not.toHaveProperty('note');
+  // A spread copies only what TypeBox enumerates: the optional field becomes required.
+  const spread = t.Object({ note: { ...t.Optional(t.String()), description: 'A note.' } });
+  expect(spread.required).toEqual(['note']);
+});
+
 it('carries every issue of a refusal and names the first, or the generic refusal when there is none', () => {
   const refusal = new SchemaValidationError([
     { code: 'custom', message: 'The range ends before it starts.', path: ['to'] },
@@ -361,6 +396,6 @@ it("rethrows an owner codec's own fault instead of answering it as an issue of t
   expect(() => readSchema(Record, { name: 'Ana' })).toThrow('The owner codec failed.');
   // The data's own mistake is still a refusal with its issues.
   expect(checkSchema(Record, { name: 1 }).error?.issues).toEqual([
-    { code: 'invalid_input', message: 'Expected string', path: ['name'] },
+    { code: 'invalid_input', message: 'must be string', path: ['name'] },
   ]);
 });

@@ -2,7 +2,7 @@
  * What an application is: its operations, their exposure on each transport and the configuration
  * every transport reads. `define-app.ts` holds the rules `.build()` checks against these shapes.
  */
-import type { Static, TSchema } from '@sinclair/typebox';
+import type { Static, TSchema } from 'typebox';
 
 import type { BinaryBody } from './binary.ts';
 import type { CaptureConfig } from './capture.ts';

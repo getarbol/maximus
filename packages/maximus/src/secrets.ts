@@ -4,7 +4,7 @@
  * reads the schema's JSON keywords alone: it never checks the value, so no format or codec has to be loaded
  * for it to remove what it must.
  */
-import type { TSchema } from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
 
 import { isRecord } from './internal/record.ts';
 import { SOURCE, STRIP } from './internal/schema-markers.ts';
@@ -224,12 +224,11 @@ function fieldSchemas(leaf: SchemaNode, key: string): readonly unknown[] {
   return isRecord(leaf.additionalProperties) ? [leaf.additionalProperties] : [UNDESCRIBED];
 }
 
-/** A pattern of `patternProperties`, compiled once and without flags, as TypeBox compiles it to check a value. */
+/** A pattern of `patternProperties`, compiled once in unicode mode, as TypeBox compiles it to check a value. */
 function compiled(pattern: string): RegExp {
   let expression = patterns.get(pattern);
   if (!expression) {
-    // oxlint-disable-next-line require-unicode-regexp -- A schema's pattern need not be valid in unicode mode.
-    expression = new RegExp(pattern);
+    expression = new RegExp(pattern, 'u');
     patterns.set(pattern, expression);
   }
   return expression;
