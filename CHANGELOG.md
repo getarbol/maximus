@@ -32,6 +32,11 @@ of the release commits.
   segment before it, the refusal of empty segments and trailing slashes, and the construction refusals are
   unchanged; with several conflicting templates in one application, the first pair named may differ. The
   rou3 compiler, which generates code at runtime, is never loaded.
+- `queue({ binding, blobs? })`, from `/capture`, sends each capture record to a Cloudflare Queue as one JSON
+  message, once: the queue's consumer retries a message it fails and moves it to its dead letter queue, as its
+  `maxRetries` and `deadLetterQueue` say, instead of the sink retrying once and writing an R2 dead letter as
+  `pipeline` does. A payload over 96 KB goes to `blobs` by reference. It is opt-in: a service that does not
+  configure it sends exactly what it sent before.
 
 ## 8.1.0 (2026-11-04)
 
