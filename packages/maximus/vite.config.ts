@@ -18,6 +18,7 @@ const entries = {
   internals: 'src/internals.ts',
   'workers/runtime': 'src/workers/runtime.ts',
   'mcp/index': 'src/mcp/index.ts',
+  'mcp/tasks': 'src/mcp/tasks.ts',
   'analytics/analytics': 'src/analytics/analytics.ts',
   'capture/index': 'src/capture/index.ts',
   'postgres/index': 'src/postgres/index.ts',

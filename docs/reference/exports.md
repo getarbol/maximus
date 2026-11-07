@@ -353,6 +353,7 @@ Webhook signature verification on a request's raw bytes. See
 | `verifyHmacSignature`           | function | Verifies an HMAC-SHA256 of the body in one header, hex or base64.                     |
 | `verifyTimestampedSignature`    | function | Verifies a `t=<seconds>,v1=<hex>` header that signs `<t>.<body>`.                     |
 | `verifyStandardWebhook`         | function | Verifies a Standard Webhooks delivery, `webhook-*` or `svix-*` headers.               |
+| `signStandardWebhook`           | function | Signs a Standard Webhooks delivery with the `standardwebhooks` package: its headers.  |
 
 ## @arbol-ai/maximus/http-paths
 
@@ -452,7 +453,7 @@ The Worker: it imports `cloudflare:workers`, so only a Worker loads it. See
 | --------------------- | -------- | --------------------------------------------------------------------------------------------------- |
 | `WorkerAssetsOptions` | type     | The `assets` option: `binding`, `pages`, `files`, `immutablePrefixes`, `headers` and `development`. |
 | `RpcMethods`          | type     | `RpcMethods<typeof app.operations>`: the methods the RPC entrypoint serves.                         |
-| `WorkerRuntime`       | type     | What `createWorker` returns: `handler`, `entrypoint`, `service` and `durableObject`.                |
+| `WorkerRuntime`       | type     | What `createWorker` returns: `handler`, `entrypoint`, `service`, `durableObject` and `tasks`.       |
 | `WorkerOptions`       | type     | What `createWorker` takes: `handlers`, `transports`, `http`, `assets` and `routes`.                 |
 | `createWorker`        | function | Serves an application as a Worker.                                                                  |
 | `credentials`         | function | Prepares one organization's credential from its own store, for a `.derive()`.                       |
@@ -462,6 +463,17 @@ The Worker: it imports `cloudflare:workers`, so only a Worker loads it. See
 | Export | Kind     | What it is                                                                                                                        |
 | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `mcp`  | function | The MCP transport, `mcp({ path? })`, at `/mcp` by default. The MCP SDK loads with its first request. See [MCP](../guides/mcp.md). |
+
+## @arbol-ai/maximus/mcp/tasks
+
+The MCP Tasks extension on the official SDK, for another MCP server that relays a service's tasks, such as a
+gateway's. See [Tasks](../guides/mcp.md#tasks).
+
+| Export        | Kind     | What it is                                                                                                     |
+| ------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `attachTasks` | function | Declares the Tasks extension on an `McpServer` and serves `tasks/get` and `tasks/cancel` for a caller's tasks. |
+| `mcpTask`     | function | A task as an MCP client reads it.                                                                              |
+| `toolResult`  | function | A Result as a tool call answers it: the value, or the failure as a tool error.                                 |
 
 ## @arbol-ai/maximus/analytics
 

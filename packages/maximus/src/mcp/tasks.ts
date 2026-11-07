@@ -1,7 +1,8 @@
 /**
  * The MCP Tasks extension (`io.modelcontextprotocol/tasks`, revision 2026-07-28) on the official SDK, in the
  * wire format of `@modelcontextprotocol/ext-tasks`: the declared extension, `tasks/get` and `tasks/cancel`, and
- * a task as a client reads it. Exported, so a gateway serves the same methods for the tasks it relays.
+ * a task as a client reads it. `@arbol-ai/maximus/mcp/tasks` exports it, so a gateway serves the same methods
+ * for the tasks it relays.
  */
 import {
   CancelTaskRequestV2Schema,

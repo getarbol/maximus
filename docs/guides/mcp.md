@@ -231,6 +231,37 @@ internal error (`-32603`) with the message `Internal error`, never the failure's
 as `maximus.unexpected`. A client's mistake, such as a protocol revision the server does not speak or a
 missing header, is answered with a `4xx` status by the SDK and is not reported.
 
+## Tasks
+
+A route that may outlast a client's patience declares `task: true`. A call to it that has not finished
+after one second then answers a task, which goes on running, instead of its result:
+
+- over MCP, to a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`, revision
+  2026-07-28) on the call: `resultType: "task"`, then `tasks/get` and `tasks/cancel`, in the wire format of
+  `@modelcontextprotocol/ext-tasks`. A failure completes the task with the same tool error a direct call
+  answers. A task id the caller did not start, or one that expired, is invalid params (`-32602`);
+- over HTTP, to a request that sends `Prefer: respond-async` (RFC 7240): `202` with the task, its URL in
+  `Location`, then `GET /v1/tasks/{taskId}` and `POST /v1/tasks/{taskId}/cancel`, which any scope of the
+  task routes admits. Another caller's task is `INVALID_INPUT` at `/taskId`.
+
+Any other call answers its result however long it takes, as before. The tasks live in a SQLite Durable
+Object per organization, bound as `MAXIMUS_TASKS` to the class `createWorker` returns as `tasks`, which the
+Worker exports as `MaximusTasks`. A project that binds it gets the export:
+
+```ts
+exports: { MaximusTasks: exports.durableObject({ storage: 'sqlite' }) },
+env: { MAXIMUS_TASKS: bindings.durableObject({ worker: NAME, exportName: 'MaximusTasks' }) },
+```
+
+Without the binding, no call answers a task. The object runs each task from its alarm, as the caller, at most
+once: a task it finds started but unfinished, after a restart, settles as `OUTCOME_UNKNOWN` and never runs
+again. An organization's tasks run side by side, and one started while others run begins once they end.
+Cancelling stops only a task that has not started. A task keeps its input until it runs and its result
+for an hour, so `.build()` refuses `task: true` on a route whose schemas mark anything `secret: true`, or that
+reads bytes or answers a file. The caller's bearer token is never stored, so a task runs without
+`authority.token`. A gateway serves the same methods for the tasks it relays with `attachTasks` from
+`@arbol-ai/maximus/mcp/tasks`.
+
 ## Limits
 
 A request's body is admitted up to the largest `maxBodyBytes` among the tools its caller may call, or the
@@ -265,7 +296,8 @@ The server speaks both eras of the protocol:
 The server identifies itself by the service's `name`, `title` and `version`. Its lists change only with a
 deployment, so it declares `listChanged: false` for tools, resources and prompts and sends no
 notifications; a `subscriptions/listen` stream is acknowledged and closed at once. Its capabilities are
-tools, resources and prompts, and the Skills extension when it serves skills; it never asks a client to
+tools, resources and prompts, the Skills extension when it serves skills, and the Tasks extension when a
+route declares `task` and the task store is bound; it never asks a client to
 sample a model or to elicit input.
 
 ## Resources

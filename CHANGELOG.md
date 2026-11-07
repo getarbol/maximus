@@ -7,6 +7,25 @@ every `@getarbol/maximus*` package shared the version shown unless an entry says
 `@getarbol/maximus-postgres` was versioned on its own; that history begins with 2.2.2. Dates are the dates
 of the release commits.
 
+## 9.1.0 (2026-11-07)
+
+- **Tasks.** An operation that declares `task: true` answers a task once a call outlasts one second: over MCP to
+  a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`, revision 2026-07-28), in the
+  wire format of `@modelcontextprotocol/ext-tasks`, then `tasks/get` and `tasks/cancel`; over HTTP to
+  `Prefer: respond-async` (RFC 7240), with `202`, the task's URL in `Location`, and the routes
+  `GET /v1/tasks/{taskId}` and `POST /v1/tasks/{taskId}/cancel` that `.build()` adds. The tasks live in a
+  SQLite Durable Object per organization, `createWorker`'s `tasks`, exported as `MaximusTasks` and bound as
+  `MAXIMUS_TASKS`; a project that binds it gets the export. The object runs each task from its alarm, as its
+  caller and at most once: a task found started but unfinished settles as `OUTCOME_UNKNOWN`. A task keeps its
+  input until it runs and its result for an hour, never the caller's bearer token, and `.build()` refuses
+  `task: true` on an operation whose schemas mark a secret, or that reads bytes or answers a file. Without the
+  binding, every call answers as before. `attachTasks`, `mcpTask` and `toolResult`, from the new entry
+  `/mcp/tasks`, serve the same methods on another MCP server, such as a gateway's.
+- `signStandardWebhook({ id, payload, secret, now? })`, from `/webhooks`, signs a delivery with the
+  specification's `standardwebhooks` package and answers its three headers. Verification stays Maximus's own,
+  which keeps its failure reasons, its tolerance and clock options and the `svix-` headers.
+- The refusal of a byte body or an attachment outside HTTP reads `… are HTTP-only and never tasks.`
+
 ## 9.0.0 (2026-11-07)
 
 Maximus runs on TypeBox 1.x (`typebox` 1.4.5) instead of `@sinclair/typebox` 0.34. Routes, transports, the
