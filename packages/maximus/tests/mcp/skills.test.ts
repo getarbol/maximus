@@ -1,9 +1,11 @@
 /**
- * The Skills extension (SEP-2640): the declared extension, `skills/list` and `skills/get` entries whose
- * manifest a host verifies against the served `SKILL.md` (size, SHA-256 digest and frontmatter), invalid
- * params for an unknown skill or a cursor, the public cache hint on both eras, and the skill tool.
+ * The Skills extension (SEP-2640), as the SDK's catalog serves it: the declared extension, `skills/list` and
+ * `skills/get` entries whose manifest a host verifies against the served `SKILL.md` (size, SHA-256 digest and
+ * frontmatter), invalid params for an unknown skill or a cursor, the public cache hint on 2026-07-28, and the
+ * skill tool.
  */
 import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { SKILLS_EXTENSION_ID } from '@modelcontextprotocol/server/ext/skills';
 import { expect, it } from 'vite-plus/test';
 import { parse } from 'yaml';
 
@@ -11,7 +13,6 @@ import { createHttpHandler, defineErrors, EmptyInputSchema, ok } from '../../src
 import type { McpSkill } from '../../src/index.ts';
 import { composeOperations, defineApp, operation } from '../../src/internals.ts';
 import { mcp } from '../../src/mcp/index.ts';
-import { SKILLS_EXTENSION } from '../../src/mcp/skills.ts';
 
 /** Its description needs YAML quoting (a colon, a `#` and quotes) and has a character of three bytes. */
 const REVIEW: McpSkill = {
@@ -87,8 +88,8 @@ async function rpc(method: string, params: object = {}, handler = handle) {
   return JSON.parse(/data: (\{[^\n]*)/.exec(text)?.[1] ?? text);
 }
 
-/** One JSON-RPC response to a `resources/read` a 2026-07-28 client posts. */
-async function modernRead(uri: string) {
+/** One JSON-RPC response to a request a 2026-07-28 client posts; `name` is the `mcp-name` header it needs. */
+async function modern(method: string, params: object = {}, name?: string) {
   const response = await handle(
     new Request('https://example.test/mcp', {
       method: 'POST',
@@ -97,15 +98,15 @@ async function modernRead(uri: string) {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
         'mcp-protocol-version': '2026-07-28',
-        'mcp-method': 'resources/read',
-        'mcp-name': uri,
+        'mcp-method': method,
+        ...(name === undefined ? {} : { 'mcp-name': name }),
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
-        method: 'resources/read',
+        method,
         params: {
-          uri,
+          ...params,
           _meta: {
             'io.modelcontextprotocol/protocolVersion': '2026-07-28',
             'io.modelcontextprotocol/clientCapabilities': {},
@@ -117,6 +118,11 @@ async function modernRead(uri: string) {
   );
   return JSON.parse(await response.text());
 }
+
+/** The URI a skill is served at. */
+const uriOf = (skill: McpSkill) => `skill://${skill.name}/SKILL.md`;
+/** The public cache hint every 2026-07-28 skill answer carries. */
+const CACHE_HINT = { resultType: 'complete', ttlMs: 300_000, cacheScope: 'public' };
 
 /** The lowercase hexadecimal SHA-256 digest of some bytes. */
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
@@ -132,14 +138,15 @@ it('lists each skill with a manifest whose size, digest and frontmatter match it
   });
   expect(initialized.result.capabilities).toMatchObject({
     resources: {},
-    extensions: { [SKILLS_EXTENSION]: {} },
+    extensions: { [SKILLS_EXTENSION_ID]: {} },
   });
   const listed = (await rpc('skills/list')).result;
-  expect(listed).toMatchObject({ resultType: 'complete', ttlMs: 300_000, cacheScope: 'public' });
+  // One page holds every skill; a 2025 revision defines no cache hint, so its answers carry none.
   expect(listed).not.toHaveProperty('nextCursor');
+  expect(listed).not.toHaveProperty('ttlMs');
   expect(listed.skills).toHaveLength(SKILLS.length);
-  for (const [index, skill] of SKILLS.entries()) {
-    const entry = listed.skills[index];
+  for (const skill of SKILLS) {
+    const entry = listed.skills.find(({ uri }: { uri: string }) => uri === uriOf(skill));
     expect(entry.uri).toBe(`skill://${skill.name}/SKILL.md`);
     expect(entry.frontmatter).toStrictEqual({ name: skill.name, description: skill.description });
     // The manifest is the one file the skill has, and its directory carries the skill's name.
@@ -165,21 +172,18 @@ it('lists each skill with a manifest whose size, digest and frontmatter match it
       )
     )
   );
-  // A 2026-07-28 read carries the same public cache hint as the listing.
-  expect((await modernRead(listed.skills[0].uri)).result).toMatchObject({
-    resultType: 'complete',
-    ttlMs: 300_000,
-    cacheScope: 'public',
-  });
+  // On 2026-07-28 the listing, each entry and each file carry the public cache hint.
+  expect((await modern('skills/list')).result).toMatchObject({ ...CACHE_HINT, skills: listed.skills });
+  expect((await modern('skills/get', { uri: uriOf(TRIAGE) })).result).toMatchObject(CACHE_HINT);
+  expect((await modern('resources/read', { uri: uriOf(REVIEW) }, uriOf(REVIEW))).result).toMatchObject(
+    CACHE_HINT
+  );
 });
 
 it('gets one skill by URI, and answers an unknown skill or any cursor with invalid params', async () => {
   const listed = (await rpc('skills/list')).result.skills;
   expect((await rpc('skills/get', { uri: 'skill://triage/SKILL.md' })).result).toStrictEqual({
-    resultType: 'complete',
-    skill: listed[1],
-    ttlMs: 300_000,
-    cacheScope: 'public',
+    skill: listed.find(({ uri }: { uri: string }) => uri === uriOf(TRIAGE)),
   });
   for (const [method, params] of [
     ['skills/get', { uri: 'skill://unknown/SKILL.md' }],

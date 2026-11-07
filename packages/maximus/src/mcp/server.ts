@@ -12,7 +12,7 @@ import type { OperationShape, TransportContext } from '../index.ts';
 import { wireInput } from '../input-schemas.ts';
 import { MAX_BODY_BYTES_CEILING, mcpOpenWorld } from '../manifest.ts';
 import { canonical, standaloneSchema } from '../schema-bundle.ts';
-import { readSkill, registerSkills, SKILLS_EXTENSION, skillTool } from './skills.ts';
+import { readSkill, skillCatalog, skillTool } from './skills.ts';
 
 /** Operation tools on one `tools/list` page; the skill tool, when served, comes before them on the first. */
 const PAGE_SIZE = 50;
@@ -199,7 +199,7 @@ export async function handleMcp({
     }
   };
   const response = await createMcpHandler(
-    () => {
+    async () => {
       const skills = application.mcp?.skills ?? [];
       const skillToolName = skills.length ? application.mcp?.skillTool : undefined;
       const server = new McpServer(
@@ -213,7 +213,6 @@ export async function handleMcp({
             tools: { listChanged: false },
             resources: { listChanged: false },
             prompts: { listChanged: false },
-            ...(skills.length ? { extensions: { [SKILLS_EXTENSION]: {} } } : {}),
           },
         }
       );
@@ -313,7 +312,9 @@ export async function handleMcp({
         );
       }
       if (skills.length) {
-        registerSkills(server, skills, answer);
+        const catalog = await skillCatalog(skills);
+        // Declares the Skills extension and serves `skills/list`, `skills/get` and each skill's files.
+        catalog.attach(server);
       }
       return server;
     },

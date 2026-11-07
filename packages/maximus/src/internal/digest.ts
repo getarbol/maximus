@@ -1,6 +1,5 @@
 /**
- * SHA-256 digests in hexadecimal, for rate limit keys, the development token's comparison and skill
- * manifests.
+ * SHA-256 digests in hexadecimal, for rate limit keys, the development token's comparison and capture.
  */
 
 /** The SHA-256 digest of text or bytes, in lowercase hexadecimal. */
