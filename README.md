@@ -143,7 +143,7 @@ Node and deployable to Cloudflare:
 | [`queue-reminders`](examples/queue-reminders) | A queue consumer that delivers once, a dead letter queue and a cron that recovers.         |
 | [`browser-pages`](examples/browser-pages)     | Browser Run: pages as Markdown for agents, or as PNG attachments.                          |
 | [`r2-documents`](examples/r2-documents)       | Byte uploads checked against their type, SHA-256 checksums and streamed downloads from R2. |
-| [`do-appointments`](examples/do-appointments) | A Durable Object per organization and day that never double-books a slot.                  |
+| [`do-appointments`](examples/do-appointments) | A Durable Object per organization and day that never double-books a slot, and a task.      |
 
 ## Documentation
 
