@@ -146,7 +146,7 @@
     "typebox": "1.4.5"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "2.0.0-beta.v.5",
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.11",
     "@modelcontextprotocol/ext-tasks": "0.2.3",
     "@types/pg": "8.23.1",
     "ajv": "8.20.0",
