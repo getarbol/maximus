@@ -16,7 +16,8 @@
       "description": "Each day's slots and the bookings that hold them."
     },
     {
-      "name": "Operation tasks"
+      "name": "Operation tasks",
+      "description": "The tasks of operations that answer before they finish: read one you started, or cancel one that has not started running."
     }
   ],
   "paths": {

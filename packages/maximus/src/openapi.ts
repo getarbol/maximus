@@ -41,6 +41,7 @@ import {
 import type { AppManifest, OperationShape } from './manifest.ts';
 import { bundleSchemas, schemaIds } from './schema-bundle.ts';
 import type { SchemaKeywords } from './schema-types.ts';
+import { TASK_GROUP, TASK_GROUP_DESCRIPTION } from './tasks.ts';
 import { tokenEndpoints } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
 
@@ -354,7 +355,8 @@ function openApiDocument<E, C, O extends Record<string, OperationShape>>(
       },
       ...(rpc ? {} : { servers: [{ url: manifest.origin }] }),
       tags: groups.map((group) => {
-        const description = manifest.groups?.[group];
+        const description =
+          manifest.groups?.[group] ?? (group === TASK_GROUP ? TASK_GROUP_DESCRIPTION : undefined);
         return description ? { name: group, description } : { name: group };
       }),
       paths,

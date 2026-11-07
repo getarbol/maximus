@@ -27,6 +27,11 @@ export const TASK_TTL_MS = 3_600_000;
 export const MAX_TASK_TTL_MS = 86_400_000;
 /** How often a client should ask for a task that is still working. */
 export const TASK_POLL_MS = 2000;
+/** The group of the task operations, which the framework adds and so describes itself. */
+export const TASK_GROUP = 'Operation tasks';
+/** What the documents say about that group, unless the service's own `groups` describes it. */
+export const TASK_GROUP_DESCRIPTION =
+  'The tasks of operations that answer before they finish: read one you started, or cancel one that has not started running.';
 
 /** A task as the store keeps it: the call it runs, as whom, and how it ended; never its input. */
 export interface TaskRecord {
@@ -166,6 +171,7 @@ function taskOperations(
     };
   const shared = {
     scope,
+    group: TASK_GROUP,
     failures: [],
     input: t.Object({ taskId: t.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false }),
     output: TaskSchema,
