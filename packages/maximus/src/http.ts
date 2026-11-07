@@ -638,7 +638,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
               ...(accessToken ? { token: accessToken } : {}),
             }
           : undefined;
-        const tasks = taskAccess(manifest.namespace, scopedEnv, actor, authority);
+        const tasks = taskAccess(manifest, scopedEnv, actor, authority);
         if (manifest.capture) {
           const token = presentedToken(incoming, manifest.tokens);
           verified = {
@@ -801,7 +801,7 @@ export function createHttpHandler<E, C, O extends Record<string, OperationShape>
               status: 202,
               headers: {
                 'preference-applied': 'respond-async',
-                location: `${manifest.origin}${paths.mount(`/v1/tasks/${task.taskId}`)}`,
+                location: `${manifest.origin}${paths.mount(`/v1/operation-tasks/${task.taskId}`)}`,
               },
             }
           );

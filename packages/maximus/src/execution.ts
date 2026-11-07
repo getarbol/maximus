@@ -31,6 +31,8 @@ export interface ExecutionCall {
   readonly rpcCaller?: string;
   /** On HTTP and MCP, the request's user agent: `Invocation.userAgent`. */
   readonly userAgent?: string;
+  /** The task the call runs as, which only the task store sets: `Invocation.taskId`. */
+  readonly taskId?: string;
   /** Set once the input is admitted: what its schema checked, and the decoded value the handler receives. */
   admitted?: { readonly checked: unknown; readonly decoded: unknown };
   /** Set once preparation answers: the context the handler receives. */
@@ -90,6 +92,7 @@ export async function executeOperation<E, C, O extends Record<string, OperationS
       ...(trustedAuthority ? { authority: trustedAuthority } : {}),
       ...(call?.rpcCaller ? { rpcCaller: call.rpcCaller } : {}),
       ...(call?.userAgent ? { userAgent: call.userAgent } : {}),
+      ...(call?.taskId ? { taskId: call.taskId } : {}),
     };
     /**
      * A failure the call answers, from its context, middleware or handler: one of the catalog and, when the

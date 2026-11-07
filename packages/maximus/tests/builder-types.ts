@@ -127,3 +127,21 @@ const handle = createHttpHandler(configured.build(), options);
 declare const background: BackgroundContext;
 void handle(new Request('https://demo.test/api/health'), { key: 'k' }, background);
 void [withOperations, success, failed, mislabeled, exposure, traced];
+
+// A task operation knows the task it runs as; the built application names the task operations it gains.
+const tasked = configured
+  .operation('runRecord', { ...definition, task: { ttlMs: 900_000 } }, async ({ taskId }) => {
+    const known: string | undefined = taskId;
+    return ok({ found: known !== undefined });
+  })
+  .build();
+const taskNames: (keyof typeof tasked.operations)[] = [
+  'runRecord',
+  'getOperationTask',
+  'cancelOperationTask',
+];
+// @ts-expect-error An application without a task operation gains no task operations.
+const untasked: (keyof ReturnType<typeof configured.build>['operations'])[] = ['getOperationTask'];
+// @ts-expect-error A task keeps its result for `ttlMs`, the only option it takes.
+const misnamed: Exposure = { task: { ttl: 1000 } };
+void [taskNames, untasked, misnamed];

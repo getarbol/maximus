@@ -241,26 +241,38 @@ after one second then answers a task, which goes on running, instead of its resu
   `@modelcontextprotocol/ext-tasks`. A failure completes the task with the same tool error a direct call
   answers. A task id the caller did not start, or one that expired, is invalid params (`-32602`);
 - over HTTP, to a request that sends `Prefer: respond-async` (RFC 7240): `202` with the task, its URL in
-  `Location`, then `GET /v1/tasks/{taskId}` and `POST /v1/tasks/{taskId}/cancel`, which any scope of the
-  task routes admits. Another caller's task is `INVALID_INPUT` at `/taskId`.
+  `Location`, then `getOperationTask` (`GET /v1/operation-tasks/{taskId}`) and `cancelOperationTask`
+  (`POST /v1/operation-tasks/{taskId}/cancel`), which `.build()` adds, which any scope of the task routes
+  admits and whose only failure besides admission's is `INVALID_INPUT` at `/taskId`: another caller's task,
+  or an unknown or expired one. No service resource uses those names or paths, so a service's own `tasks`
+  keeps its routes.
 
-Any other call answers its result however long it takes, as before. The tasks live in a SQLite Durable
-Object per organization, bound as `MAXIMUS_TASKS` to the class `createWorker` returns as `tasks`, which the
-Worker exports as `MaximusTasks`. A project that binds it gets the export:
+Any other call answers its result however long it takes, as before. Each task lives in its own SQLite
+Durable Object, named by its id, bound as `MAXIMUS_TASKS` to the class `createWorker` returns as `tasks`,
+which the Worker exports as `MaximusTasks`. A project that binds it gets the export:
 
 ```ts
 exports: { MaximusTasks: exports.durableObject({ storage: 'sqlite' }) },
 env: { MAXIMUS_TASKS: bindings.durableObject({ worker: NAME, exportName: 'MaximusTasks' }) },
 ```
 
-Without the binding, no call answers a task. The object runs each task from its alarm, as the caller, at most
-once: a task it finds started but unfinished, after a restart, settles as `OUTCOME_UNKNOWN` and never runs
-again. An organization's tasks run side by side, and one started while others run begins once they end.
-Cancelling stops only a task that has not started. A task keeps its input until it runs and its result
-for an hour, so `.build()` refuses `task: true` on a route whose schemas mark anything `secret: true`, or that
-reads bytes or answers a file. The caller's bearer token is never stored, so a task runs without
-`authority.token`. A gateway serves the same methods for the tasks it relays with `attachTasks` from
-`@arbol-ai/maximus/mcp/tasks`.
+Without the binding, no call answers a task. The object's alarm starts the task at once, so no task waits for
+another, and runs it as the caller, at most once: a task it finds started but unfinished, after a restart,
+settles as `OUTCOME_UNKNOWN` and never runs again. Cancelling stops only a task that has not started. The
+handler knows it runs as a task: `taskId` holds the task's id, and is absent on a call that answers its own
+result.
+
+The input is never stored. The object holds it in memory from the call until its alarm starts the task,
+which is at once, and drops it then; a task whose object restarted in between settles as `INTERNAL_ERROR`
+without running. The task and its result are kept for an hour after the call, then deleted; `task: { ttlMs }`
+keeps them for `ttlMs` milliseconds instead, up to a day. `.build()` refuses a task whose output marks
+anything `secret: true`, or that reads bytes or answers a file. The caller's bearer token is never stored, so
+a task runs without `authority.token`.
+
+A task id is the service's namespace, a dot and a UUID, so a gateway that relays tasks routes `tasks/get` and
+`tasks/cancel` by the namespace: one service per namespace. `@arbol-ai/maximus/mcp/tasks` serves the same
+methods on its MCP server with `attachTasks`, reads a client's declaration with `declaresTasks(meta)` and a
+task answered to `tools/call` with `isTaskResult(result)`, without loading `@modelcontextprotocol/ext-tasks`.
 
 ## Limits
 

@@ -16,6 +16,7 @@ import { hasSchemaReferences } from './schema-bundle.ts';
 import type { SchemaKeywords } from './schema-types.ts';
 import { isNamespacedScope } from './scopes.ts';
 import { holdsSecrets } from './secrets.ts';
+import { MAX_TASK_TTL_MS } from './tasks.ts';
 import type { TelemetryConfig } from './telemetry.ts';
 import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
 import type { TokenPolicy } from './tokens.ts';
@@ -308,11 +309,30 @@ function checkOperationContract(name: string, op: OperationShape, namespace: str
       `Operation "${name}": a record whose keys follow a pattern takes additionalProperties: false, t.Record(key, value, { additionalProperties: false }), or a key outside the pattern passes unchecked.`
     );
   }
-  if (op.task && (holdsSecrets(op.input) || holdsSecrets(op.output))) {
+  if (!validTask(op.task)) {
     throw new TypeError(
-      `Operation "${name}": a task keeps its input until it runs and its result for an hour, so its schemas mark nothing secret: true.`
+      `Operation "${name}": task is true or { ttlMs }, a positive integer of milliseconds up to a day.`
     );
   }
+  if (op.task && holdsSecrets(op.output)) {
+    throw new TypeError(
+      `Operation "${name}": a task keeps its result until it expires, so its output marks nothing secret: true.`
+    );
+  }
+}
+
+/** Whether `task` is absent, `true` or `{ ttlMs }`: a positive integer of milliseconds up to a day. */
+function validTask(task: OperationShape['task']): boolean {
+  if (task === undefined || task === true) {
+    return true;
+  }
+  return (
+    typeof task === 'object' &&
+    Object.keys(task).length === 1 &&
+    Number.isInteger(task.ttlMs) &&
+    task.ttlMs > 0 &&
+    task.ttlMs <= MAX_TASK_TTL_MS
+  );
 }
 
 /** Byte bodies, attachments, limits, header-sourced fields and the route itself. */

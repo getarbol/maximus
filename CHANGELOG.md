@@ -9,18 +9,24 @@ of the release commits.
 
 ## 8.4.0 (2026-11-07)
 
-- **Tasks.** An operation that declares `task: true` answers a task once a call outlasts one second: over MCP to
-  a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`, revision 2026-07-28), in the
-  wire format of `@modelcontextprotocol/ext-tasks`, then `tasks/get` and `tasks/cancel`; over HTTP to
-  `Prefer: respond-async` (RFC 7240), with `202`, the task's URL in `Location`, and the routes
-  `GET /v1/tasks/{taskId}` and `POST /v1/tasks/{taskId}/cancel` that `.build()` adds. The tasks live in a
-  SQLite Durable Object per organization, `createWorker`'s `tasks`, exported as `MaximusTasks` and bound as
-  `MAXIMUS_TASKS`; a project that binds it gets the export. The object runs each task from its alarm, as its
-  caller and at most once: a task found started but unfinished settles as `OUTCOME_UNKNOWN`. A task keeps its
-  input until it runs and its result for an hour, never the caller's bearer token, and `.build()` refuses
-  `task: true` on an operation whose schemas mark a secret, or that reads bytes or answers a file. Without the
-  binding, every call answers as before. `attachTasks`, `mcpTask` and `toolResult`, from the new entry
-  `/mcp/tasks`, serve the same methods on another MCP server, such as a gateway's.
+- **Tasks.** An operation that declares `task: true`, or `task: { ttlMs }`, answers a task once a call outlasts
+  one second: over MCP to a client that declares the Tasks extension (`io.modelcontextprotocol/tasks`,
+  revision 2026-07-28), in the wire format of `@modelcontextprotocol/ext-tasks`, then `tasks/get` and
+  `tasks/cancel`; over HTTP to `Prefer: respond-async` (RFC 7240), with `202`, the task's URL in `Location`,
+  and the operations `getOperationTask` (`GET /v1/operation-tasks/{taskId}`) and `cancelOperationTask`
+  (`POST /v1/operation-tasks/{taskId}/cancel`) that `.build()` adds, in its types too, with no failure of the
+  service's catalog. Each task lives in its own SQLite Durable Object, named by its id, so no task waits for
+  another: `createWorker`'s `tasks`, exported as `MaximusTasks` and bound as `MAXIMUS_TASKS`; a project that
+  binds it gets the export. The object's alarm starts the task at once and runs it as its caller, at most once:
+  a task found started but unfinished settles as `OUTCOME_UNKNOWN`. Its input is never stored, only held in
+  memory until the task starts; a task whose object restarted before that settles as `INTERNAL_ERROR` without
+  running. A task and its result are kept for an hour after the call, or `ttlMs` (up to a day), never with the
+  caller's bearer token, and `.build()` refuses a task whose output marks a secret, or that reads bytes or
+  answers a file. The handler reads the task it runs as from `taskId` (`Invocation.taskId`). Without the
+  binding, every call answers as before. The new entry `/mcp/tasks` exports `attachTasks`, `mcpTask`,
+  `toolResult`, `declaresTasks`, `isTaskResult` and `TASKS_EXTENSION`, which serve the same methods and read
+  the extension on another MCP server, such as a gateway's, without loading `@modelcontextprotocol/ext-tasks`
+  or zod.
 - `signStandardWebhook({ id, payload, secret, now? })`, from `/webhooks`, signs a delivery with the
   specification's `standardwebhooks` package and answers its three headers. Verification stays Maximus's own,
   which keeps its failure reasons, its tolerance and clock options and the `svix-` headers.

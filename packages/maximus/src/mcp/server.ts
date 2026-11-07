@@ -4,7 +4,6 @@
  * and the guides as resources, the guides as prompts and the skills through the Skills extension. `mcp()`
  * loads this module on the first MCP request, so a Worker's other requests never evaluate the SDK.
  */
-import { hasTaskClientCapabilityV2 } from '@modelcontextprotocol/ext-tasks/core/v2';
 import { createMcpHandler, McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import type { Tool } from '@modelcontextprotocol/server';
 
@@ -14,7 +13,7 @@ import { wireInput } from '../input-schemas.ts';
 import { MAX_BODY_BYTES_CEILING, mcpOpenWorld } from '../manifest.ts';
 import { canonical, standaloneSchema } from '../schema-bundle.ts';
 import { readSkill, skillCatalog, skillTool } from './skills.ts';
-import { attachTasks, mcpTask, toolResult } from './tasks.ts';
+import { attachTasks, declaresTasks, mcpTask, toolResult } from './tasks.ts';
 
 /** Operation tools on one `tools/list` page; the skill tool, when served, comes before them on the first. */
 const PAGE_SIZE = 50;
@@ -252,7 +251,7 @@ export async function handleMcp({
           }
           // A client that declares the Tasks extension gets the task of a call that outlasts the wait.
           const task =
-            op.task && hasTaskClientCapabilityV2({ _meta: ctx.mcpReq.envelope })
+            op.task && declaresTasks(ctx.mcpReq.envelope)
               ? await tasks?.start(name, call.params.arguments ?? {})
               : undefined;
           if (task?.status === 'working') {
