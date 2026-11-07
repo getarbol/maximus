@@ -153,7 +153,7 @@ Node and deployable to Cloudflare:
   work, web apps, testing, deploying and more.
 - [Reference](docs/README.md#reference): configuration, route options, the CLI, wire formats, failures and
   exports.
-- [Upgrading to 9.0](docs/upgrading-to-9.md) from an 8.x service.
+- [Upgrading to 8.3](docs/upgrading-to-8.3.md) from Maximus 8.2 or earlier: TypeBox 1.x.
 - [Upgrading to 8.0](docs/upgrading-to-8.md) from a 7.x service.
 
 The [Maximus skill](.agents/skills/maximus/SKILL.md) teaches coding agents to build with Maximus; every
