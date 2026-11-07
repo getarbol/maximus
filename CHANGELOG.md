@@ -16,6 +16,14 @@ of the release commits.
   revision only, which defines them; the skills are listed through the resource template
   `skill://{+path}`; and the extension also answers `resources/directory/read` for a skill's directory,
   declaring `{ directoryRead: true }`.
+- `cutPage(items, { key, order }, query)` cuts one page of a list a service holds whole, with opaque cursors
+  that are places between items, never offsets, and answers `undefined` for a cursor it did not make, for the
+  service to refuse with its own failure; `cursorKey(cursor)` reads the key a cursor carries. Both come from
+  the root and `/schemas`, beside `Page` and `PageQueryFields`.
+- `publicDestination(url)`, from the root and `/body`, answers the URL when a Worker may send a request there
+  for someone it does not control, such as a customer's server: https on its default port to a public DNS
+  name, without credentials or a fragment; never an IP literal, a special-use or private-network name, nor
+  Cloudflare's or Arbol's own hosts (`getarbol.com`, `getarbol.app` and their subdomains).
 
 ## 8.1.0 (2026-11-04)
 

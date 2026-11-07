@@ -140,6 +140,14 @@ export default defineHandler(
   formats](../reference/wire-formats.md#lists) gives the exact schemas.
 - A cursor the list did not issue is the service's own failure to answer, such as the `INVALID_CURSOR` of
   the [`d1-notes`](../../examples/d1-notes) example.
+- A list the service holds whole, such as one a provider answers complete, is cut with
+  `cutPage(items, { key, order }, input)`. `key` gives the values an item sorts by, which together tell it
+  from every other item (`({ createdAt, id }) => [createdAt, id]`), compared as text in code unit order,
+  and `order: 'desc'` lists the greatest first. A cursor is the place right after a page's last item or
+  right before its first, as opaque base64url text, never an offset: it keeps its meaning while items come
+  and go, and read the other way it answers its own page again. `cutPage` answers `undefined` for a cursor
+  it did not make, such as one of another list, for the service to refuse with its own failure;
+  `cursorKey(cursor)` reads the key a cursor carries, to check whose it is before reading the list.
 
 `PageInfo` and each page are named schemas, so the OpenAPI document holds each once. That makes a page's
 name public: `Page` takes a PascalCase name, conventionally the item's and `Page`, and refuses any other

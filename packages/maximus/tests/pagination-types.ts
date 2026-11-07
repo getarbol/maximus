@@ -1,9 +1,9 @@
 /**
  * Type tests of the list contract: `Page`, `PageInfo` and `PageQuery`, the page name a list output needs,
- * and the defaults a list handler receives already applied.
+ * the defaults a list handler receives already applied, and the page `cutPage` answers.
  */
-import { Page, PageQueryFields, defineErrors, maximus, ok, t } from '../src/index.ts';
-import type { PageInfo, PageInfoSchema, PageQuery, Static } from '../src/index.ts';
+import { Page, PageQueryFields, cutPage, defineErrors, maximus, ok, t } from '../src/index.ts';
+import type { PageInfo, PageInfoSchema, PageOrder, PageQuery, Static } from '../src/index.ts';
 import { inputSchema } from '../src/schemas.ts';
 
 const record = t.Object({ recordId: t.String() }, { additionalProperties: false });
@@ -58,4 +58,27 @@ base.operation('listRecords', definition, async (_context, input) => {
 // @ts-expect-error A list handler answers with the page's navigation.
 base.operation('withoutInfo', definition, async () => ok({ object: 'list' as const, data: [] }));
 
-void [typed, shared, unnavigable, misnamed, absent, query, sideways, undefaulted];
+// A page cut from a list holds its items, or is undefined for a cursor the list did not make.
+const byId: PageOrder<Static<typeof record>> = { key: ({ recordId }) => [recordId] };
+const cut: Page<Static<typeof record>> | undefined = cutPage([{ recordId: 'r' }], byId, query);
+// @ts-expect-error A refused cursor answers no page.
+const certain: Page<Static<typeof record>> = cutPage([{ recordId: 'r' }], byId, query);
+// @ts-expect-error A key is a list of the values an item sorts by.
+const unlisted: PageOrder<Static<typeof record>> = { key: ({ recordId }) => recordId };
+// @ts-expect-error A list is ordered ascending or descending.
+const shuffled: PageOrder<Static<typeof record>> = { key: ({ recordId }) => [recordId], order: 'random' };
+
+void [
+  typed,
+  shared,
+  unnavigable,
+  misnamed,
+  absent,
+  query,
+  sideways,
+  undefaulted,
+  cut,
+  certain,
+  unlisted,
+  shuffled,
+];

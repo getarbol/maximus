@@ -127,7 +127,8 @@ Every `maximus` command says what it did in a sentence; `--json` prints it as JS
 - **Worker code reads `env`, never `process.env`.** A secret is `bindings.secret()`. The development token is
   never declared in `env` and never set on a deployed Worker.
 - **Outbound calls:** a Worker's `fetch(…, { redirect: 'error' })` throws before it sends anything. Send with
-  `redirect: 'manual'` and refuse a `3xx`.
+  `redirect: 'manual'` and refuse a `3xx`. A URL someone else gave you, such as a customer's server, passes
+  `publicDestination(url)` from `@arbol-ai/maximus/body` first.
 - **Generated code stays generated.** Never edit `.maximus/`: change the source files or `vite.config.ts`.
 - **Refusals are guidance.** `maximus prepare`, `maximus()` and the application's `.build()` refuse a broken
   project with a message that names the rule and the file or operation. Fix the declaration; never loosen

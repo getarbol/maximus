@@ -62,8 +62,8 @@ export {
   SignedUrlSchema,
 } from './common-schemas.ts';
 export type { DeletedObject, NamedReference, PostalAddress, SignedUrl } from './common-schemas.ts';
-export { Page, PageInfoSchema, PageQueryFields, pageLimit } from './pagination.ts';
-export type { PageInfo, PageQuery, TPage } from './pagination.ts';
+export { Page, PageInfoSchema, PageQueryFields, cursorKey, cutPage, pageLimit } from './pagination.ts';
+export type { PageInfo, PageOrder, PageQuery, TPage } from './pagination.ts';
 export { AttachmentOutputSchema } from './attachment-schema.ts';
 export type { Attachment } from './attachment-schema.ts';
 export type { BinaryBody, BodyFailure } from './binary.ts';
@@ -102,7 +102,7 @@ export type { ScopeMatch } from './scopes.ts';
 export { protectedResourceMetadata } from './oauth.ts';
 export type { OAuthResource } from './oauth.ts';
 
-// HTTP: the handler, its routes and the bounded body readers.
+// HTTP: the handler, its routes, the bounded body readers and where a Worker may send a request.
 export { createHttpHandler } from './http.ts';
 export type {
   HttpOptions,
@@ -116,6 +116,7 @@ export { createHttpRouteResolver } from './http-paths.ts';
 export type { HttpRouteDefinition, HttpRouteMatch } from './http-paths.ts';
 export { readBodyText, readBodyBytes } from './internal/body.ts';
 export type { BodyReadOptions, HttpBodyFailure, HttpBodyFailureReason } from './internal/body.ts';
+export { publicDestination } from './internal/destination.ts';
 export { readJsonResponse, readJsonBody, retryAfterSeconds, isJsonMediaType } from './internal/json.ts';
 
 // The contract: the OpenAPI document.
