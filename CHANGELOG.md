@@ -20,8 +20,10 @@ Breaking:
   `t.Cyclic`), `t.Composite`, `t.Ref(schema)` (a reference takes the name alone), `t.Date`, `t.Uint8Array`,
   `t.RegExp`, `t.Promise`, `t.Iterator`, `t.AsyncIterator`, `t.Awaited`, `t.Const`, `t.Not`,
   `t.ReadonlyOptional` and `t.Argument`; adds `t.Refine`; types `t.Union`'s members as a tuple, so a union of
-  a mapped array is `never`; and makes `TSchema` an empty interface, so a keyword read from a value typed
-  `TSchema` no longer compiles.
+  a mapped array is `never`; and types a schema without its options, `TSchema` as an empty interface, so
+  `schema.description`, `UuidSchema.pattern` or a `TObject`'s `additionalProperties` no longer compile. The
+  new type `SchemaKeywords`, from the root and `/schemas`, reads them: `(schema as SchemaKeywords).pattern`.
+  `literalUnion(values)` types a list of any length as the union of its values.
 - TypeBox 1.x keeps the marks of an optional field, a codec, a refinement and a TypeBox type in properties a
   spread drops: `{ ...schema, description }` now loses them. `annotate(schema, options)`, new in the root and
   `/schemas`, adds options to a schema and keeps them, and every Maximus helper copies schemas that way.

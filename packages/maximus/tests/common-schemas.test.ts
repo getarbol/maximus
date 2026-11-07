@@ -24,8 +24,7 @@ import {
   parseInput,
   t,
 } from '../src/index.ts';
-import type { TSchema } from '../src/index.ts';
-import type { SchemaKeywords } from '../src/schema-types.ts';
+import type { SchemaKeywords, TSchema } from '../src/index.ts';
 import { inputSchema } from '../src/schemas.ts';
 
 // The values and objects every service publishes alike are components of one name, so a document, and

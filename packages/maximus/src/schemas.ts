@@ -8,7 +8,7 @@ import { Type } from 'typebox';
 
 export { Type, Type as t } from 'typebox';
 export type { Static, TSchema } from 'typebox';
-export type { StaticDecode } from './schema-types.ts';
+export type { SchemaKeywords, StaticDecode } from './schema-types.ts';
 export { parseInput, parseSchema, decodeInput, decodeSchema } from './validation.ts';
 export type { InputIssue } from './validation.ts';
 

@@ -64,10 +64,12 @@ the spreads to change, search for object spreads whose source is a schema, such 
 - `t.Refine(type, check, error?)` is new: TypeBox's own refinement, whose `error` is a function of the value
   that answers the message. Like a `refineSchema` message, it reaches the caller and never holds the value.
 - `t.Union` types its members as a tuple: `t.Union(values.map((value) => t.Literal(value)))` has the static
-  type `never`. Use `literalUnion(values)` for literals, or pass a tuple.
-- `TSchema` is an empty interface: reading `schema.properties`, `schema.type` or `schema.description` from a
-  value typed `TSchema` no longer compiles. Keep the schema's own type (`typeof NoteSchema`, `TObject<…>`), or
-  read the keyword through a type that names it.
+  type `never`. Use `literalUnion(values)`, which types the values of a list of any length, and `annotate` it
+  for a description: `annotate(literalUnion(PRODUCTS.map(({ id }) => id)), { description: '…' })`.
+- A schema's type names its kind and structure only: `TSchema` is an empty interface, and a `TObject` has
+  `properties` and `required` but no `additionalProperties`, `$id` or `description`, as a `TString` has no
+  `pattern`. Reading such a keyword no longer compiles: read it through `SchemaKeywords`, from the root and
+  `/schemas`, as `(UuidSchema as SchemaKeywords).pattern`.
 
 ## Formats
 

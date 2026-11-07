@@ -100,11 +100,16 @@ export const annotate = <S extends TSchema, const O extends Record<string, unkno
   options: O
 ): S & O => Memory.Update(schema, {}, options) as S & O;
 
-/** A union of literals: `literalUnion(['open', 'done'])`. */
+/**
+ * The literals of a union, as TypeBox types its members: one per value of a tuple, or for an array of unknown
+ * length one literal of every value it may hold, since TypeBox reads a union's members as a tuple.
+ */
+type LiteralMembers<V extends readonly (string | number | boolean)[]> = number extends V['length']
+  ? [TLiteral<V[number]>]
+  : { -readonly [K in keyof V]: TLiteral<V[K]> };
+/** A union of literals: `literalUnion(['open', 'done'])`, or the values of a list, `literalUnion(ids)`. */
 export const literalUnion = <const V extends readonly (string | number | boolean)[]>(values: V) =>
-  t.Union(values.map((value: V[number]) => t.Literal(value))) as TUnion<{
-    -readonly [K in keyof V]: TLiteral<V[K]>;
-  }>;
+  t.Union(values.map((value: V[number]) => t.Literal(value))) as TUnion<LiteralMembers<V>>;
 /**
  * The schema with a default that decoding applies when the field is absent, so the field is optional on the
  * wire.

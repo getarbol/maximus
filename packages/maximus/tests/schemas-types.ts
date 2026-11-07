@@ -59,6 +59,14 @@ const invalidChoice: StaticDecode<typeof optionalOwner> = { state: 'other' };
 const optionalName: string | undefined = optionalDecoded.name;
 void [optionalDecoded, invalidChoice, optionalName];
 
+// A union of a list's values, whose length the type does not know, admits each of them and nothing else.
+const PRODUCTS: readonly { id: 'agenda' | 'raiz' }[] = [{ id: 'agenda' }, { id: 'raiz' }];
+const Product = literalUnion(PRODUCTS.map(({ id }) => id));
+const product: Static<typeof Product> = 'raiz';
+// @ts-expect-error A value the list cannot hold is not a member.
+const unknownProduct: Static<typeof Product> = 'other';
+void [product, unknownProduct];
+
 const StoredOwner = t.Object({
   settings: t.Unsafe<{ enabled: boolean; labels: Record<string, string> }>(
     t.Object({ enabled: t.Boolean(), labels: t.Record(t.String(), t.String()) })

@@ -49,6 +49,7 @@ export type {
 // Schemas: TypeBox as `t`, the validators and the schemas services share.
 export { Type, Type as t } from 'typebox';
 export type { Static, TSchema } from 'typebox';
+export type { SchemaKeywords } from './schema-types.ts';
 export { parseInput, parseSchema } from './validation.ts';
 export { annotate } from './input-schemas.ts';
 export { EmptyInputSchema, OrganizationIdSchema, UuidSchema } from './schemas.ts';

@@ -99,6 +99,7 @@ See [Project structure](../guides/project-structure.md), [Routes](../guides/rout
 | `Type`, `t`              | constant       | [TypeBox](https://github.com/sinclairzx81/typebox) 1.x's schema builder.                                              |
 | `Static`                 | type           | The TypeScript type of a schema's values.                                                                             |
 | `TSchema`                | type           | Any TypeBox schema.                                                                                                   |
+| `SchemaKeywords`         | type           | A schema's JSON Schema keywords, to read one TypeBox does not type: `(schema as SchemaKeywords).pattern`.             |
 | `annotate`               | function       | The schema with more options, such as a `description`, keeping its optionality, codecs and refinements.               |
 | `parseInput`             | function       | Checks a value against a schema without decoding it: a `Result` of the value, or `INVALID_INPUT`.                     |
 | `parseSchema`            | function       | Checks a value against a schema and returns it typed, or throws a `TypeError` that names no value.                    |
@@ -237,6 +238,7 @@ The schema vocabulary without the rest of the core: what a contract module that 
 | `Static`                 | type           | The TypeScript type of a schema's values.                                                                       |
 | `TSchema`                | type           | Any TypeBox schema.                                                                                             |
 | `StaticDecode`           | type           | A schema's decoded value: what a handler receives from an input with codecs.                                    |
+| `SchemaKeywords`         | type           | A schema's JSON Schema keywords, to read one TypeBox does not type: `(schema as SchemaKeywords).pattern`.       |
 | `annotate`               | function       | The schema with more options, such as a `description`, keeping its optionality, codecs and refinements.         |
 | `parseInput`             | function       | Checks a value against a schema without decoding it: a `Result` of the value, or `INVALID_INPUT`.               |
 | `parseSchema`            | function       | Checks a value against a schema and returns it typed, or throws a `TypeError` that names no value.              |
