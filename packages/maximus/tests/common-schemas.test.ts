@@ -24,7 +24,7 @@ import {
   parseInput,
   t,
 } from '../src/index.ts';
-import type { TSchema } from '../src/index.ts';
+import type { SchemaKeywords, TSchema } from '../src/index.ts';
 import { inputSchema } from '../src/schemas.ts';
 
 // The values and objects every service publishes alike are components of one name, so a document, and
@@ -147,7 +147,11 @@ it('names each shared value and object once, and every use refers to it', () => 
     ])
   );
   // The scalars: their constraints in the component, their description at each use.
-  expect(schemas.Uuid).toStrictEqual({ type: 'string', format: 'uuid', pattern: UuidSchema.pattern });
+  expect(schemas.Uuid).toStrictEqual({
+    type: 'string',
+    format: 'uuid',
+    pattern: (UuidSchema as SchemaKeywords).pattern,
+  });
   expect(schemas.OrganizationId).toStrictEqual({
     type: 'string',
     pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$',

@@ -4,7 +4,7 @@
  * hidden-tool checks kept and, over REST, concurrent tenants kept apart, invalid output refused, and the rate
  * limit and body bound applied before the tenant context loads.
  */
-import { FormatRegistry } from '@sinclair/typebox';
+import { Format } from 'typebox/format';
 import { describe, it, expect, vi } from 'vite-plus/test';
 
 import {
@@ -189,47 +189,43 @@ it('bounds bodies and keeps unauthenticated requests out of business execution',
 it('validates business input and output once through the shared operation boundary', async () => {
   let inputs = 0;
   let outputs = 0;
-  FormatRegistry.Set('count-input', () => {
+  // Formats of this test's own, which nothing else names: TypeBox 1.x keeps them registered.
+  Format.Set('count-input', () => {
     inputs += 1;
     return true;
   });
-  FormatRegistry.Set('count-output', () => {
+  Format.Set('count-output', () => {
     outputs += 1;
     return true;
   });
-  try {
-    const app = {
-      ...manifest,
-      operations: {
-        lookup: {
-          ...manifest.operations.lookup,
-          input: t.Object(
-            { documentNumber: t.String({ format: 'count-input' }) },
-            { additionalProperties: false }
-          ),
-          output: t.Object(
-            { documentNumber: t.String({ format: 'count-output' }), organization: t.String() },
-            { additionalProperties: false }
-          ),
-        },
+  const app = {
+    ...manifest,
+    operations: {
+      lookup: {
+        ...manifest.operations.lookup,
+        input: t.Object(
+          { documentNumber: t.String({ format: 'count-input' }) },
+          { additionalProperties: false }
+        ),
+        output: t.Object(
+          { documentNumber: t.String({ format: 'count-output' }), organization: t.String() },
+          { additionalProperties: false }
+        ),
       },
-    };
-    const handle = createHttpHandler(app, { verify: async () => claims });
-    const response = await handle(
-      request('/mcp', {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'lookup_record', arguments: { documentNumber: '123' } },
-      }),
-      {}
-    );
-    expect(await response.text()).toContain('structuredContent');
-    expect({ inputs, outputs }).toEqual({ inputs: 1, outputs: 1 });
-  } finally {
-    FormatRegistry.Delete('count-input');
-    FormatRegistry.Delete('count-output');
-  }
+    },
+  };
+  const handle = createHttpHandler(app, { verify: async () => claims });
+  const response = await handle(
+    request('/mcp', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'lookup_record', arguments: { documentNumber: '123' } },
+    }),
+    {}
+  );
+  expect(await response.text()).toContain('structuredContent');
+  expect({ inputs, outputs }).toEqual({ inputs: 1, outputs: 1 });
 });
 
 it('keeps MCP input, output and hidden-tool checks after delegating business validation', async () => {

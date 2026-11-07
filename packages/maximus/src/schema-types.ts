@@ -1,40 +1,35 @@
 /**
- * The type a schema decodes to: TypeBox's `StaticDecode` where a native transform needs it, `Static`
- * everywhere else.
+ * The type a schema decodes to: TypeBox's `StaticDecode`, which reads each codec's decoded type and is
+ * `Static` everywhere else. And the keywords Maximus reads of a schema, which TypeBox leaves out of its types.
  */
-import type {
-  Kind,
-  TransformKind,
-  Static,
-  StaticDecode as TypeBoxStaticDecode,
-  TArray,
-  TObject,
-  TRecord,
-  TSchema,
-  TTuple,
-  TUnion,
-} from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
 
-/** Opaque owner codecs already carry their decoded static type; only native transforms need traversal. */
-type HasNativeTransform<S extends TSchema> = typeof TransformKind extends keyof S
-  ? true
-  : string extends S[typeof Kind]
-    ? false
-    : S extends TObject<infer P>
-      ? true extends { [K in keyof P]: HasNativeTransform<P[K]> }[keyof P]
-        ? true
-        : false
-      : S extends TArray<infer I>
-        ? HasNativeTransform<I>
-        : S extends TUnion<infer U> | TTuple<infer U>
-          ? HasNativeTransform<U[number]>
-          : S extends TRecord<TSchema, infer V>
-            ? HasNativeTransform<V>
-            : false;
+export type { StaticDecode } from 'typebox';
 
 /**
- * A schema's decoded value. TypeBox's deep decoder can recurse indefinitely through opaque owner
- * codecs; a schema without native transforms already has exactly its decoded `Static` type.
+ * A schema's JSON Schema keywords, as Maximus reads them to publish, route and check a contract. TypeBox 1.x
+ * types a schema without its options, so a service reads one through this view:
+ * `(schema as SchemaKeywords).pattern`.
  */
-export type StaticDecode<S extends TSchema> =
-  true extends HasNativeTransform<S> ? TypeBoxStaticDecode<S> : Static<S>;
+export interface SchemaKeywords extends TSchema {
+  $id?: string;
+  type?: string | string[];
+  description?: string;
+  default?: unknown;
+  properties?: Record<string, SchemaKeywords>;
+  required?: string[];
+  additionalProperties?: boolean | SchemaKeywords;
+  patternProperties?: Record<string, SchemaKeywords>;
+  items?: SchemaKeywords | SchemaKeywords[];
+  anyOf?: SchemaKeywords[];
+  allOf?: SchemaKeywords[];
+  oneOf?: SchemaKeywords[];
+  minProperties?: number;
+  maxProperties?: number;
+  $ref?: string;
+  $defs?: Record<string, SchemaKeywords>;
+  pattern?: string;
+  format?: string;
+  minLength?: number;
+  maxLength?: number;
+}

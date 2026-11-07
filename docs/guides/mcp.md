@@ -219,7 +219,7 @@ result with `isError: true` whose text is the failure as JSON, so a model can re
   "content": [
     {
       "type": "text",
-      "text": "{\"code\":\"INVALID_INPUT\",\"message\":\"The request does not match the published schema.\",\"retryable\":false,\"data\":{\"issues\":[{\"path\":\"/noteId\",\"message\":\"Expected string to match '…'\"}]}}"
+      "text": "{\"code\":\"INVALID_INPUT\",\"message\":\"The request does not match the published schema.\",\"retryable\":false,\"data\":{\"issues\":[{\"path\":\"/noteId\",\"message\":\"must match pattern \\\"…\\\"\"}]}}"
     }
   ],
   "isError": true

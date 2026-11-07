@@ -2,8 +2,8 @@
  * The capture record: what one operation call, or one refusal, becomes for the sink that keeps it. The fields
  * an analytics event has keep its names, so live counters and a store of records agree.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static, TSchema } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { Static, TSchema } from 'typebox';
 
 import { OrganizationIdSchema, UuidSchema } from './schemas.ts';
 

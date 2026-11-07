@@ -1,11 +1,13 @@
 /**
  * Owner codecs on TypeBox schemas: defaults, normalizers, transforms, inspections, refinements, pipes and
- * unknown-key stripping. `inputSchema()` compiles them into one input schema, so the wire is checked as
- * declared and the handler receives the decoded value.
+ * unknown-key stripping. `inputSchema()` compiles them into TypeBox codecs and refinements, so the wire is
+ * checked as declared and the handler receives the decoded value. Every helper copies a schema with what
+ * TypeBox keeps hidden on it, as `t.With` does.
  */
-import { Type as t, Kind, TransformKind } from '@sinclair/typebox';
+import { IsCodec, Type as t } from 'typebox';
 import type {
   Static,
+  TCodec,
   TSchema,
   TObject,
   TProperties,
@@ -13,15 +15,19 @@ import type {
   TArray,
   TUnion,
   TOptional,
-  TTransform,
   TLiteral,
-  OptionalKind,
-} from '@sinclair/typebox';
-import { Value, TransformDecode } from '@sinclair/typebox/value';
+} from 'typebox';
+import { Memory } from 'typebox/system';
 
+import { carriedErrors, carriedIssues, SchemaValidationError } from './internal/decode-issues.ts';
+import type { SchemaIssue } from './internal/decode-issues.ts';
 import { SOURCE, STRIP } from './internal/schema-markers.ts';
-import type { StaticDecode } from './schema-types.ts';
+import { DecodeUnsafe, HasCodec, Value } from './internal/value.ts';
+import type { SchemaKeywords, StaticDecode } from './schema-types.ts';
 import { holdsSecrets } from './secrets.ts';
+
+export { SchemaValidationError } from './internal/decode-issues.ts';
+export type { SchemaIssue } from './internal/decode-issues.ts';
 
 /** Type-only: the key under which a codec's schema type carries its wire type. No schema object has it. */
 declare const WIRE: unique symbol;
@@ -60,29 +66,6 @@ export type SchemaInput<S extends TSchema, Depth extends unknown[] = []> = Depth
           ? SchemaInput<U[number], [...Depth, unknown]>
           : Static<S>;
 
-/**
- * One refused field: a code, a message that names the expectation and never the value, and the path to the
- * field.
- */
-export interface SchemaIssue {
-  /** The kind of issue, such as `invalid_input` for a schema mismatch or `custom` for a refinement. */
-  code: string;
-  /** Why the field was refused, for people; it names the expectation, never the value. */
-  message: string;
-  /** The keys and array indexes that lead to the refused field; empty when the whole value is refused. */
-  path: (string | number)[];
-}
-/** Every issue of a refused value, as `readSchema` throws it and `checkSchema` returns it. */
-export class SchemaValidationError extends TypeError {
-  /** Every issue of the refused value; the error's message is the first one's. */
-  readonly issues: SchemaIssue[];
-  constructor(issues: SchemaIssue[]) {
-    super(issues[0]?.message ?? 'The input does not match its schema.');
-    this.name = 'SchemaValidationError';
-    this.issues = issues;
-  }
-}
-
 /** The ordered codec steps a schema runs inside `inputSchema()`. */
 const STEPS = Symbol('maximus.schema.steps');
 /** The transforms a schema applies after its source value is valid. */
@@ -98,7 +81,7 @@ type SchemaStep =
   | { kind: 'normalize' | 'transform'; apply: (input: unknown) => unknown }
   | { kind: 'inspect'; apply: Inspector };
 /** A TypeBox schema with the codec markers the owner added to it. */
-type OwnerSchema = TSchema & {
+type OwnerSchema = SchemaKeywords & {
   [STEPS]?: readonly SchemaStep[];
   [TRANSFORMERS]?: readonly ((input: unknown) => unknown)[];
   [NORMALIZERS]?: readonly ((input: unknown) => unknown)[];
@@ -107,47 +90,52 @@ type OwnerSchema = TSchema & {
   [STRIP]?: boolean;
 };
 
-/** A union of literals: `literalUnion(['open', 'done'])`. */
+/**
+ * The schema with `options` added, keeping what TypeBox keeps hidden on it, as TypeBox's `Type.With` does;
+ * unlike it, a reference (`t.Ref`) is copied too, since a helper below may be given one.
+ */
+const annotate = <S extends TSchema, const O extends Record<string, unknown>>(schema: S, options: O): S & O =>
+  Memory.Update(schema, {}, options) as S & O;
+
+/**
+ * The literals of a union, as TypeBox types its members: one per value of a tuple, or for an array of unknown
+ * length one literal of every value it may hold, since TypeBox reads a union's members as a tuple.
+ */
+type LiteralMembers<V extends readonly (string | number | boolean)[]> = number extends V['length']
+  ? [TLiteral<V[number]>]
+  : { -readonly [K in keyof V]: TLiteral<V[K]> };
+/** A union of literals: `literalUnion(['open', 'done'])`, or the values of a list, `literalUnion(ids)`. */
 export const literalUnion = <const V extends readonly (string | number | boolean)[]>(values: V) =>
-  t.Union(values.map((value: V[number]) => t.Literal(value))) as TUnion<{
-    -readonly [K in keyof V]: TLiteral<V[K]>;
-  }>;
+  t.Union(values.map((value: V[number]) => t.Literal(value))) as TUnion<LiteralMembers<V>>;
 /**
  * The schema with a default that decoding applies when the field is absent, so the field is optional on the
  * wire.
  */
-export const defaultSchema = <S extends TSchema, const D>(schema: S, value: D): S & { default: D } => ({
-  ...schema,
-  default: value,
-});
+export const defaultSchema = <S extends TSchema, const D>(schema: S, value: D): S & { default: D } =>
+  annotate(schema, { default: value });
 /**
  * A strict object that, read with `stripUnknown` (as `readSchema` does), drops unknown keys instead of
  * refusing them. Wrap an input that uses it in `inputSchema()`.
  */
-export const stripObject = <P extends TProperties>(properties: P): TObject<P> => ({
-  ...t.Object(properties, { additionalProperties: false }),
-  [STRIP]: true,
-});
+export const stripObject = <P extends TProperties>(properties: P): TObject<P> =>
+  annotate(t.Object(properties, { additionalProperties: false }), { [STRIP]: true });
 /** The object, refusing unknown keys even where a read strips them. */
-export const strictObject = <S extends TSchema>(schema: S): S => ({
-  ...schema,
-  additionalProperties: false,
-  [STRIP]: false,
-});
+export const strictObject = <S extends TSchema>(schema: S): S =>
+  annotate(schema, { additionalProperties: false, [STRIP]: false });
 /** The object, admitting and keeping unknown keys. */
-export const looseObject = <S extends TSchema>(schema: S): S => ({
-  ...schema,
-  additionalProperties: true,
-  [STRIP]: false,
-});
+export const looseObject = <S extends TSchema>(schema: S): S =>
+  annotate(schema, { additionalProperties: true, [STRIP]: false });
 /** The object with more properties, keeping how it treats unknown keys. */
 export const extendObject = <P extends TProperties, Q extends TProperties>(
   schema: TObject<P>,
   properties: Q
-): TObject<P & Q> => ({
-  ...t.Object({ ...schema.properties, ...properties }, { additionalProperties: schema.additionalProperties }),
-  [STRIP]: (schema as OwnerSchema)[STRIP],
-});
+): TObject<P & Q> =>
+  annotate(
+    t.Object({ ...schema.properties, ...properties } as P & Q, {
+      additionalProperties: (schema as SchemaNode).additionalProperties as boolean | undefined,
+    }),
+    { [STRIP]: (schema as OwnerSchema)[STRIP] }
+  );
 
 /**
  * Reads a field through `normalize`. For a string, or a string that may be null, the pattern, format and
@@ -156,26 +144,28 @@ export const extendObject = <P extends TProperties, Q extends TProperties>(
  * `inputSchema()`.
  */
 export const normalizeSchema = <S extends TSchema, O>(schema: S, normalize: (value: Static<S>) => O) =>
-  t.Unsafe<O>({
-    ...schema,
-    [NORMALIZERS]: [...((schema as OwnerSchema)[NORMALIZERS] ?? []), normalize],
-    [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'normalize', apply: normalize }],
-  }) as TUnsafe<O> &
+  t.Unsafe<O>(
+    annotate(schema, {
+      [NORMALIZERS]: [...((schema as OwnerSchema)[NORMALIZERS] ?? []), normalize],
+      [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'normalize', apply: normalize }],
+    })
+  ) as TUnsafe<O> &
     WireType<SchemaInput<S>> &
-    (S extends TOptional<TSchema> ? { [OptionalKind]: 'Optional' } : Record<never, never>) &
+    (S extends TOptional<TSchema> ? { '~optional': true } : Record<never, never>) &
     (S extends { default: infer D } ? { default: D } : Record<never, never>);
 /**
  * Decodes a field with `transform` once its value passes `schema`: the wire sends what `schema` checks, and
  * the handler receives what `transform` returns. Runs inside `inputSchema()`.
  */
 export const transformSchema = <S extends TSchema, O>(schema: S, transform: (value: Static<S>) => O) =>
-  t.Unsafe<O>({
-    ...schema,
-    [TRANSFORMERS]: [...((schema as OwnerSchema)[TRANSFORMERS] ?? []), transform],
-    [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'transform', apply: transform }],
-  }) as TUnsafe<O> &
+  t.Unsafe<O>(
+    annotate(schema, {
+      [TRANSFORMERS]: [...((schema as OwnerSchema)[TRANSFORMERS] ?? []), transform],
+      [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'transform', apply: transform }],
+    })
+  ) as TUnsafe<O> &
     WireType<SchemaInput<S>> &
-    (S extends TOptional<TSchema> ? { [OptionalKind]: 'Optional' } : Record<never, never>) &
+    (S extends TOptional<TSchema> ? { '~optional': true } : Record<never, never>) &
     (S extends { default: infer D } ? { default: D } : Record<never, never>);
 
 /**
@@ -199,7 +189,7 @@ export const pipeSchema = <S extends TSchema, O extends TSchema>(
   target: O
 ): O & WireType<SchemaInput<S>> => {
   requireSecretsOnWire(source, target);
-  return { ...target, [SOURCE]: source };
+  return annotate(target, { [SOURCE]: source }) as O & WireType<SchemaInput<S>>;
 };
 /**
  * Runs `inspect` on a value the schema admits; every `addIssue` refuses the value with that issue. Runs
@@ -208,11 +198,11 @@ export const pipeSchema = <S extends TSchema, O extends TSchema>(
 export const inspectSchema = <S extends TSchema>(
   schema: S,
   inspect: (value: Static<S>, context: { addIssue: (issue: SchemaIssue) => void }) => void
-): S => ({
-  ...schema,
-  [INSPECTORS]: [...((schema as OwnerSchema)[INSPECTORS] ?? []), inspect],
-  [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'inspect', apply: inspect }],
-});
+): S =>
+  annotate(schema, {
+    [INSPECTORS]: [...((schema as OwnerSchema)[INSPECTORS] ?? []), inspect],
+    [STEPS]: [...((schema as OwnerSchema)[STEPS] ?? []), { kind: 'inspect', apply: inspect }],
+  });
 /**
  * Refuses a value the schema admits when `predicate` rejects it, with a `custom` issue whose message and path
  * `detail` gives (`Invalid value` at the field by default). Runs inside `inputSchema()`.
@@ -251,46 +241,143 @@ export const urlSchema = (options: { protocol: RegExp; hostname?: RegExp; maxLen
     }
   );
 
-/** Compile owner semantics into real native TypeBox source codecs. Canonical output schemas stay strict. */
-const projectOwnerInput = (schema: OwnerSchema, stripUnknown: boolean): TSchema => {
-  if (schema[SOURCE]) {
-    const source = projectOwnerInput(schema[SOURCE], stripUnknown);
-    const targetSchema = { ...schema, [SOURCE]: undefined };
-    const target = projectOwnerInput(targetSchema, stripUnknown);
-    return t
-      .Transform(source)
-      .Decode((value) => {
-        const targetInput = Value.Default(target, value);
-        Value.Assert(target, targetInput);
-        return TransformDecode(target, [], targetInput);
-      })
-      .Encode((value) => value);
+/** A node of a schema, as JSON Schema reads it, with the markers its codecs left on it. */
+type SchemaNode = OwnerSchema;
+
+/** Whether a schema is text, or text that may be null: what a normalizer checks again once it has run. */
+function textual(schema: SchemaNode): boolean {
+  return (
+    schema.type === 'string' ||
+    (Array.isArray(schema.anyOf) &&
+      schema.anyOf.every((branch: SchemaNode) => branch.type === 'string' || branch.type === 'null'))
+  );
+}
+
+/**
+ * A node's own codec steps, run in their order on its value once its children are decoded: the decoded value,
+ * or the issues that refuse it, at their paths below the node. A step that throws a `SchemaValidationError`
+ * refuses with its issues; anything else it throws is the codec's fault and propagates.
+ */
+function runSteps(
+  schema: SchemaNode,
+  input: unknown,
+  strip: boolean
+): { value: unknown; issues: SchemaIssue[] } {
+  let value = input;
+  if (strip && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    value = Object.fromEntries(Object.entries(value).filter(([key]) => key in (schema.properties as object)));
   }
-  const projected: OwnerSchema = { ...schema };
-  if (schema.properties) {
+  const steps = schema[STEPS] ?? [];
+  for (const [index, step] of steps.entries()) {
+    if (step.kind === 'inspect') {
+      const issues: SchemaIssue[] = [];
+      step.apply(value, { addIssue: (issue) => issues.push(issue) });
+      if (issues.length) {
+        return { value, issues };
+      }
+      continue;
+    }
+    try {
+      value = step.apply(value);
+    } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        return { value, issues: error.issues };
+      }
+      throw error;
+    }
+    // Text normalization admits a raw spelling before canonical text constraints.
+    if (
+      step.kind === 'normalize' &&
+      steps[index + 1]?.kind !== 'normalize' &&
+      textual(schema) &&
+      !Value.Check(schema, value)
+    ) {
+      return {
+        value,
+        issues: [
+          { code: 'invalid_input', message: 'The normalized value does not match its schema.', path: [] },
+        ],
+      };
+    }
+  }
+  return { value, issues: [] };
+}
+
+/** A copy of a value decoded through a schema's codecs: a check never changes the value it checks. */
+function decodedCopy(schema: TSchema, value: unknown): unknown {
+  return HasCodec(schema) ? DecodeUnsafe({}, schema, Value.Clone(value)) : value;
+}
+
+/**
+ * A node with owner steps as TypeBox runs it: a refinement that runs the steps on the value, its children
+ * decoded, and refuses with their issues, and a codec that decodes the value through them.
+ */
+function ownerNode(projected: TSchema, schema: SchemaNode, strip: boolean): TSchema {
+  const issuesOf = (input: unknown) => runSteps(schema, decodedCopy(projected, input), strip).issues;
+  const refined = t.Refine(
+    projected,
+    (input) => issuesOf(input).length === 0,
+    (input) => carriedIssues(issuesOf(input))
+  );
+  return t
+    .Codec(refined)
+    .Decode((value) => runSteps(schema, value, strip).value)
+    .Encode((value) => value);
+}
+
+/**
+ * A `pipeSchema` as TypeBox runs it: the value read as `source`, then defaulted, checked and decoded as
+ * `target`. Refused as the source refuses it, else with the target's issues at their paths.
+ */
+function pipeNode(source: TSchema, target: TSchema): TSchema {
+  const targetInput = (input: unknown) => Value.Default(target, decodedCopy(source, input));
+  const refined = t.Refine(
+    source,
+    // A value its source refuses is the source's to report.
+    (input) => !Value.Check(source, input) || Value.Check(target, targetInput(input)),
+    (input) => carriedErrors(Value.Errors(target, targetInput(input)))
+  );
+  return t
+    .Codec(refined)
+    .Decode((value) => DecodeUnsafe({}, target, Value.Default(target, value)))
+    .Encode((value) => value);
+}
+
+/**
+ * Compiles owner semantics into TypeBox codecs and refinements; canonical output schemas stay strict. Every
+ * node is copied with what TypeBox keeps hidden on it, a refinement or a codec among them.
+ */
+const projectOwnerInput = (schema: OwnerSchema, stripUnknown: boolean): TSchema => {
+  const node = schema as SchemaNode;
+  if (node[SOURCE]) {
+    const source = projectOwnerInput(node[SOURCE], stripUnknown);
+    const target = projectOwnerInput(Memory.Update(node, {}, { [SOURCE]: undefined }), stripUnknown);
+    return pipeNode(source, target);
+  }
+  const projected = Memory.Update(node, {}, {}) as SchemaNode;
+  const properties = node.properties as Record<string, OwnerSchema> | undefined;
+  if (properties) {
     projected.properties = Object.fromEntries(
-      Object.entries(schema.properties as Record<string, OwnerSchema>).map(([key, value]) => [
-        key,
-        projectOwnerInput(value, stripUnknown),
-      ])
+      Object.entries(properties).map(([key, value]) => [key, projectOwnerInput(value, stripUnknown)])
     );
-    projected.required = (schema.required as string[] | undefined)?.filter(
-      (key) => !('default' in schema.properties[key])
+    projected.required = (node.required as string[] | undefined)?.filter(
+      (key) => !('default' in (properties[key] ?? {}))
     );
-    if (stripUnknown && schema[STRIP]) {
+    if (stripUnknown && node[STRIP]) {
       projected.additionalProperties = true;
     }
   }
-  if (schema.items) {
-    projected.items = Array.isArray(schema.items)
-      ? schema.items.map((value) => projectOwnerInput(value, stripUnknown))
-      : projectOwnerInput(schema.items, stripUnknown);
+  if (node.items) {
+    projected.items = Array.isArray(node.items)
+      ? node.items.map((value: OwnerSchema) => projectOwnerInput(value, stripUnknown))
+      : projectOwnerInput(node.items as OwnerSchema, stripUnknown);
   }
-  if (schema.anyOf) {
-    projected.anyOf = schema.anyOf.map((value: OwnerSchema) => {
+  const normalizers = node[NORMALIZERS] ?? [];
+  if (Array.isArray(node.anyOf)) {
+    projected.anyOf = node.anyOf.map((value: SchemaNode) => {
       // A nullable text codec normalizes before its union's canonical pattern/length checks.
-      if ((schema[NORMALIZERS]?.length ?? 0) > 0 && value.type === 'string') {
-        const source = { ...value };
+      if (normalizers.length > 0 && value.type === 'string') {
+        const source = Memory.Update(value, {}, {}) as SchemaNode;
         delete source.pattern;
         delete source.format;
         delete source.minLength;
@@ -300,76 +387,39 @@ const projectOwnerInput = (schema: OwnerSchema, stripUnknown: boolean): TSchema 
       return projectOwnerInput(value, stripUnknown);
     });
   }
-  if (schema.patternProperties) {
+  if (node.patternProperties) {
     projected.patternProperties = Object.fromEntries(
-      Object.entries(schema.patternProperties as Record<string, OwnerSchema>).map(([key, value]) => [
+      Object.entries(node.patternProperties as Record<string, OwnerSchema>).map(([key, value]) => [
         key,
         projectOwnerInput(value, stripUnknown),
       ])
     );
   }
-  const normalizers = schema[NORMALIZERS] ?? [];
-  if (schema.type === 'string' && normalizers.length) {
+  if (node.type === 'string' && normalizers.length) {
     delete projected.pattern;
     delete projected.format;
     delete projected.minLength;
     delete projected.maxLength;
   }
-  const transforms = schema[TRANSFORMERS] ?? [];
-  const inspectors = schema[INSPECTORS] ?? [];
-  const strip = stripUnknown && schema[STRIP] && schema.properties;
-  if (!(normalizers.length || transforms.length || inspectors.length || strip)) {
+  const strip = Boolean(stripUnknown && node[STRIP] && properties);
+  if (!((node[STEPS]?.length ?? 0) > 0 || strip)) {
     return projected;
   }
-  return t
-    .Transform(projected)
-    .Decode((input) => {
-      let value = input;
-      if (strip && value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        value = Object.fromEntries(Object.entries(value).filter(([key]) => key in schema.properties));
-      }
-      const issues: SchemaIssue[] = [];
-      const steps = schema[STEPS] ?? [];
-      for (const [index, step] of steps.entries()) {
-        if (step.kind === 'inspect') {
-          step.apply(value, { addIssue: (issue) => issues.push(issue) });
-          if (issues.length) {
-            throw new SchemaValidationError(issues);
-          }
-        } else {
-          value = step.apply(value);
-          // Text normalization admits a raw spelling before canonical text constraints.
-          // Object projections validate their source first and their target through pipeSchema.
-          if (
-            step.kind === 'normalize' &&
-            steps[index + 1]?.kind !== 'normalize' &&
-            (schema.type === 'string' ||
-              schema.anyOf?.every((branch: TSchema) => branch.type === 'string' || branch.type === 'null')) &&
-            !Value.Check(schema, value)
-          ) {
-            throw new SchemaValidationError([
-              { code: 'invalid_input', message: 'The normalized value does not match its schema.', path: [] },
-            ]);
-          }
-        }
-      }
-      return value;
-    })
-    .Encode((value) => value);
+  return ownerNode(projected, node, strip);
 };
 /**
  * An input schema as callers send it, for the documents that publish it: a field with a default is optional,
  * since decoding fills it in. A schema `inputSchema()` compiled is its wire form already.
  */
 export function wireInput(schema: TSchema): TSchema {
-  return TransformKind in schema ? schema : projectOwnerInput(schema as OwnerSchema, false);
+  return IsCodec(schema) ? schema : projectOwnerInput(schema as OwnerSchema, false);
 }
 
 /**
  * Whether a schema carries owner codecs that only `inputSchema()` compiles: a normalizer, transform,
  * inspector or refinement, a `pipeSchema` source, or a `stripObject`. A plain decode ignores their
  * markers, so such a schema used directly as an operation input would admit raw, unnormalized and
- * unrefined values without a word. A compiled subtree (a TypeBox transform) is already honest.
+ * unrefined values without a word. A compiled subtree (a TypeBox codec) is already honest.
  */
 export function hasUncompiledCodecs(schema: TSchema): boolean {
   const seen = new Set<object>();
@@ -377,7 +427,7 @@ export function hasUncompiledCodecs(schema: TSchema): boolean {
    * Whether this schema, or any schema below it that no transform already compiled, carries a codec marker.
    */
   const visit = (node: unknown): boolean => {
-    if (!node || typeof node !== 'object' || seen.has(node) || TransformKind in node) {
+    if (!node || typeof node !== 'object' || seen.has(node) || IsCodec(node)) {
       return false;
     }
     seen.add(node);
@@ -407,24 +457,26 @@ export function hasUncompiledCodecs(schema: TSchema): boolean {
 export function inputSchema<S extends TSchema>(
   schema: S,
   options?: { stripUnknown?: boolean }
-): TTransform<TUnsafe<SchemaInput<S>>, StaticDecode<S>>;
+): TCodec<TUnsafe<SchemaInput<S>>, StaticDecode<S>>;
 /** The same, reading another wire shape `wire` and decoding it into `schema`'s canonical type. */
 export function inputSchema<S extends TSchema, W extends TSchema>(
   schema: S,
   wire: W
-): TTransform<W, StaticDecode<S>>;
+): TCodec<W, StaticDecode<S>>;
 export function inputSchema<S extends TSchema, W extends TSchema>(
   schema: S,
   source?: W | { stripUnknown?: boolean }
 ) {
-  const wire = source && Kind in source ? (source as W) : undefined;
+  // The options hold `stripUnknown` alone; anything else is the wire schema.
+  const options = source && Object.keys(source).every((key) => key === 'stripUnknown') ? source : undefined;
+  const wire = source && !options ? (source as W) : undefined;
   if (wire) {
     requireSecretsOnWire(wire, schema);
   }
-  const stripUnknown = !wire && source && 'stripUnknown' in source && source.stripUnknown === true;
-  const projected = projectOwnerInput(schema, Boolean(stripUnknown));
+  const stripUnknown = (options as { stripUnknown?: boolean } | undefined)?.stripUnknown === true;
+  const projected = projectOwnerInput(schema, stripUnknown);
   return t
-    .Transform(t.Unsafe<SchemaInput<S>>(wire ? projectOwnerInput(wire, false) : projected))
+    .Codec(t.Unsafe<SchemaInput<S>>(wire ? projectOwnerInput(wire, false) : projected))
     .Decode((input) => {
       if (!wire) {
         return input as StaticDecode<S>;
@@ -432,7 +484,7 @@ export function inputSchema<S extends TSchema, W extends TSchema>(
       const value = Value.Default(projected, input);
       // GET scalar decoding changes the source type; admit its canonical target before owner codecs.
       Value.Assert(projected, value);
-      return TransformDecode(projected, [], value) as StaticDecode<S>;
+      return DecodeUnsafe({}, projected, value) as StaticDecode<S>;
     })
     .Encode((value) => value as SchemaInput<S>);
 }

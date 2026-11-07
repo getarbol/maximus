@@ -3,7 +3,7 @@
  * its name from its file, and `context.ts` prepares every call. What a route or tool leaves out is derived
  * here, once: its operation name, effect, scope, title and tool hints.
  */
-import type { TSchema } from '@sinclair/typebox';
+import type { TSchema } from 'typebox';
 
 import type { BinaryBody } from '../binary.ts';
 import type { ApplicationBuilder, KnownOperationFields } from '../builder.ts';

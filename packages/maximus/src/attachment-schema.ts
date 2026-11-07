@@ -2,7 +2,8 @@
  * The file an HTTP operation answers with and its output schema, with nothing that needs a runtime. An
  * attachment is never a JSON or RPC value.
  */
-import { Kind, Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import { Memory } from 'typebox/system';
 
 /** A file an HTTP operation answers with: its bytes, media type, filename and exact length. */
 export interface Attachment {
@@ -22,9 +23,15 @@ export interface Attachment {
   byteLength: number;
 }
 /** The output of an operation that answers with a file (`http.response: 'attachment'`). */
-export const AttachmentOutputSchema = Type.Unsafe<Attachment>({
-  [Kind]: 'HttpAttachment',
-  type: 'string',
-  format: 'binary',
-  description: 'Authenticated attachment bytes with validated media type, filename and exact length.',
-});
+export const AttachmentOutputSchema = Type.Unsafe<Attachment>(
+  // Its kind is hidden, as TypeBox keeps its own: it names the schema to Maximus, never to a document.
+  Memory.Update(
+    {
+      type: 'string',
+      format: 'binary',
+      description: 'Authenticated attachment bytes with validated media type, filename and exact length.',
+    },
+    { '~kind': 'HttpAttachment' },
+    {}
+  )
+);

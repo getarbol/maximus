@@ -3,8 +3,6 @@
  * service that breaks one never starts: each refusal is a TypeError whose message names the rule, and most
  * of the rules about one operation also name that operation.
  */
-import type { TSchema } from '@sinclair/typebox';
-
 import { isAttachmentSchema } from './binary.ts';
 import type { CaptureConfig } from './capture.ts';
 import type { ErrorCatalog } from './errors.ts';
@@ -15,6 +13,7 @@ import { MAX_BODY_BYTES_CEILING, STANDARD_CODES, operationScopes } from './manif
 import type { AppManifest, McpConfiguration, McpGuide, McpSkill, OperationShape } from './manifest.ts';
 import { createOpenApi } from './openapi.ts';
 import { hasSchemaReferences } from './schema-bundle.ts';
+import type { SchemaKeywords } from './schema-types.ts';
 import { isNamespacedScope } from './scopes.ts';
 import type { TelemetryConfig } from './telemetry.ts';
 import { checkTokenAuthority, tokenAudiences } from './tokens.ts';
@@ -334,13 +333,14 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
   if (op.http?.headers) {
     const pathFields = new Set(operationPathParameters(op.http.path));
     const headers = Object.entries(op.http.headers);
+    const input: SchemaKeywords = op.input;
     if (
       !binary ||
-      op.input.type !== 'object' ||
+      input.type !== 'object' ||
       new Set(headers.map(([, wire]) => wire.toLowerCase())).size !== headers.length ||
       headers.some(
         ([field, wire]) =>
-          !Object.hasOwn(op.input.properties, field) || pathFields.has(field) || !isInputHeaderName(wire)
+          !Object.hasOwn(input.properties ?? {}, field) || pathFields.has(field) || !isInputHeaderName(wire)
       )
     ) {
       throw new TypeError(
@@ -366,7 +366,7 @@ function checkHttpExposure(name: string, op: OperationShape, routes: Set<string>
 }
 
 /**
- * A schema reference (TypeBox `Ref` or `Recursive`) resolves when the OpenAPI document bundles the schemas,
+ * A schema reference (TypeBox `Ref` or `Cyclic`) resolves when the OpenAPI document bundles the schemas,
  * to the one definition its name has. An application whose schemas refer to a name is bundled at
  * construction, so a reference that names no single definition is refused before the service starts rather
  * than when the document is first requested; schemas without references have nothing to resolve.
@@ -447,8 +447,11 @@ function validBodyLimit(value: number | undefined): boolean {
   return value === undefined || (Number.isInteger(value) && value > 0 && value <= MAX_BODY_BYTES_CEILING);
 }
 
-/** The key pattern of `t.Record(t.String(), value)`, which every key matches, so every value is checked. */
-const ANY_KEY = '^(.*)$';
+/**
+ * The key patterns of `t.Record(t.String(), value)`, which every key matches, so every value is checked: TypeBox
+ * 1.x writes the first, and 0.34 wrote the second.
+ */
+const ANY_KEYS: ReadonlySet<string> = new Set(['^.*$', '^(.*)$']);
 
 /**
  * Whether a schema holds, at any depth, a record whose keys follow a pattern but that admits other keys:
@@ -467,7 +470,7 @@ function looseRecord(schema: unknown): boolean {
     patterns &&
     typeof patterns === 'object' &&
     node.additionalProperties !== false &&
-    Object.keys(patterns).some((pattern) => pattern !== ANY_KEY)
+    Object.keys(patterns).some((pattern) => !ANY_KEYS.has(pattern))
   ) {
     return true;
   }
@@ -479,7 +482,10 @@ function looseRecord(schema: unknown): boolean {
  * a union whose every member is a strict object, so a request body or a result
  * can be discriminated by a field (`{ channel: 'email', … } | { channel: 'sms', … }`).
  */
-function strictObject(schema: TSchema, unions: boolean): boolean {
+function strictObject(node: SchemaKeywords, unions: boolean): boolean {
+  // A TypeBox Cyclic is the definition its reference names.
+  const named = node.$ref === undefined ? undefined : node.$defs?.[node.$ref];
+  const schema = named ?? node;
   if (schema.type === 'object') {
     return schema.additionalProperties === false;
   }
@@ -488,6 +494,6 @@ function strictObject(schema: TSchema, unions: boolean): boolean {
     unions &&
     Array.isArray(members) &&
     members.length > 0 &&
-    members.every((member) => strictObject(member as TSchema, false))
+    members.every((member) => strictObject(member as SchemaKeywords, false))
   );
 }

@@ -3,10 +3,11 @@
  * application's own into one catalog whose factories build each failure and whose schema validates every
  * failure an operation returns.
  */
-import { Type } from '@sinclair/typebox';
-import type { Static, TLiteral, TSchema, TObject, TProperties, TUnion } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import { Type } from 'typebox';
+import type { Static, TLiteral, TSchema, TObject, TProperties, TUnion } from 'typebox';
 
+import { Value } from './internal/value.ts';
+import type { SchemaKeywords } from './schema-types.ts';
 import { STANDARD_FAILURES } from './standard-failures.ts';
 import { parseSchema } from './validation.ts';
 
@@ -165,9 +166,12 @@ export interface ErrorCatalog {
   /** The value as one of the catalog's failures; throws a TypeError when it is none of them. */
   validate: (error: unknown) => Failure;
 }
-/** The union schema of a set of definitions: one strict failure schema per definition. */
+/**
+ * The union schema of a set of definitions: one strict failure schema per definition. TypeBox reads a union's
+ * members as a tuple; one member that is the union of every failure schema types the same values.
+ */
 type CatalogSchema<Definitions extends Record<string, ErrorDefinition>> = TUnion<
-  { [K in keyof Definitions]: FailureSchemaOf<Definitions[K]> }[keyof Definitions][]
+  [{ [K in keyof Definitions]: FailureSchemaOf<Definitions[K]> }[keyof Definitions]]
 >;
 /** A catalog over a set of definitions: a factory per name, and the members of `ErrorCatalog`. */
 type Catalog<Definitions extends Record<string, ErrorDefinition>> = Factories<Definitions> & {
@@ -235,7 +239,8 @@ export function defineErrors<const D extends Record<string, ErrorDefinition>>(
     if (
       'dataSchema' in definition &&
       definition.dataSchema &&
-      (definition.dataSchema.type !== 'object' || definition.dataSchema.additionalProperties !== false)
+      ((definition.dataSchema as SchemaKeywords).type !== 'object' ||
+        (definition.dataSchema as SchemaKeywords).additionalProperties !== false)
     ) {
       throw new TypeError('Domain error data must be a strict object schema.');
     }

@@ -10,6 +10,7 @@ clients when the route says so, and to other Workers over native RPC.
   deploy it.
 - [Concepts](concepts.md): the model behind every service, from a route file to the answer a caller
   receives, and the words the rest of the documentation uses.
+- [Upgrading to 8.3](upgrading-to-8.3.md): move a service on 8.2 or earlier to TypeBox 1.x.
 - [Upgrading to 8.0](upgrading-to-8.md): move a 7.x service to the 8.0 project layout.
 
 ## Guides

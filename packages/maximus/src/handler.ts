@@ -6,8 +6,8 @@
  * derives what it leaves out (its name, scope, effect and title) and runs it through the same execution
  * path as every other operation.
  */
-import { KindGuard, Type } from '@sinclair/typebox';
-import type { Static, TObject, TProperties, TSchema } from '@sinclair/typebox';
+import { Type } from 'typebox';
+import type { Static, TObject, TProperties, TSchema } from 'typebox';
 
 import type { BodyFailure } from './binary.ts';
 import type { ApplicationBuilder } from './builder.ts';
@@ -101,16 +101,25 @@ export type Fail<Codes extends string> = <const Code extends Codes>(
   ...data: FailureArguments<Code>
 ) => Failed<Code>;
 
+/**
+ * A TypeBox type rather than a record of fields: TypeBox marks every type it builds with a hidden kind, and
+ * `Type.Unsafe` its own. Every object is a `TSchema`, so the marks are what tell the two apart.
+ */
+type TypeBoxType = { readonly '~kind': string } | { readonly '~unsafe': unknown };
+/** Whether a value is a TypeBox type rather than a record of fields. */
+function isTypeBoxType(value: object): value is TSchema {
+  return '~kind' in value || '~unsafe' in value;
+}
 /** A schema, or the fields of a strict object schema. */
 export type SchemaOrFields = TSchema | TProperties;
 /** The schema `input` or `output` stands for: itself, or the strict object of its fields. */
-export type SchemaOf<S> = S extends TSchema ? S : S extends TProperties ? TObject<S> : never;
+export type SchemaOf<S> = S extends TypeBoxType ? S : S extends TProperties ? TObject<S> : never;
 /** The schema `input` or `output` stands for, as `SchemaOf` types it: no fields is an empty strict object. */
 export function schemaOf(value: SchemaOrFields | undefined): TSchema {
   if (value === undefined) {
     return Type.Object({}, { additionalProperties: false });
   }
-  return KindGuard.IsSchema(value) ? value : Type.Object(value, { additionalProperties: false });
+  return isTypeBoxType(value) ? value : Type.Object(value, { additionalProperties: false });
 }
 
 /** A field a declaration names, or none when it leaves the field out (its type parameter stays `never`). */
